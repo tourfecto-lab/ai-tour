@@ -42,6 +42,8 @@ class AIReport extends Model
         'competitors_analyzed',
         'is_cached',
         'cached_until',
+        // من غيره التاريخ مكانش بيتحمّل من الداتابيز فصفحة التقرير تعرض "-"
+        'created_at',
         'status',
         'error_message',
         'tokens_used',
