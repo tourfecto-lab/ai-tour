@@ -40,6 +40,9 @@ class TourfectoAIEngine
      */
     private $subscription;
 
+    /** آخر generateReviewReply رجّع رد جاهز (مش من الذكاء الاصطناعي) */
+    public bool $lastReviewReplyWasFallback = false;
+
     /**
      * Constructor
      */
@@ -222,6 +225,7 @@ class TourfectoAIEngine
         string $platform,
         int $userId
     ): ?string {
+        $this->lastReviewReplyWasFallback = false;
         $billingUncertain = false;
         $billingScope = isset($this->subscription) ? $this->subscription->beginUsageScope() : [];
         try {
@@ -229,7 +233,7 @@ class TourfectoAIEngine
             // التحقق من رصيد الـ AI
             $creditsCheck = $this->subscription->reserveAICredits($userId);
             if (!$creditsCheck['available']) {
-                return $this->getFallbackReply($sentiment);
+                return $this->getFallbackReply($sentiment, $reviewText);
             }
 
             // بناء الـ Prompt
@@ -250,7 +254,7 @@ class TourfectoAIEngine
             $apiResponse = $this->geminiClient->generateContent($prompt, ['task'=>'review_reply']);
 
             if (!$apiResponse['success']) {
-                return $this->getFallbackReply($sentiment);
+                return $this->getFallbackReply($sentiment, $reviewText);
             }
 
             // استهلاك رصيد الـ AI
@@ -262,7 +266,7 @@ class TourfectoAIEngine
             Logger::error('Generate Review Reply Error', [
                 'message' => $e->getMessage()
             ]);
-            return $this->getFallbackReply($sentiment);
+            return $this->getFallbackReply($sentiment, $reviewText);
         }
     
         } catch (Throwable $billingFailure) {
@@ -557,15 +561,10 @@ class TourfectoAIEngine
      * @param array $sentiment
      * @return string
      */
-    private function getFallbackReply(array $sentiment): string
+    private function getFallbackReply(array $sentiment, string $reviewText = ''): string
     {
-        if ($sentiment['label'] === 'positive') {
-            return "شكراً جزيلاً لك على تقييمك الإيجابي. يسعدنا جداً أنك استمتعت بتجربتك معنا. نتطلع دائماً لتقديم الأفضل لعملائنا الكرام. نتمنى رؤيتك مرة أخرى قريباً!";
-        } elseif ($sentiment['label'] === 'negative') {
-            return "نشكرك على مشاركة تجربتك معنا. نأسف جداً لأي إزعاج حدث لك. نعتز بآراء عملائنا ونعمل باستمرار على تحسين خدماتنا. يرجى التواصل معنا على رقم الدعم لإعطائنا فرصة لتعويضك عن هذه التجربة.";
-        }
-
-        return "شكراً لتقييمك لخدماتنا. نضع آراء عملائنا في أولوياتنا ونسعى دائماً لتحسين تجربتكم. نتمنى لكم يوماً سعيداً ونترقب زيارتكم مرة أخرى.";
+        $this->lastReviewReplyWasFallback = true;
+        return ReviewReplyFallback::forReview($reviewText, (string) ($sentiment['label'] ?? 'neutral'));
     }
 
     /**

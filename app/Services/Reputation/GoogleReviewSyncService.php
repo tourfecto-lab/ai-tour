@@ -35,10 +35,12 @@ class GoogleReviewSyncService
         $summary = ['synced' => 0, 'new_reviews' => 0, 'errors' => 0];
 
         try {
-            $connections = (new PlatformConnection())->where([
-                'platform' => 'google_business',
-                'status' => 'connected',
-            ]);
+            // الاتصالات اللي فشلت مرة (خطأ مؤقت من Google مثلًا) بنحاول
+            // معاها تاني - قبل كده كانت بتقف للأبد بعد أول خطأ.
+            $connections = array_merge(
+                (new PlatformConnection())->where(['platform' => 'google_business', 'status' => 'connected']),
+                (new PlatformConnection())->where(['platform' => 'google_business', 'status' => 'error'])
+            );
         } catch (Exception $e) {
             if (class_exists('Logger')) {
                 Logger::error('GoogleReviewSyncService: تعذر جلب الاتصالات', ['error' => $e->getMessage()]);
@@ -47,12 +49,16 @@ class GoogleReviewSyncService
         }
 
         foreach ($connections as $connection) {
+            $wasConnected = $connection->getAttribute('status') === 'connected';
             try {
                 $result = $this->syncConnection($connection);
                 $summary['synced']++;
                 $summary['new_reviews'] += $result['new_reviews'];
             } catch (Throwable $e) {
                 $summary['errors']++;
+                if ($wasConnected) {
+                    self::notifyConnectionBroken((int) $connection->getAttribute('user_id'));
+                }
                 if (class_exists('Logger')) {
                     Logger::error('Google review sync failed for connection', [
                         'connection_id' => $connection->getAttribute('id'),
@@ -113,7 +119,7 @@ class GoogleReviewSyncService
                 'review_text' => $review['text'] ?? '',
                 'rating' => $review['rating'] ?? 0,
                 'review_date' => $review['date'] ?? date('Y-m-d H:i:s'),
-                'review_language' => 'ar',
+                'review_language' => ReviewReplyFallback::language((string) ($review['text'] ?? '')),
             ]);
 
             // GBP Automated Reply Rules (2026-08-15): بعد ما المراجعة تتسجّل،
@@ -159,6 +165,28 @@ class GoogleReviewSyncService
         }
 
         return ['new_reviews' => $newCount];
+    }
+
+    /**
+     * تنبيه العميل مرة واحدة لما الربط يقف (مش كل دورة): المنصة مش هتقدر
+     * تسحب التقييمات ولا ترد عليها لحد ما يعيد الربط.
+     */
+    private static function notifyConnectionBroken(int $userId): void
+    {
+        if ($userId <= 0 || !class_exists('Notification')) {
+            return;
+        }
+        try {
+            Notification::notify(
+                $userId,
+                'integration_error',
+                'ربط Google Business وقف',
+                'مش قادرين نسحب تقييماتك من Google أو نرد عليها. ادخل صفحة الربط واضغط "إعادة الربط" جنب موقعك، وسجّل بنفس حساب Google اللي بتدير بيه النشاط.',
+                '/integrations'
+            );
+        } catch (Throwable $e) {
+            // التنبيه تحسين - مش لازم يوقف المزامنة
+        }
     }
 
     private function reviewExists(int $websiteId, string $platform, string $platformReviewId): bool

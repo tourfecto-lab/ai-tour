@@ -92,7 +92,7 @@ class TripAdvisorReviewSyncService
                 'review_text' => trim(($review['title'] ?? '') . "\n" . ($review['text'] ?? '')),
                 'rating' => $review['rating'] ?? 0,
                 'review_date' => $review['date'] ?? date('Y-m-d H:i:s'),
-                'review_language' => $review['language'] ?? 'ar',
+                'review_language' => $review['language'] ?? ReviewReplyFallback::language((string) ($review['text'] ?? '')),
             ]);
 
             if (class_exists('ReviewRequestService')) {

@@ -606,6 +606,7 @@ return [
     'Review' => dirname(__DIR__,2).'/app/Models/Review.php',
     'ReviewAutoReplyRunner' => dirname(__DIR__,2).'/app/Services/Automation/ReviewAutoReplyRunner.php',
     'ReviewReplyAutomationHandler' => dirname(__DIR__,2).'/app/Services/Automation/Handlers/ReviewReplyAutomationHandler.php',
+    'ReviewReplyFallback' => dirname(__DIR__,2).'/app/Services/Reputation/ReviewReplyFallback.php',
     'ReviewRequest' => dirname(__DIR__,2).'/app/Models/ReviewRequest.php',
     'ReviewRequestAutomationHandler' => dirname(__DIR__,2).'/app/Services/Automation/Handlers/ReviewRequestAutomationHandler.php',
     'ReviewRequestController' => dirname(__DIR__,2).'/app/Controllers/ReviewRequestController.php',

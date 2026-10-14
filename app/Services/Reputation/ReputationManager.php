@@ -122,20 +122,34 @@ class ReputationManager
                 $userId
             );
 
+            // الرد الجاهز (لما الذكاء الاصطناعي مش متاح) مش بيتحفظ كمسودة:
+            // الرد التلقائي بينشر المسودة المحفوظة، فنسيبها فاضية لحد ما
+            // الذكاء الاصطناعي يكتب رد حقيقي في الدورة الجاية.
+            if ($reply && $this->replyGenerator->lastWasFallback) {
+                $reply = null;
+            }
+
             if ($reply) {
                 $this->saveReply($reviewId, $reply);
             }
 
-            // إرسال الرد إلى المنصة إذا كان Auto Pilot مفعلاً
+            // إرسال الرد إلى المنصة إذا كان Auto Pilot مفعلاً. التقييم
+            // بيتعلّم "اتبعت" بس لو المنصة قبلت الرد فعلًا - قبل كده كان
+            // بيتعلّم حتى لو الإرسال فشل، فالتقييم يفضل من غير رد للأبد
+            // والرد التلقائي (ReviewAutoReplyRunner) يتخطاه.
             $botSettings = $this->subscription->getBotSettings($userId, $websiteId);
-            if ($botSettings['auto_pilot'] && $reply) {
-                $this->sendReplyToPlatform(
+            $replySent = false;
+            if (!empty($botSettings['auto_pilot']) && $reply) {
+                $sendResult = $this->sendReplyToPlatform(
                     $webhookData['platform'],
                     $webhookData['platform_review_id'],
                     $reply,
                     $userId
                 );
-                $this->markReplySent($reviewId);
+                if (!empty($sendResult['success'])) {
+                    $this->markReplySent($reviewId);
+                    $replySent = true;
+                }
             }
 
             return [
@@ -143,7 +157,7 @@ class ReputationManager
                 'review_id' => $reviewId,
                 'sentiment' => $sentiment,
                 'reply_generated' => (bool) $reply,
-                'reply_sent' => $botSettings['auto_pilot'] && $reply,
+                'reply_sent' => $replySent,
                 'message' => 'Review processed successfully.'
             ];
 

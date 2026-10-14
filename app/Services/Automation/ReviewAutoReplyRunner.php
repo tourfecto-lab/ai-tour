@@ -58,6 +58,11 @@ class ReviewAutoReplyRunner
     {
         $out = ['sent' => 0, 'pending' => 0, 'skipped' => 0, 'failed' => 0];
 
+        // العميل مختار مواقع تانية للخدمة دي
+        if (!$this->engine->inScope($userId, 'review_replies', $websiteId)) {
+            return $out;
+        }
+
         // لو كل الفئات يدوي، مفيش داعي نصرف رصيد ذكاء اصطناعي على مسودات
         $anyActive = false;
         foreach (array_keys(AutomationCatalog::get('review_replies')['buckets']) as $b) {
@@ -226,12 +231,16 @@ class ReviewAutoReplyRunner
             if ($label === '') {
                 $label = AutomationCatalog::reviewBucket($review['rating'] ?? 0);
             }
-            return (new ReplyGenerator())->generate(
+            $generator = new ReplyGenerator();
+            $draft = $generator->generate(
                 (string) ($review['review_text'] ?? ''),
                 ['label' => $label, 'score' => (float) ($review['sentiment_score'] ?? 0.5), 'rating' => (float) ($review['rating'] ?? 0)],
                 'google_business',
                 $userId
             );
+            // رد جاهز (الذكاء الاصطناعي مش متاح أو الرصيد خلص) مش بيتنشر
+            // تلقائي باسم العميل: بنسيب التقييم للدورة الجاية.
+            return $generator->lastWasFallback ? null : $draft;
         } catch (Throwable $e) {
             return null;
         }
