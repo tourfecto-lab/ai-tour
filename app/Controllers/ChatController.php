@@ -1115,7 +1115,7 @@ HTML;
         if (box.style.display === 'block') { box.style.display = 'none'; return; }
         box.style.display = 'block';
         const c = currentConversation || {};
-        box.innerHTML = '<div class="p-cell-muted" style="font-size:13px;">⏳ Looking up the customer's bookings...</div>';
+        box.innerHTML = '<div class="p-cell-muted" style="font-size:13px;">⏳ Looking up the customer’s bookings...</div>';
         const qs = new URLSearchParams({ phone: c.customer_phone || '', email: c.customer_email || '' });
         const r = await fetchJSON('/api/chat/customer-bookings?' + qs.toString());
         const list = (r.success && r.data.bookings) ? r.data.bookings : [];
