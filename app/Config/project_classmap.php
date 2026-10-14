@@ -245,6 +245,7 @@ return [
     'CompetitorRecommendation' => dirname(__DIR__,2).'/app/Models/CompetitorRecommendation.php',
     'CompetitorSiteExecutionService' => dirname(__DIR__,2).'/app/Services/CompetitorIntelligence/CompetitorSiteExecutionService.php',
     'CompetitorTrackingService' => dirname(__DIR__,2).'/app/Services/CompetitorIntelligence/CompetitorTrackingService.php',
+    'ConnectionGuide' => dirname(__DIR__,2).'/app/Services/Integrations/ConnectionGuide.php',
     'ContactManagementService' => dirname(__DIR__,2).'/app/Services/EmailMarketing/ContactManagementService.php',
     'ContactSubmission' => dirname(__DIR__,2).'/app/Models/ContactSubmission.php',
     'Container' => dirname(__DIR__,2).'/app/Core/Container.php',

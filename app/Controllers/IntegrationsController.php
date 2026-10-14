@@ -1,5 +1,6 @@
 <?php
 require_once dirname(__DIR__) . '/Core/IntegrationManager.php';
+require_once dirname(__DIR__) . '/Services/Integrations/ConnectionGuide.php';
 /**
  * Tourfecto - Integrations Controller
  * إدارة التكاملات الخارجية (Slack, Zapier, HubSpot, Algolia, Calendly,
@@ -180,6 +181,10 @@ class IntegrationsController extends Controller
         }
 
         $cardsHtml = '';
+        $isLinked = [];
+        $guideTotal = 0;
+        $guideLinked = 0;
+        $todo = [];
         foreach ($platforms as $key => $p) {
             $conn = $connected[$key] ?? null;
             $icon = icon_svg($p['icon']);
@@ -197,28 +202,43 @@ class IntegrationsController extends Controller
                 $action = $p['connect'] ? '<a href="' . $p['connect'] . '" class="p-btn primary xs">ربط الحساب</a>' : '<span class="p-cell-muted" style="font-size:12px;">لا يحتاج ربط</span>';
             }
 
-            if ($key === 'google_analytics') {
-                $pill = '<span class="pill gray">Per website / حسب الموقع</span>';
+            // منصات بتتربط لكل موقع على حدة: زرار ربط مباشر جنب كل موقع
+            // (بدل لينك عام بيرجّع العميل لصفحة تانية).
+            $perWebsite = [
+                'google_business' => ['url' => '/reputation/connect/google/', 'label' => 'ربط Google Business'],
+                'tripadvisor' => ['url' => '/reputation/connect/tripadvisor/', 'label' => 'ربط TripAdvisor'],
+                'google_search_console' => ['url' => '/search-console/connect/', 'label' => 'ربط Search Console'],
+                'google_analytics' => ['url' => '/google-analytics/connect/', 'label' => 'ربط Google Analytics'],
+            ];
+            if (isset($perWebsite[$key])) {
                 $account = '';
                 $action = '';
+                $linkedCount = 0;
                 try {
                     $sites = (new Website())->where(['user_id' => $userId], ['created_at' => 'DESC']);
                     foreach ($sites as $site) {
                         $siteId = (int) $site->getAttribute('id');
                         $label = htmlspecialchars((string) $site->getAttribute('main_url'), ENT_QUOTES, 'UTF-8');
-                        $links = (new PlatformConnection())->where(['user_id' => $userId, 'website_id' => $siteId, 'platform' => 'google_analytics'], [], 1);
-                        $linked = !empty($links) && $links[0]->getAttribute('status') === 'connected';
-                        $status = $linked ? 'Connected / مربوط' : 'Not connected / غير مربوط';
-                        $button = $linked ? 'Reconnect / إعادة الربط' : 'Connect Google Analytics / ربط Google Analytics';
-                        $action .= '<div style="margin:8px 0;overflow-wrap:anywhere;"><div class="p-cell-muted">' . $label . ' — ' . $status . '</div><a class="p-btn primary xs" href="/google-analytics/connect/' . $siteId . '">' . $button . '</a></div>';
+                        $links = (new PlatformConnection())->where(['user_id' => $userId, 'website_id' => $siteId, 'platform' => $key], [], 1);
+                        $linkStatus = !empty($links) ? (string) $links[0]->getAttribute('status') : '';
+                        $linked = $linkStatus === 'connected';
+                        if ($linked) {
+                            $linkedCount++;
+                        }
+                        $status = $linked ? 'مربوط' : ($linkStatus === 'token_expired' ? 'انتهت الصلاحية - اربط تاني' : 'غير مربوط');
+                        $button = $linked ? 'إعادة الربط' : $perWebsite[$key]['label'];
+                        $action .= '<div style="margin:8px 0;overflow-wrap:anywhere;"><div class="p-cell-muted">' . $label . ' — ' . $status . '</div><a class="p-btn ' . ($linked ? 'outline' : 'primary') . ' xs" href="' . $perWebsite[$key]['url'] . $siteId . '">' . $button . '</a></div>';
                     }
-                    if (empty($sites)) $action = '<a class="p-btn primary xs" href="/websites">Add a website first / أضف موقعًا أولاً</a>';
+                    if (empty($sites)) {
+                        $action = '<a class="p-btn primary xs" href="/websites">أضف موقعك الأول</a>';
+                    }
                 } catch (Throwable $e) {
-                    $action = '<span class="p-cell-muted">Unable to load websites / تعذر تحميل المواقع</span>';
-                    Logger::error('Analytics website list failed', ['message' => $e->getMessage()]);
+                    $action = '<span class="p-cell-muted">تعذر تحميل المواقع</span>';
+                    Logger::error('Integrations website list failed', ['platform' => $key, 'message' => $e->getMessage()]);
                 }
+                $pill = $linkedCount > 0 ? '<span class="pill green">مربوط</span>' : '<span class="pill gray">غير مربوط</span>';
+                $isLinked[$key] = $linkedCount > 0;
             }
-
 
             if(isset(OtaProviderCatalog::all()[$key])){
                 $pill='<span class="pill gray">Per website</span>';$account='';$action='';
@@ -261,6 +281,27 @@ class IntegrationsController extends Controller
                 }catch(Throwable $e){$action='<span class="p-cell-muted">Connection unavailable. Please contact support.</span>';}
             }
 
+            if (!isset($isLinked[$key])) {
+                $isLinked[$key] = $conn && $conn['status'] === 'connected';
+            }
+            $missingKeys = ConnectionGuide::missingKeys($key, [IntegrationManager::class, 'settingValue']);
+            if (!empty($missingKeys) && !$isLinked[$key]) {
+                // الأدمن لسه مجهّزش مفاتيح المنصة: زرار الربط هيفشل، فمنعرضوش للعميل
+                $pill = '<span class="pill yellow">جاري التجهيز</span>';
+                $action = $isAdmin
+                    ? '<span class="p-cell-muted" style="font-size:12px;">ناقص مفاتيح: ' . htmlspecialchars(implode(', ', $missingKeys), ENT_QUOTES, 'UTF-8') . '</span>'
+                    : '<span class="p-cell-muted" style="font-size:12px;">الربط هيتفتح قريب</span>';
+            }
+            if (ConnectionGuide::get($key) !== null) {
+                $guideTotal++;
+                if ($isLinked[$key]) {
+                    $guideLinked++;
+                } elseif (empty($missingKeys)) {
+                    $todo[] = $p['label'];
+                }
+            }
+            $guideHtml = ConnectionGuide::renderHtml($key);
+
             $cardsHtml .= '<div class="p-card" style="margin-bottom:12px;">'
                 . '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">'
                 . '<div style="display:flex;align-items:center;gap:12px;min-width:0;">'
@@ -271,7 +312,9 @@ class IntegrationsController extends Controller
                 . $account
                 . '</div></div>'
                 . '<div style="flex-shrink:0;">' . $action . '</div>'
-                . '</div></div>';
+                . '</div>'
+                . $guideHtml
+                . '</div>';
         }
 
         // ملاحظات عامة للعميل
@@ -293,7 +336,18 @@ class IntegrationsController extends Controller
 
         $notice=$_SESSION['ota_connection_notice']??'';unset($_SESSION['ota_connection_notice']);
         $otaNotice=is_string($notice)&&$notice!==''?'<div class="p-card" role="status">'.htmlspecialchars($notice,ENT_QUOTES,'UTF-8').'</div>':'';
-        $body = $otaNotice.'<div class="p-card" style="margin-bottom:16px;">'
+        $todoHtml = '';
+        if (!empty($todo)) {
+            $todoHtml = '<div class="p-cell-muted" style="margin-top:6px;font-size:13px;">لسه مستنيين تربط: '
+                . htmlspecialchars(implode('، ', $todo), ENT_QUOTES, 'UTF-8')
+                . '. افتح "إزاي أربط؟" تحت كل خدمة وامشي على الخطوات.</div>';
+        }
+        $summary = '<div class="p-card" style="margin-bottom:16px;">'
+            . '<div style="font-weight:700;font-size:16px;">ربطت ' . $guideLinked . ' من ' . $guideTotal . ' خدمات</div>'
+            . '<div class="p-cell-muted" style="font-size:13px;">كل خدمة تربطها، المنصة بتشتغل عليها لوحدها بدالك. الحاجات اللي محتاجة منك خطوة مكتوبة تحت كل خدمة.</div>'
+            . $todoHtml
+            . '</div>';
+        $body = $otaNotice.$summary.'<div class="p-card" style="margin-bottom:16px;">'
             . '<div class="p-card-head"><h3>حساباتك المربوطة</h3></div>'
             . '<div class="p-cell-muted" style="margin-bottom:14px;">اربط حسابات المنصات الخارجية للاستفادة من كل موديول.</div>'
             . $cardsHtml

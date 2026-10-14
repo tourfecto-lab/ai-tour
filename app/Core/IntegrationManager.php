@@ -66,6 +66,12 @@ class IntegrationManager
      * المحفوظة من لوحة الأدمن)، وبعدين الثابت/env. لو في خطأ (جدول مش
      * موجود) بنكمل على الـ env.
      */
+    /** قيمة إعداد واحد (system_settings أولًا ثم env) - للفحص بس، متتعرضش للعميل */
+    public static function settingValue(string $envKey): string
+    {
+        return self::envValue($envKey);
+    }
+
     private static function envValue(string $envKey): string
     {
         if (class_exists('SystemSettingsService')) {
