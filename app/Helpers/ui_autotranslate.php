@@ -189,10 +189,23 @@ if (!function_exists('tf_autotranslate_html')) {
     function tf_autotranslate_html(string $html): string
     {
         $js = static fn (array $m): string => $m[1] . tf_autotranslate_text($m[2], true) . $m[3];
-        $out = preg_replace_callback('/(<script\b[^>]*>)(.*?)(<\/script>)/isu', $js, $html);
-        if (!is_string($out)) {
-            return tf_autotranslate_text($html);
+        // بحث نصي عادي بدل regex: سكربتات الصفحات الكبيرة (زي الشات) كانت
+        // بتعدّي حد الـ backtracking فالـ regex يفشل والترجمة ترجع للطريقة
+        // غير الآمنة.
+        $out = '';
+        $pos = 0;
+        $lower = strtolower($html);
+        while (($open = strpos($lower, '<script', $pos)) !== false) {
+            $tagEnd = strpos($html, '>', $open);
+            $close = $tagEnd === false ? false : strpos($lower, '</script>', $tagEnd);
+            if ($close === false) {
+                break;
+            }
+            $out .= substr($html, $pos, $tagEnd + 1 - $pos)
+                . tf_autotranslate_text(substr($html, $tagEnd + 1, $close - $tagEnd - 1), true);
+            $pos = $close;
         }
+        $out .= substr($html, $pos);
         $out2 = preg_replace_callback('/(\son[a-z]+\s*=\s*")([^"]*)(")/iu', $js, $out);
         if (is_string($out2)) {
             $out = $out2;
