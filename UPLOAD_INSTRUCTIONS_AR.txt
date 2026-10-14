@@ -1,0 +1,17 @@
+TOURFECTO - Hostinger Safe Patch
+
+مهم: لا تفك هذا ZIP داخل مجلد app.
+ارفع محتويات المجلدين app و public_html إلى نفس المجلدين الموجودين على السيرفر مع Replace/Overwrite.
+
+الملفات ومساراتها بالضبط:
+app/Config/app.php
+app/Controllers/WebhookController.php
+app/Core/Cache.php
+app/Middleware/AuthMiddleware.php
+public_html/_internal_error_dashboard_9f21x.php
+
+إذا كان File Manager يحول أسماء المجلدات إلى CONTRO~1 أو MIDDLE~1 عند فك ZIP، لا تستخدم Extract للـZIP على السيرفر.
+افتح الحزمة على جهازك وارفع الملفات الخمسة مباشرة إلى المجلدات المذكورة أعلاه، واختر Replace/Overwrite.
+
+لا يوجد SQL مطلوب لهذه الحزمة.
+لا تحتوي الحزمة على .env أو مفاتيح API.
