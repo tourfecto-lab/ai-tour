@@ -25,8 +25,8 @@ $db->exec('DELETE FROM automation_decisions WHERE user_id = ?', [$uid]);
 $db->exec('DELETE FROM reviews WHERE user_id = ?', [$uid]);
 // باقة فيها auto_pilot (professional) عشان نختبر مسار الإرسال القديم كمان
 $planId = (int) ($db->query("SELECT id FROM subscription_plans WHERE plan_code = 'professional_monthly' LIMIT 1")[0]['id'] ?? 0);
-$db->query("INSERT INTO subscriptions (user_id, plan_id, plan_name, plan_type, status, price, currency, start_date, expiry_date, current_period_start, current_period_end, created_at)
-    VALUES (?, ?, 'professional', 'monthly', 'active', 99.00, 'USD', NOW(), DATE_ADD(NOW(), INTERVAL 1 MONTH), NOW(), DATE_ADD(NOW(), INTERVAL 1 MONTH), NOW())", [$uid, $planId]);
+$db->query("INSERT INTO subscriptions (user_id, plan_id, plan_name, plan_type, status, price, currency, current_period_start, current_period_end, created_at)
+    VALUES (?, ?, 'professional', 'monthly', 'active', 99.00, 'USD', NOW(), DATE_ADD(NOW(), INTERVAL 1 MONTH), NOW())", [$uid, $planId]);
 $db->query("INSERT INTO platform_connections (website_id, user_id, platform, status, external_account_id, external_location_id) VALUES (?, ?, 'google_business', 'connected', 'acc', 'loc')", [$wid, $uid]);
 
 echo "Generator without AI\n";

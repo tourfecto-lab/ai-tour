@@ -195,11 +195,18 @@ class ReviewAutoReplyRunner
             return ['success' => false, 'error' => $send['error'] ?? 'Google رفض الرد'];
         }
 
+        // الرد وصل Google: لازم نسجّله حتى لو عمود reply_sent القديم مش
+        // موجود في السيرفر (كان بيفشل الـ UPDATE كله فالتقييم يفضل "مستني").
         $db->exec(
-            "UPDATE reviews SET ai_generated_reply = ?, reply_sent = 1, reply_sent_at = NOW(),
+            "UPDATE reviews SET ai_generated_reply = ?, reply_sent_at = NOW(),
                     reply_status = ?, reply_approved_by = ?, updated_at = NOW() WHERE id = ?",
             [$text, $approvedBy ? 'sent' : 'auto_sent', $approvedBy, $reviewId]
         );
+        try {
+            $db->exec('UPDATE reviews SET reply_sent = 1 WHERE id = ?', [$reviewId]);
+        } catch (Throwable $e) {
+            // عمود اختياري
+        }
         if ($validator) {
             try {
                 if (!$validator->consumeReviewCredits($userId, 1, ($credits['source'] ?? '') === 'wallet')) throw new RuntimeException('تعذر تأكيد محاسبة الاستخدام');

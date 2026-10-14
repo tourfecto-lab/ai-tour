@@ -46,7 +46,7 @@ class ApprovedReplyDelivery
             $cloud=WhatsAppCloudAPI::forWebsite((int)$m['website_id']);
             if($cloud){$phone=WhatsAppCloudAPI::normalizePhone($phone);
                 if(!$this->q("SELECT id FROM chat_messages WHERE user_id=? AND website_id=? AND message_direction='incoming' AND platform='whatsapp' AND customer_phone IN (?,?) AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 24 HOUR) LIMIT 1",[$m['user_id'],$m['website_id'],$phone,'+'.$phone])->fetchColumn())return ['success'=>false,'definitive_failure'=>true,'error'=>'The WhatsApp reply window has closed. Use an approved template.'];
-                if($this->q("SELECT id FROM wa_marketing_contacts WHERE user_id=? AND website_id=? AND phone=? AND consent='opted_out' LIMIT 1",[$m['user_id'],$m['website_id'],$phone])->fetchColumn())return ['success'=>false,'definitive_failure'=>true,'error'=>'This customer has opted out.'];
+                if($this->q("SELECT id FROM wa_marketing_contacts WHERE user_id=? AND website_id=? AND phone=? AND consent_state='opted_out' LIMIT 1",[$m['user_id'],$m['website_id'],$phone])->fetchColumn())return ['success'=>false,'definitive_failure'=>true,'error'=>'This customer has opted out.'];
                 $r=$cloud->sendText($phone,$reply);return ['success'=>!empty($r['ok']),'id'=>$r['id']??null,'http_code'=>$r['http_code']??0,'error'=>$r['error']??null];
             }
         }

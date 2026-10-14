@@ -213,7 +213,7 @@ class SocialMonthlyPlanService
             foreach($items as $i){if(strtotime($i['scheduled_at'].' UTC')<time()+60)throw new InvalidArgumentException('Some dates have passed; edit them before approval');
                 $assets=$this->assets($uid,[(int)$i['media_item_id']]);if(!self::compatible($i['platform'],$assets))throw new InvalidArgumentException('An item requires video');
                 $this->q("INSERT INTO social_posts(user_id,website_id,content,media_item_id,hashtags,status,created_at,updated_at) VALUES(?,?,?,?,NULL,'scheduled',UTC_TIMESTAMP(),UTC_TIMESTAMP())",[$uid,$p['website_id'],$i['content'],$i['media_item_id']]);$postId=(int)$this->pdo->lastInsertId();
-                $this->q("INSERT INTO social_post_targets(social_post_id,platform_connection_id,scheduled_at,status,created_at,updated_at) VALUES(?,?,?,'scheduled',UTC_TIMESTAMP(),UTC_TIMESTAMP())",[$postId,$i['connection_id'],$i['scheduled_at']]);$targetId=(int)$this->pdo->lastInsertId();
+                $this->q("INSERT INTO social_post_targets(social_post_id,platform_connection_id,scheduled_at,status,created_at) VALUES(?,?,?,'scheduled',UTC_TIMESTAMP())",[$postId,$i['connection_id'],$i['scheduled_at']]);$targetId=(int)$this->pdo->lastInsertId();
                 $job=$queue->push(PublishSocialPostJob::class,['social_post_target_id'=>$targetId],'social',max(0,strtotime($i['scheduled_at'].' UTC')-time()));if(!$job)throw new RuntimeException('Publishing queue unavailable');
                 $this->q('UPDATE jobs SET available_at=? WHERE id=?',[$i['scheduled_at'],$job]);
                 if(in_array($i['platform'],['facebook','instagram'],true))foreach([86400,604800] as $after){

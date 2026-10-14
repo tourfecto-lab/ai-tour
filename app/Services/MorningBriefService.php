@@ -151,7 +151,7 @@ class MorningBriefService
         $st['handoff_chats'] = (int) $this->n("SELECT COUNT(*) v FROM ai_conversations c JOIN websites w ON w.id = c.website_id WHERE w.user_id = ? AND c.ai_status = 'human' AND c.unread_count > 0 AND c.status IN ('open','pending')", [$o]);
         $st['new_reviews'] = (int) $this->n("SELECT COUNT(*) v FROM reviews WHERE user_id = ? AND created_at >= ? AND created_at < ?", array_merge([$o], $Y));
         $st['avg_rating'] = round($this->n("SELECT COALESCE(AVG(rating),0) v FROM reviews WHERE user_id = ? AND created_at >= ? AND created_at < ?", array_merge([$o], $Y)), 1);
-        $st['bad_reviews_open'] = (int) $this->n("SELECT COUNT(*) v FROM reviews WHERE user_id = ? AND rating <= 3 AND COALESCE(reply_sent,0) = 0 AND created_at >= (NOW() - INTERVAL 14 DAY)", [$o]);
+        $st['bad_reviews_open'] = (int) $this->n("SELECT COUNT(*) v FROM reviews WHERE user_id = ? AND rating <= 3 AND reply_sent_at IS NULL AND created_at >= (NOW() - INTERVAL 14 DAY)", [$o]);
         $st['new_leads'] = (int) $this->n("SELECT COUNT(*) v FROM website_leads l JOIN generated_websites g ON g.id = l.website_id WHERE g.user_id = ? AND l.created_at >= ? AND l.created_at < ?", array_merge([$o], $Y))
             + (int) $this->n("SELECT COUNT(*) v FROM ai_leads l JOIN websites w ON w.id = l.website_id WHERE w.user_id = ? AND l.created_at >= ? AND l.created_at < ?", array_merge([$o], $Y));
         $st['approvals'] = (int) $this->n("SELECT COUNT(*) v FROM automation_decisions WHERE user_id = ? AND status = 'pending'", [$o]);

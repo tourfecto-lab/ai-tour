@@ -73,7 +73,7 @@ class WebsiteController extends Controller
     private function findDuplicateWebsite(int $userId, string $url): ?int
     {
         $key = self::hostKey($url);
-        $rows = $this->db()->query('SELECT id, main_url FROM websites WHERE user_id = ? AND deleted_at IS NULL', [$userId]);
+        $rows = $this->db()->query('SELECT id, main_url FROM websites WHERE user_id = ?', [$userId]);
         foreach ($rows as $r) {
             if (self::hostKey((string) $r['main_url']) === $key) {
                 return (int) $r['id'];
@@ -84,7 +84,7 @@ class WebsiteController extends Controller
 
     private function countWebsites(int $userId): int
     {
-        $r = $this->db()->query('SELECT COUNT(*) AS c FROM websites WHERE user_id = ? AND deleted_at IS NULL', [$userId]);
+        $r = $this->db()->query('SELECT COUNT(*) AS c FROM websites WHERE user_id = ?', [$userId]);
         return (int) ($r[0]['c'] ?? 0);
     }
 

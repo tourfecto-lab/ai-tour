@@ -21,7 +21,7 @@ $db->exec('DELETE FROM reviews WHERE user_id = ?', [$uid]);
 $db->exec("DELETE FROM platform_connections WHERE user_id = ?", [$uid]);
 $db->query("INSERT INTO platform_connections (website_id, user_id, platform, status, external_account_id, external_location_id) VALUES (?, ?, 'google_business', 'connected', 'acc', 'loc')", [$wid, $uid]);
 $mk = function ($ext, $rating, $text) use ($db, $uid, $wid) {
-    return $db->query("INSERT INTO reviews (website_id, user_id, source_platform, platform, external_review_id, reviewer_name, review_text, rating, review_date) VALUES (?, ?, 'google_business', 'google_business', ?, 'Anna', ?, ?, NOW())", [$wid, $uid, $ext, $text, $rating]);
+    return $db->query("INSERT INTO reviews (website_id, user_id, source_platform, external_review_id, reviewer_name, review_text, rating, review_date) VALUES (?, ?, 'google_business', ?, 'Anna', ?, ?, NOW())", [$wid, $uid, $ext, $text, $rating]);
 };
 $r5 = $mk('g-5', 5, 'Amazing Nile cruise, thank you!');
 $r3 = $mk('g-3', 3, 'OK trip but the bus was late');

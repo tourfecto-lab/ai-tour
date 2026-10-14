@@ -382,7 +382,11 @@ class AdminAccountsController extends Controller
         $db->exec("UPDATE users SET email = CONCAT('deleted+', id, '+', UNIX_TIMESTAMP(), '@deleted.invalid'), deleted_at = NOW(),
                    api_token = NULL, password_hash = ? WHERE id = ?", [$junk, $uid]);
         $this->tryExec("UPDATE users SET status = 'inactive' WHERE id = ?", [$uid]);
-        $this->tryExec('UPDATE users SET password = ?, remember_token = NULL, two_factor_secret = NULL, two_factor_enabled = 0 WHERE id = ?', [$junk, $uid]);
+        // كل عمود في جملة لوحده: أعمدة قديمة زي password/remember_token مش
+        // موجودة في كل السيرفرات، وفشلها كان بيمنع مسح التحقق بخطوتين.
+        $this->tryExec('UPDATE users SET two_factor_secret = NULL, two_factor_enabled = 0 WHERE id = ?', [$uid]);
+        $this->tryExec('UPDATE users SET password = ? WHERE id = ?', [$junk, $uid]);
+        $this->tryExec('UPDATE users SET remember_token = NULL WHERE id = ?', [$uid]);
         $this->revokeSessions($uid);
         // مايتجددش ولا يتخصم منه تاني
         $this->tryExec("UPDATE subscriptions SET status = 'cancelled', cancelled_at = NOW(), cancellation_reason = 'account deleted by admin'
@@ -391,7 +395,9 @@ class AdminAccountsController extends Controller
         $this->tryExec("UPDATE websites SET is_connected = 0 WHERE user_id = ?", [$uid]);
         $this->tryExec("UPDATE websites SET auto_pilot_mode = 'off' WHERE user_id = ?", [$uid]);
         $this->tryExec('DELETE FROM admin_staff WHERE user_id = ?', [$uid]);
-        $this->tryExec("UPDATE automation_policies SET enabled = 0 WHERE user_id = ?", [$uid]);
+        // الجدول مالوش عمود enabled: الإيقاف = وضع يدوي لكل الخدمات
+        $this->tryExec("UPDATE automation_policies SET mode = 'manual', bucket_modes = NULL WHERE user_id = ?", [$uid]);
+        $this->tryExec("UPDATE automation_policies SET graduated_buckets = NULL WHERE user_id = ?", [$uid]);
     }
 
     private function cleanupBeforeDelete(int $uid): void
