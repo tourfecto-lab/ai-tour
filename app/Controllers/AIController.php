@@ -236,9 +236,13 @@ class AIController extends Controller
                 return $this->error('غير مصرح بالوصول إلى هذا التقرير', 403);
             }
 
+            // التقارير القديمة اتحفظت أقسامها فاضية لأن الذكاء الاصطناعي سمّى
+            // الحقول بأسماء تانية - بنكمّلها من التقرير الكامل المحفوظ.
+            require_once dirname(__DIR__) . '/Services/AI/SeoReportNormalizer.php';
+            $fullData = $reportData->getFullReport();
             return $this->success([
-                'report' => $reportData->toArray(),
-                'full_data' => $reportData->getFullReport()
+                'report' => SeoReportNormalizer::fillReportRow($reportData->toArray()),
+                'full_data' => is_array($fullData) ? SeoReportNormalizer::normalize($fullData) : $fullData
             ]);
 
         } catch (Exception $e) {

@@ -582,6 +582,7 @@ return [
     'ReputationManager' => dirname(__DIR__,2).'/app/Services/Reputation/ReputationManager.php',
     'RequestOriginGuard' => dirname(__DIR__,2).'/app/Security/RequestOriginGuard.php',
     'ResponseParser' => dirname(__DIR__,2).'/app/Services/AI/ResponseParser.php',
+    'SeoReportNormalizer' => dirname(__DIR__,2).'/app/Services/AI/SeoReportNormalizer.php',
     'RevaiAiQuery' => dirname(__DIR__,2).'/app/Models/RevaiAiQuery.php',
     'RevaiForecast' => dirname(__DIR__,2).'/app/Models/RevaiForecast.php',
     'RevaiInsight' => dirname(__DIR__,2).'/app/Models/RevaiInsight.php',

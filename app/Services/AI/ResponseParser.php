@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/SeoReportNormalizer.php';
 
 /**
  * Tourfecto - Response Parser
@@ -238,7 +239,8 @@ class ResponseParser
             }
         }
 
-        return $data;
+        // الذكاء الاصطناعي بيسمّي الحقول بأسماء تانية (target_keywords ...)
+        return SeoReportNormalizer::normalize($data);
     }
 
     /**
