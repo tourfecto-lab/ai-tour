@@ -151,7 +151,13 @@ if (!function_exists('tf_autotranslate_phrase')) {
 }
 
 if (!function_exists('tf_autotranslate_text')) {
-    function tf_autotranslate_text(string $text): string
+    /**
+     * @param bool $jsSafe الترجمة هتتحط جوه كود JavaScript (<script> أو
+     *   onclick="..."): الجملة العربية كانت جوه string بين '...' أو "..."
+     *   أو `...`، والترجمة الإنجليزي فيها علامات زي ' (Couldn't) كانت بتقفل
+     *   الـ string وتوقّف الصفحة كلها. فبنبدّل العلامات دي بشكلها المطبعي.
+     */
+    function tf_autotranslate_text(string $text, bool $jsSafe = false): string
     {
         if ($text === '' || !preg_match('/[' . TF_AUTOTRANSLATE_AR . ']/u', $text)) {
             return $text;
@@ -160,11 +166,42 @@ if (!function_exists('tf_autotranslate_text')) {
         if (!$dict) {
             return $text;
         }
-        $res = preg_replace_callback(tf_autotranslate_run_regex(), static function (array $m) use ($dict): string {
+        $res = preg_replace_callback(tf_autotranslate_run_regex(), static function (array $m) use ($dict, $jsSafe): string {
             $t = tf_autotranslate_phrase($m[0], $dict);
-            return $t ?? $m[0];
+            if ($t === null) {
+                return $m[0];
+            }
+            return $jsSafe ? tf_autotranslate_js_safe($t) : $t;
         }, $text);
         return is_string($res) ? $res : $text;
+    }
+}
+
+if (!function_exists('tf_autotranslate_js_safe')) {
+    function tf_autotranslate_js_safe(string $t): string
+    {
+        return strtr($t, ["'" => '’', '"' => '”', '`' => '’', '\\' => '/', '${' => '$ {', "\n" => ' ', "\r" => ' ', '</' => '<\/']);
+    }
+}
+
+if (!function_exists('tf_autotranslate_html')) {
+    /** ترجمة صفحة HTML: كود الـ JavaScript بيتترجم بشكل آمن، والباقي عادي */
+    function tf_autotranslate_html(string $html): string
+    {
+        $js = static fn (array $m): string => $m[1] . tf_autotranslate_text($m[2], true) . $m[3];
+        $out = preg_replace_callback('/(<script\b[^>]*>)(.*?)(<\/script>)/isu', $js, $html);
+        if (!is_string($out)) {
+            return tf_autotranslate_text($html);
+        }
+        $out2 = preg_replace_callback('/(\son[a-z]+\s*=\s*")([^"]*)(")/iu', $js, $out);
+        if (is_string($out2)) {
+            $out = $out2;
+        }
+        $out2 = preg_replace_callback("/(\\son[a-z]+\\s*=\\s*')([^']*)(')/iu", $js, $out);
+        if (is_string($out2)) {
+            $out = $out2;
+        }
+        return tf_autotranslate_text($out);
     }
 }
 
@@ -237,7 +274,7 @@ if (!function_exists('tf_autotranslate_buffer')) {
                 $protected = [];
             }
 
-            $out = tf_autotranslate_text($masked);
+            $out = tf_autotranslate_html($masked);
             if ($protected) {
                 $out = strtr($out, $protected);
             }

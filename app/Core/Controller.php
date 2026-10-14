@@ -737,8 +737,10 @@ abstract class Controller
         if (in_array($activeTab, ['competitor_intelligence', 'competitor_monitoring', 'ai_competitors'], true)) {
             $bodyHtml = $this->competitorTabsHtml($activeTab) . $bodyHtml;
         }
-        $pageTitleSafe = htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8');
-        $pageSubtitleSafe = htmlspecialchars($pageSubtitle, ENT_QUOTES, 'UTF-8');
+        // بعض الصفحات بتبعت العنوان متعمله escape بالفعل (tr())، فكان بيظهر
+        // "Today&#039;s" - بنفك الأول عشان الـ escape يحصل مرة واحدة بس.
+        $pageTitleSafe = htmlspecialchars(html_entity_decode($pageTitle, ENT_QUOTES, 'UTF-8'), ENT_QUOTES, 'UTF-8');
+        $pageSubtitleSafe = htmlspecialchars(html_entity_decode($pageSubtitle, ENT_QUOTES, 'UTF-8'), ENT_QUOTES, 'UTF-8');
         $lang = current_lang();
         $dir = current_dir();
 

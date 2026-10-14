@@ -2047,9 +2047,10 @@ JS;
     public function sequences(array $params=[]): array{
         if(!$this->isAuthenticated())return $this->error('Unauthorized',401);
         $body=$this->crmTabsHtml('sequences').'<section class="p-card"><h2>تسلسلات المتابعة / Follow-up sequences</h2><p>اختار متابعة يدوية لإنشاء مهمة، أو إرسال تلقائي باستخدام SMTP أو واتساب الخاص بالحساب. التأخير هو مدة الانتظار بعد الخطوة.</p><form id="crmSequenceForm"><label>الاسم / Name <input name="name" required class="p-input" maxlength="190"></label><div id="crmSequenceSteps"></div><button type="button" class="p-btn outline" id="crmAddStep">إضافة خطوة / Add step</button> <button class="p-btn primary">حفظ التسلسل / Save</button></form><p id="crmSequenceNotice" role="status"></p></section><section class="p-card"><h3>التسلسلات / Sequences</h3><div id="crmSequenceList"></div></section><section class="p-card"><h3>التسجيلات / Enrollments</h3><div id="crmSequenceEnrollments"></div></section>';
-        $script='<script src="'.htmlspecialchars(asset_v('/assets/js/crm-sequences.js'),ENT_QUOTES,'UTF-8').'"></script>';
-        // Script URL is part of the body; renderPanelPage expects raw JavaScript for its script argument.
-        echo $this->renderPanelPage('crm','تسلسلات المتابعة','Follow-up sequences',$body.$script);exit;
+        // الملف بيستخدم window.Panel، فلازم يتحمّل بعد panel.js (كان جوه الـ body
+        // فبيشتغل قبله والصفحة تقف: Cannot read properties of undefined).
+        $script='var s=document.createElement("script");s.src='.json_encode(asset_v('/assets/js/crm-sequences.js'),JSON_UNESCAPED_SLASHES).';document.body.appendChild(s);';
+        echo $this->renderPanelPage('crm','تسلسلات المتابعة','Follow-up sequences',$body,$script);exit;
     }
 
 }

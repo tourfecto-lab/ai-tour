@@ -399,7 +399,21 @@
         });
     }
 
+    // مبلغ بعملة النشاط (window.TF_CURRENCY من renderPanelPage) - صفحة
+    // الإيرادات كانت بتنادي P.money ومكانتش موجودة فالصفحة كلها بتقف.
+    function money(n) {
+        var v = Number(n);
+        if (!isFinite(v)) return '—';
+        var cur = (global.TF_CURRENCY || 'USD');
+        try {
+            return new Intl.NumberFormat(document.documentElement.lang || 'en', { style: 'currency', currency: cur, maximumFractionDigits: 2 }).format(v);
+        } catch (e) {
+            return cur + ' ' + v.toFixed(2);
+        }
+    }
+
     global.Panel = {
+        money: money,
         esc: esc,
         fetchJSON: fetchJSON,
         toast: toast,
