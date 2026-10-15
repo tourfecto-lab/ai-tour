@@ -29,6 +29,10 @@
         try {
             var res = await fetch(url, opt);
             var j; try { j = await res.json(); } catch (e) { j = { success: false, error: 'invalid_response' }; }
+            if (res.status === 401) {
+                j = { success: false, error: 'انتهت جلستك. سجّل الدخول مرة أخرى.' };
+                if (window.Panel && window.Panel.sessionExpired) window.Panel.sessionExpired();
+            }
             return j;
         } catch (e) { return { success: false, error: 'network' }; } finally { clearTimeout(timer); }
     }
@@ -238,6 +242,8 @@
             if (el.dataset.copy) return; el.dataset.copy = '1';
             var wrap = el.parentNode.classList && el.parentNode.classList.contains('sc-copywrap') ? el.parentNode : null;
             if (!wrap) { wrap = document.createElement('div'); wrap.className = 'sc-copywrap'; el.parentNode.insertBefore(wrap, el); wrap.appendChild(el); }
+            // الأكواد عليها padding في style مباشر بيغلب الـ CSS، فزرار "نسخ" كان بيغطي أول الكود
+            el.style.paddingRight = '84px';
             var b = document.createElement('button'); b.type = 'button'; b.className = 'sc-copy'; b.innerHTML = ICON.copy + ' <span>' + esc(t('sc.copy')) + '</span>';
             b.onclick = function () {
                 var text = el.textContent;

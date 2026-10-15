@@ -51,11 +51,30 @@
         }
         if (!res.ok) {
             body.success = false;
-            if (!body.error) body.error = res.status === 401 || res.status === 419
-                ? 'انتهت جلستك. سجّل الدخول مرة أخرى.' : 'تعذر إتمام الطلب الآن. حاول مرة أخرى.';
+            if (res.status === 401 || res.status === 419) {
+                // السيرفر بيرجّع "Authentication token required" - رسالة مش مفهومة للعميل
+                body.error = 'انتهت جلستك. سجّل الدخول مرة أخرى.';
+                showSessionExpired();
+            } else if (!body.error) {
+                body.error = 'تعذر إتمام الطلب الآن. حاول مرة أخرى.';
+            }
         }
         if (body.success === false && body.upgrade_url) showUpgradePrompt(body.error, body.upgrade_url);
         return body;
+    }
+
+    // الجلسة انتهت: شريط ثابت بزرار دخول يرجّع العميل لنفس الصفحة. مش تحويل
+    // تلقائي عشان لو العميل كاتب حاجة في فورم متضيعش.
+    function showSessionExpired() {
+        if (document.getElementById('tfSessionExpired')) return;
+        const back = location.pathname + location.search;
+        const bar = document.createElement('div');
+        bar.id = 'tfSessionExpired';
+        bar.setAttribute('role', 'alert');
+        bar.style.cssText = 'position:fixed;z-index:10000;inset-inline:16px;top:16px;max-width:560px;margin-inline:auto;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 16px;border-radius:14px;background:var(--panel-card-bg,#fff);color:var(--panel-text,#0F1B2D);border:1px solid #E5484D;box-shadow:0 18px 40px -18px rgba(11,27,51,.45);font-size:14px;';
+        bar.innerHTML = '<span style="flex:1;min-width:200px;">انتهت جلستك. سجّل الدخول تاني وكمّل من نفس المكان.</span>'
+            + '<a href="/login?redirect=' + encodeURIComponent(back) + '" style="text-decoration:none;background:var(--panel-accent,#1F4FFF);color:#fff;padding:8px 16px;border-radius:10px;font-weight:600;white-space:nowrap;">تسجيل الدخول</a>';
+        document.body.appendChild(bar);
     }
 
     // الأداة محتاجة اشتراك/رصيد (SubscriptionMiddleware بيرجّع upgrade_url): شريط ثابت
@@ -414,6 +433,7 @@
 
     global.Panel = {
         money: money,
+        sessionExpired: showSessionExpired,
         esc: esc,
         fetchJSON: fetchJSON,
         toast: toast,
