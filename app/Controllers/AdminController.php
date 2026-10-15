@@ -3701,7 +3701,10 @@ HTML;
             . '<p class="p-cell-muted" style="font-size:12px;margin:12px 0 4px">WhatsApp ← Configuration (للشركات اللي بتربط بضغطة من خلال تطبيقك):</p>'
             . $row('Callback URL', $base . '/api/whatsapp-cloud/webhook')
             . $row('Verify token', $verify, 'واشترك في: messages')
-            . '<p class="p-cell-muted" style="font-size:11.5px;margin:10px 0 0">لو تطبيقك نوع Business: اعمل Configuration من Facebook Login for Business بالصلاحيات (pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic, instagram_content_publish, pages_messaging, ads_management, ads_read, business_management) وحط الـ Config ID فوق.</p>'
+            . '<p class="p-cell-muted" style="font-size:12px;margin:12px 0 4px">Webhooks ← Page وكمان Webhooks ← Instagram (رسائل ماسنجر وإنستجرام لكل الشركات):</p>'
+            . $row('Callback URL', $base . '/api/meta/webhook')
+            . $row('Verify token', class_exists('MetaWebhookController') ? MetaWebhookController::verifyToken() : '', 'واشترك في: messages و messaging_postbacks')
+            . '<p class="p-cell-muted" style="font-size:11.5px;margin:10px 0 0">لو تطبيقك نوع Business: اعمل Configuration من Facebook Login for Business بالصلاحيات (pages_show_list, pages_manage_posts, pages_read_engagement, instagram_basic, instagram_content_publish, pages_messaging, instagram_manage_messages, pages_manage_metadata, ads_management, ads_read, business_management) وحط الـ Config ID فوق.</p>'
             . '</details>';
     }
 

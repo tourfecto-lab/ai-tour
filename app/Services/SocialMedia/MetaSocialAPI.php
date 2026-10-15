@@ -335,6 +335,15 @@ class MetaSocialAPI
         return $out;
     }
 
+    /**
+     * يشترك بالصفحة في تطبيق المنصة عشان رسائل Messenger وInstagram توصل
+     * على الـ webhook العام. بيحتاج صلاحية pages_messaging.
+     */
+    public function subscribeMessaging(string $pageId, string $pageAccessToken): array
+    {
+        return $this->post($pageId . '/subscribed_apps', ['subscribed_fields' => 'messages,messaging_postbacks'], $pageAccessToken);
+    }
+
     private function get(string $path, array $query = []): array
     {
         $query['access_token'] = $this->accessToken;

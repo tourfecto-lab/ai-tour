@@ -111,8 +111,8 @@ class IntegrationsController extends Controller
                 'icon' => 'search',
             ],
             'meta_ads' => [
-                'label' => 'Meta Ads (Facebook / Instagram)',
-                'desc' => 'إدارة حملات فيسبوك وانستجرام الإعلانية',
+                'label' => 'Meta (Facebook / Instagram)',
+                'desc' => 'ربط واحد: الإعلانات + النشر على صفحاتك + الرد على رسائل ماسنجر وإنستجرام',
                 'connect' => '/ads/connect/meta',
                 'icon' => 'megaphone',
             ],
@@ -283,6 +283,9 @@ class IntegrationsController extends Controller
 
             if (!isset($isLinked[$key])) {
                 $isLinked[$key] = $conn && $conn['status'] === 'connected';
+            }
+            if ($key === 'meta_ads') {
+                $account .= $this->metaPagesSummary($userId);
             }
             $missingKeys = ConnectionGuide::missingKeys($key, [IntegrationManager::class, 'settingValue']);
             if (!empty($missingKeys) && !$isLinked[$key]) {
@@ -947,6 +950,43 @@ JS;
             return $envKey;
         }
         return substr($envKey, 0, 3) . str_repeat('*', $len - 3);
+    }
+
+    /** الصفحات والحسابات اللي اتربطت مع Meta: النشر والرسائل لكل واحدة، ولينك واتساب */
+    private function metaPagesSummary(int $userId): string
+    {
+        try {
+            $rows = $this->db->query(
+                "SELECT platform, external_location_id, external_location_name FROM platform_connections
+                 WHERE user_id = ? AND status = 'connected' AND platform IN ('facebook','instagram','messenger')",
+                [$userId]
+            );
+        } catch (Throwable $e) {
+            return '';
+        }
+        $messenger = [];
+        foreach ($rows as $r) {
+            if ($r['platform'] === 'messenger') {
+                $messenger[(string) $r['external_location_id']] = true;
+            }
+        }
+        $items = '';
+        foreach ($rows as $r) {
+            if ($r['platform'] === 'messenger') {
+                continue;
+            }
+            $name = htmlspecialchars((string) ($r['external_location_name'] ?: $r['external_location_id']), ENT_QUOTES, 'UTF-8');
+            $label = $r['platform'] === 'facebook' ? 'صفحة فيسبوك' : 'إنستجرام';
+            // رسائل إنستجرام بتوصل عن طريق اشتراك الصفحة المرتبطة بيه
+            $msg = $r['platform'] === 'facebook' ? isset($messenger[(string) $r['external_location_id']]) : !empty($messenger);
+            $items .= '<li>' . $label . ': <b>' . $name . '</b> — نشر ✓ · رسائل ' . ($msg ? '✓' : '✗') . '</li>';
+        }
+        if ($items === '') {
+            return '<div class="p-cell-muted" style="font-size:12px;margin-top:6px">لسه مفيش صفحات فيسبوك أو إنستجرام. اضغط "إعادة الربط" واختار صفحاتك في نافذة فيسبوك.</div>';
+        }
+        $hint = !empty($messenger) ? '' : '<div class="p-cell-muted" style="font-size:12px">الرسائل لسه مش مفعّلة: اضغط "إعادة الربط" ووافق على صلاحية الرسائل.</div>';
+        return '<ul style="margin:6px 0;padding-inline-start:18px;font-size:12.5px;line-height:1.9">' . $items . '</ul>' . $hint
+            . '<a class="p-cell-muted" style="font-size:12px" href="/chat/settings">واتساب بيتربط من إعدادات الشات ←</a>';
     }
 
     /** تحويل اسم متغير env لاسم مفتاح setting (lowercase underscore) */

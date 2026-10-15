@@ -102,7 +102,7 @@ class MetaOAuthClient
         'ads' => ['ads_management', 'ads_read', 'business_management'],
         'pages' => ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'],
         'instagram' => ['instagram_basic', 'instagram_content_publish'],
-        'messaging' => ['pages_messaging', 'instagram_manage_messages'],
+        'messaging' => ['pages_messaging', 'instagram_manage_messages', 'pages_manage_metadata'],
     ];
 
     /** الصلاحيات اللي هنطلبها - قابلة للتغيير من META_OAUTH_SCOPES (مفصولة بفاصلة) لو Meta لسه ماوافقتش على بعضها */

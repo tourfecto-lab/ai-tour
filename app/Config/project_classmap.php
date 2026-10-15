@@ -494,6 +494,7 @@ return [
     'MessengerAPI' => dirname(__DIR__,2).'/app/Services/Chat/MessengerAPI.php',
     'MetaAdsAPI' => dirname(__DIR__,2).'/app/Services/Ads/MetaAdsAPI.php',
     'MetaOAuthClient' => dirname(__DIR__,2).'/app/Services/OAuth/MetaOAuthClient.php',
+    'MetaWebhookController' => dirname(__DIR__,2).'/app/Controllers/MetaWebhookController.php',
     'MetaSocialAPI' => dirname(__DIR__,2).'/app/Services/SocialMedia/MetaSocialAPI.php',
     'MixpanelService' => dirname(__DIR__,2).'/app/Services/Integrations/MixpanelService.php',
     'Model' => dirname(__DIR__,2).'/app/Core/Model.php',

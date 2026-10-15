@@ -1855,6 +1855,16 @@ JS;
                     $this->upsertSocialConnection($websiteId, $userId, 'facebook', $page['id'], $page['name'], $encryptedPageToken);
                     $count++;
 
+                    // رسائل الصفحة (Messenger + Instagram DM): نشترك بالصفحة في تطبيق
+                    // المنصة فالرسائل توصل على /api/meta/webhook من غير أي إعداد من العميل
+                    $sub = $api->subscribeMessaging((string) $page['id'], (string) $page['access_token']);
+                    if (!empty($sub['success'])) {
+                        $this->upsertSocialConnection($websiteId, $userId, 'messenger', $page['id'], $page['name'], $encryptedPageToken);
+                        $diag['messaging'] = ($diag['messaging'] ?? 0) + 1;
+                    } else {
+                        Logger::warning('Meta page messaging subscribe failed', ['page' => $page['id'], 'error' => mb_substr((string) ($sub['error'] ?? ''), 0, 200)]);
+                    }
+
                     // حساب انستجرام بيزنس المرتبط بالصفحة (لو موجود)
                     if (!empty($page['instagram_id'])) {
                         $this->upsertSocialConnection(

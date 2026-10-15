@@ -389,6 +389,9 @@ $router->post('/api/whatsapp-cloud/templates', 'WhatsAppCloudController', 'creat
 $router->post('/api/whatsapp-cloud/test', 'WhatsAppCloudController', 'test', ['AuthMiddleware']);
 $router->get('/api/whatsapp-cloud/embedded-config', 'WhatsAppCloudController', 'embeddedConfig', ['AuthMiddleware']);
 $router->post('/api/whatsapp-cloud/embedded', 'WhatsAppCloudController', 'embedded', ['AuthMiddleware']);
+// رسائل Messenger وInstagram لكل الشركات على تطبيق Meta بتاع المنصة
+$router->get('/api/meta/webhook', 'MetaWebhookController', 'verify');
+$router->post('/api/meta/webhook', 'MetaWebhookController', 'receive');
 $router->get('/api/whatsapp-cloud/webhook', 'WhatsAppCloudController', 'platformWebhookVerify');
 $router->post('/api/whatsapp-cloud/webhook', 'WhatsAppCloudController', 'platformWebhook');
 $router->get('/api/whatsapp-cloud/webhook/{website_id}', 'WhatsAppCloudController', 'webhookVerify');
