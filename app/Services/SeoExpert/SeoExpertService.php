@@ -169,6 +169,12 @@ class SeoExpertService
             $response=$selected?AiText::generate($prompt,['task'=>'strategic_seo_plan','user_id'=>$uid,'website_id'=>$wid,'output_language'=>$brief['language'],'maxOutputTokens'=>12000,'responseMimeType'=>'application/json']):['success'=>true,'data'=>json_encode(['summary'=>'No eligible marketing pages were found in this audited sample. Review the excluded-page purposes and publish confirmed public service content before generating marketing changes.','changes'=>[],'client_tasks'=>[],'content_drafts'=>[]])];
             if(empty($response['success']))throw new ProviderRequestFailure(preg_match('/timeout|timed out|reset|uncertain|network/i',(string)($response['error']??''))===1);$received=true;
             $plan=self::validatePlan((string)($response['data']??''),$pages,(string)parse_url($site['main_url'],PHP_URL_HOST),$selected);
+            // الذكاء الاصطناعي بيعيد كتابة عناوين كويسة ويشيل البراند والكلمات المهمة:
+            // نقبل بس التعديلات اللي بتصلّح مشكلة حقيقية، ونشيل المهام العامة من غير دليل.
+            require_once __DIR__.'/SeoPlanQualityGate.php';
+            $brand=(string)($snapshot['brief']['shared_profile']['facts']['business_name']??($snapshot['brief']['business_name']??''));
+            $plan['changes']=SeoPlanQualityGate::filterChanges($plan['changes'],$pages,$brand);
+            $plan['client_tasks']=SeoPlanQualityGate::filterClientTasks($plan['client_tasks']);
             $this->db->transaction(function()use($r,$id,$plan,$pages,$snapshot,$cfg,$policy){
                 $this->q('DELETE FROM seo_expert_tasks WHERE run_id=?',[$id]);
                 foreach($plan['changes'] as $c){$p=$pages[$c['page_index']];$duplicate=count($p['values'][$c['field']]??[])>1;$this->task($r,$duplicate?'manual':'metadata','seo',$p,'Update '.$c['field'],$c['reason'],$c['field'],$c['value'],$duplicate?'needs_client':'pending');}
