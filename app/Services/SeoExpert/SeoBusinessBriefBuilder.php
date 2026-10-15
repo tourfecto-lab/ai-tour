@@ -252,10 +252,23 @@ class SeoBusinessBriefBuilder
         if (is_array($schemaLogo)) {
             $schemaLogo = $schemaLogo['url'] ?? '';
         }
-        foreach ([(string) $schemaLogo, (string) ($home['logo'] ?? '')] as $candidate) {
-            if (preg_match('#^https://#i', $candidate)) {
+        $logoCandidates = $home['logo_candidates'] ?? [];
+        // اللوجو الحقيقي قبل أيقونة المتصفح (favicon .ico)
+        usort($logoCandidates, static fn ($a, $b) => (int) (bool) preg_match('/\.ico(\?|$)|favicon/i', (string) $a) <=> (int) (bool) preg_match('/\.ico(\?|$)|favicon/i', (string) $b));
+        foreach (array_merge([(string) $schemaLogo, (string) ($home['logo'] ?? '')], $logoCandidates) as $candidate) {
+            if (preg_match('#^https://#i', (string) $candidate)) {
                 $logo = $candidate;
                 break;
+            }
+        }
+
+        // أسعار مكتوبة في كروت الرحلات (لو مفيش في الـ Schema) - السعر زي ما هو على الموقع
+        $cardPrices = [];
+        foreach ($contexts as $ctx) {
+            foreach ($ctx['card_prices'] ?? [] as $cp) {
+                if (self::looksLikeTrip((string) $cp)) {
+                    $cardPrices[] = $cp . $L(' (زي ما هو على الموقع — ضيف تاريخ انتهاء العرض)', ' (as shown on the site — add validity date)');
+                }
             }
         }
 
@@ -264,7 +277,7 @@ class SeoBusinessBriefBuilder
             'email' => $emails[0] ?? '',
             'cta' => mb_substr($cta, 0, 300),
             'logo_url' => mb_substr($logo, 0, 500),
-            'offers' => mb_substr(implode("\n", self::unique($prices, 10)), 0, 1500),
+            'offers' => mb_substr(implode("\n", self::unique($prices ?: $cardPrices, 10)), 0, 1500),
             'business_name' => mb_substr(strip_tags($name), 0, 150),
             'business_facts' => mb_substr(implode("\n", $lines), 0, 2500),
             'audience' => mb_substr($audience, 0, 700),

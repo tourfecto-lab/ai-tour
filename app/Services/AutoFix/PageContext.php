@@ -42,11 +42,26 @@ class PageContext
 
         $out['title'] = $this->clean($xp->evaluate('string(//title)'));
         $out['h1'] = $this->clean($xp->evaluate('string((//h1)[1])'));
-        // عناوين الأقسام والكروت (أسماء الرحلات غالبًا بتبقى h2/h3 في صفحات الأقسام)
+        // عناوين الأقسام والكروت (أسماء الرحلات غالبًا بتبقى h2/h3 في صفحات الأقسام)،
+        // ومعاها السعر المكتوب في نفس الكارت لو موجود
         $out['headings'] = [];
+        $out['card_prices'] = [];
         foreach ($xp->query('//h2|//h3') as $hn) {
             $hv = $this->clean($hn->textContent);
-            if ($hv !== '' && mb_strlen($hv) <= 90) { $out['headings'][] = $hv; }
+            if ($hv !== '' && mb_strlen($hv) <= 90) {
+                $out['headings'][] = $hv;
+                $card = $hn->parentNode;
+                for ($up = 0; $up < 3 && $card && $card->parentNode; $up++) {
+                    $cardText = $this->clean($card->textContent);
+                    // وصلنا لحاوية فيها أكتر من كارت: السعر ممكن يبقى بتاع رحلة تانية
+                    if (mb_strlen($cardText) > 600 || $xp->query('.//h2|.//h3', $card)->length > 1) { break; }
+                    if (preg_match('/(?:US\$|\$|€|£|EGP|USD|EUR|GBP)\s?\d{1,5}(?:[.,]\d{1,2})?|\d{1,5}(?:[.,]\d{1,2})?\s?(?:USD|EUR|GBP|EGP|\$|€|£|جنيه)/u', $cardText, $pm)) {
+                        $out['card_prices'][] = $hv . ' — ' . trim($pm[0]);
+                        break;
+                    }
+                    $card = $card->parentNode;
+                }
+            }
             if (count($out['headings']) >= 30) { break; }
         }
         $htmlNode = $doc->getElementsByTagName('html')->item(0);
@@ -152,6 +167,14 @@ class PageContext
         }
         foreach ($xp->query('//link[contains(@rel,"icon") and @href]') as $l) {
             $candidates['logo'][] = $l->getAttribute('href');
+        }
+        // روابط اللوجو المرشحة (من غير تحقق إنها صورة) - لملء ملف الشركة، والعميل بيراجع
+        $out['logo_candidates'] = [];
+        foreach (array_unique($candidates['logo'] ?? []) as $c) {
+            $abs = $this->absolute($out['final_url'], $c);
+            if ($abs !== '' && strpos($abs, 'https://') === 0) {
+                $out['logo_candidates'][] = $abs;
+            }
         }
         foreach (['image', 'logo'] as $kind) {
             foreach (array_unique($candidates[$kind] ?? []) as $c) {
