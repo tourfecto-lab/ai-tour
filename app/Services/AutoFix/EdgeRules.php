@@ -142,8 +142,10 @@ class EdgeRules
             if($pageRules)$rules['page_rules']=$pageRules;
             // مقالات معتمدة بتتنشر من خلال ملف الربط في مواقع PHP (/guides/{slug}) - نص بس
             $articles=[];
-            foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified') AND published_url LIKE '%/guides/%' ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
-                $slug=basename((string)parse_url((string)$a['published_url'],PHP_URL_PATH));
+            foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified') AND (published_url LIKE '%/guides/%' OR published_url LIKE '%tf_article=%') ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
+                // الرابط ممكن يكون /guides/{slug} أو البديل ?tf_article={slug}
+                parse_str((string)parse_url((string)$a['published_url'],PHP_URL_QUERY),$q);
+                $slug=isset($q['tf_article'])&&is_string($q['tf_article'])?$q['tf_article']:basename((string)parse_url((string)$a['published_url'],PHP_URL_PATH));
                 if(!preg_match('/^[a-z0-9][a-z0-9-]{0,120}$/',$slug))continue;
                 $title=self::line((string)$a['title']);$body=trim(str_replace("\r",'',strip_tags((string)$a['expected_value'])));
                 if($title===''||$body==='')continue;

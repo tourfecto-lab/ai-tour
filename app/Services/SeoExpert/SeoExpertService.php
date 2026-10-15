@@ -336,10 +336,10 @@ class SeoExpertService
                     if(!$same&&$attempt<3)$pending=true;$this->q('UPDATE seo_expert_tasks SET evidence_json=?,checked_at=UTC_TIMESTAMP() WHERE id=?',[json_encode($evidence,JSON_THROW_ON_ERROR),$t['id']]);continue;
                 }
                 if($t['kind']==='content'){
-                    $expected=self::normalizeText((string)$t['expected_value']);$fragment=mb_substr($expected,0,120);$observed=self::normalizeText((string)($ctx['text']??''));$viaConnector=empty($t['external_post_id'])&&str_contains((string)$t['published_url'],'/guides/');
+                    $expected=self::normalizeText((string)$t['expected_value']);$fragment=mb_substr($expected,0,120);$observed=self::normalizeText((string)($ctx['text']??''));$viaConnector=empty($t['external_post_id'])&&(str_contains((string)$t['published_url'],'/guides/')||str_contains((string)$t['published_url'],'tf_article='));
                     if($viaConnector&&(empty($ctx['ok'])||!str_contains(self::normalizeText((string)($ctx['title']??'')),self::normalizeText((string)$t['title'])))){
                         // لو السيرفر مش بيوجّه /guides/ لـ PHP، نجرب الرابط البديل اللي بيعدّي على index.php دايمًا
-                        $alt=rtrim((string)$this->site($uid,$wid)['main_url'],'/').'/?tf_article='.rawurlencode(basename((string)parse_url((string)$t['published_url'],PHP_URL_PATH)));$altCtx=$reader->fresh($alt);
+                        $alt=str_contains((string)$t['published_url'],'tf_article=')?(string)$t['published_url']:rtrim((string)$this->site($uid,$wid)['main_url'],'/').'/?tf_article='.rawurlencode(basename((string)parse_url((string)$t['published_url'],PHP_URL_PATH)));$altCtx=$reader->fresh($alt);
                         if(!empty($altCtx['ok'])&&str_contains(self::normalizeText((string)($altCtx['title']??'')),self::normalizeText((string)$t['title']))){$ctx=$altCtx;$url=$alt;$this->q('UPDATE seo_expert_tasks SET published_url=? WHERE id=?',[$alt,$t['id']]);}
                     }
                     $storedBody=$viaConnector?(string)$t['expected_value']:$this->publishedBody($uid,$wid,(int)$t['external_post_id']);
