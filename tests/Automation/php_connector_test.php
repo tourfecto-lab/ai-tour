@@ -48,6 +48,24 @@ check(strpos($tours, '<title>Tours Page Title</title>') !== false, 'page rule ap
 $other = (string) render($connector, '/contact', $page);
 check(strpos($other, '<title>Old</title>') !== false, 'homepage values not applied to other pages');
 
+// مقالات منشورة من خلال ملف الربط
+file_put_contents($cache, json_encode(['t' => time(), 'f' => 0, 'rules' => ['articles' => [
+    'discover-egypt' => ['title' => 'Discover Egypt', 'description' => 'Guide to Egypt tours.', 'published_at' => '2026-10-15',
+        'body' => "Egypt is wonderful.\n\n**Luxor Tours**: temples <script>alert(1)</script> and balloons.\n\n- Valley of the Kings\n- Karnak"],
+]]]));
+$art = (string) render($connector, '/guides/discover-egypt', $page);
+check(strpos($art, '<h1>Discover Egypt</h1>') !== false, 'article served on /guides/{slug}');
+check(strpos($art, '<strong>Luxor Tours</strong>') !== false && strpos($art, '<li>Valley of the Kings</li>') !== false, 'bold and list formatting');
+check(strpos($art, '<script>alert(1)</script>') === false && strpos($art, '&lt;script&gt;') !== false, 'article text is escaped');
+check(strpos($art, 'rel="canonical" href="http://127.0.0.1:' . $port . '/guides/discover-egypt"') !== false, 'article canonical');
+check(strpos($art, '"@type":"Article"') !== false && strpos($art, 'tourfecto-connector') !== false, 'Article schema and connector marker');
+$fallback = (string) render($connector, '/?tf_article=discover-egypt', $page);
+check(strpos($fallback, '<h1>Discover Egypt</h1>') !== false, 'fallback ?tf_article= works');
+$index = (string) render($connector, '/guides', $page);
+check(strpos($index, 'href="/guides/discover-egypt"') !== false, 'guides index lists the article');
+$missing = (string) render($connector, '/guides/unknown', $page);
+check(strpos($missing, '<title>Old</title>') !== false, 'unknown article falls through to the site');
+
 file_put_contents($cache, json_encode(['t' => time(), 'f' => 0, 'rules' => []]));
 $plain = (string) render($connector, '/', $page);
 check(strpos($plain, '<title>Old</title>') !== false && strpos($plain, 'content="old"') !== false, 'no rules: page unchanged');

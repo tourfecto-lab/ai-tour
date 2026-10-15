@@ -237,7 +237,8 @@ class SeoExpertService
         $this->requireReady();$r=$this->run($uid,$id);$wid=(int)$r['website_id'];if(($input['reviewed']??false)!==true)throw new InvalidArgumentException('Review the plan before approval');if(!self::worker())throw new InvalidArgumentException('Worker is not running');
         if(!ExternalExecution::lock('seo-expert-site:'.$wid))throw new RuntimeException('Site busy');try{return $this->db->transaction(function()use($uid,$id,$wid,$input){$r=$this->run($uid,$id,true);$approvalSnapshot=json_decode((string)$r['snapshot_json'],true)?:[];(new BusinessHubService($this->db))->assertRevision($uid,(int)$r['website_id'],$approvalSnapshot['brief']??[]);$cfg=$this->config($uid,$wid,true);if(in_array($r['status'],['executing','monitoring'],true))return $this->detail($uid,$id);if(!in_array($r['status'],['draft','completed'],true)||(int)$r['version']!==(int)($input['version']??0))throw new InvalidArgumentException('Plan changed; reload and review it');$snap=json_decode((string)$r['snapshot_json'],true);if(($snap['opportunities']['scope_version']??0)!==SeoPagePolicy::VERSION&&empty($r['approved_at']))throw new InvalidArgumentException('Review the plan scope first; no new paid cycle is needed. / اضغط مراجعة نطاق الخطة أولًا بدون دورة مدفوعة جديدة.');if(($snap['brief']??[])!==json_decode($cfg['brief_json'],true)||($r['approved_at']===null&&(int)($snap['config_version']??0)!==(int)$cfg['version']))throw new InvalidArgumentException('Business setup changed. Generate a fresh plan before approval.');
             $selected=$input['task_ids']??[];if(!is_array($selected)||!$selected||count($selected)>1000)throw new InvalidArgumentException('Select the tasks you reviewed');
-            $newlyApproved=0;foreach(array_unique($selected) as $taskId){if(!is_scalar($taskId)||!ctype_digit((string)$taskId))throw new InvalidArgumentException('Invalid selected task');$t=$this->q('SELECT kind,status,page_url FROM seo_expert_tasks WHERE id=? AND run_id=? AND user_id=?',[(int)$taskId,$id,$uid])->fetch(PDO::FETCH_ASSOC);if(!$t||!in_array($t['kind'],['metadata','content'],true))throw new InvalidArgumentException('A selected task is unavailable');if(!SeoPagePolicy::route((string)$t['page_url'])['eligible'])throw new InvalidArgumentException('Operational/template pages cannot receive marketing edits.');if(in_array($t['status'],['approved','active','verified','publishing'],true))continue;if($t['status']!=='pending')throw new InvalidArgumentException('A selected task is not pending');if($t['kind']==='content'&&($input['publish_content']??false)!==true)throw new InvalidArgumentException('Confirm factual content publication');$this->q("UPDATE seo_expert_tasks SET status='approved' WHERE id=? AND run_id=?",[(int)$taskId,$id]);$newlyApproved++;}
+            $newlyApproved=0;foreach(array_unique($selected) as $taskId){if(!is_scalar($taskId)||!ctype_digit((string)$taskId))throw new InvalidArgumentException('Invalid selected task');$t=$this->q('SELECT kind,status,page_url,published_url FROM seo_expert_tasks WHERE id=? AND run_id=? AND user_id=?',[(int)$taskId,$id,$uid])->fetch(PDO::FETCH_ASSOC);if(!$t||!in_array($t['kind'],['metadata','content'],true))throw new InvalidArgumentException('A selected task is unavailable');if(!SeoPagePolicy::route((string)$t['page_url'])['eligible'])throw new InvalidArgumentException('Operational/template pages cannot receive marketing edits.');if(in_array($t['status'],['approved','active','verified','publishing'],true))continue;// مقال ماتنشرش لأن مكانش فيه طريقة نشر (قبل تركيب ملف الربط): يتعتمد تاني ويتنشر
+            $retryArticle=$t['kind']==='content'&&$t['status']==='needs_client'&&empty($t['published_url']);if($t['status']!=='pending'&&!$retryArticle)throw new InvalidArgumentException('A selected task is not pending');if($t['kind']==='content'&&($input['publish_content']??false)!==true)throw new InvalidArgumentException('Confirm factual content publication');$this->q("UPDATE seo_expert_tasks SET status='approved' WHERE id=? AND run_id=?",[(int)$taskId,$id]);$newlyApproved++;}
             if(!$newlyApproved)return $this->detail($uid,$id);
 
             $this->q("UPDATE seo_expert_sites SET status='active',version=version+1,updated_at=UTC_TIMESTAMP() WHERE website_id=? AND user_id=?",[$wid,$uid]);
@@ -251,6 +252,8 @@ class SeoExpertService
         $next=gmdate('Y-m-d H:i:s',time()+7*86400);$job=(new QueueManager($this->db))->push(SeoExpertCycleJob::class,['website_id'=>$wid,'user_id'=>$uid],'seo',7*86400);if(!$job)throw new RuntimeException('Could not schedule next cycle');$this->q('UPDATE jobs SET available_at=? WHERE id=?',[$next,$job]);$this->q('UPDATE seo_expert_sites SET next_due_at=? WHERE website_id=?',[$next,$wid]);
     }
     public function recurring(int $uid,int $wid): void{$this->requireReady();$cfg=$this->config($uid,$wid);if($cfg['status']!=='active'||empty(json_decode($cfg['policy_json'],true)['auto_missing_metadata']))return;try{$this->enqueue($uid,$wid,'weekly_'.$wid.'_'.gmdate('Ymd'));}catch(Throwable $e){try{Notification::notify($uid,'seo_expert_attention','SEO cycle needs attention','Review the worker, budget or balance in SEO Expert.','/seo-expert');}catch(Throwable $ignored){}$this->scheduleNext($uid,$wid);}}
+    /** رابط مقروء للمقال: discover-egypts-treasures-with-tourfecto-travel */
+    public static function articleSlug(string $title): string{$slug=strtolower(trim((string)preg_replace('/[^A-Za-z0-9]+/','-',iconv('UTF-8','ASCII//TRANSLIT//IGNORE',str_replace(["'",'’','`'],'',$title))?:''),'-'));$slug=substr($slug,0,80);return trim($slug,'-')?:'article';}
     public static function contentHtml(string $body,array $sources): string{$html='';foreach(preg_split('/\n\s*\n/',trim($body)) as $p)$html.='<p>'.nl2br(htmlspecialchars($p,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8')).'</p>';foreach(array_slice($sources,0,3) as $url)$html.='<p><a href="'.htmlspecialchars($url,ENT_QUOTES,'UTF-8').'">'.htmlspecialchars($url,ENT_QUOTES,'UTF-8').'</a></p>';return $html;}
     private function publisher(?int &$lastCode=null): WordPressPublisher{
         return new WordPressPublisher(static function(array $request)use(&$lastCode): array{
@@ -261,7 +264,20 @@ class SeoExpertService
         });
     }
     private function publishContent(array $t,array $r): void{
-        $uid=(int)$r['user_id'];$wid=(int)$r['website_id'];$conn=$this->connection($uid,$wid,'wordpress');if(!$conn){$this->needsClient($t,'Connect WordPress publishing, then request another execution. No article was published.');return;}
+        $uid=(int)$r['user_id'];$wid=(int)$r['website_id'];$conn=$this->connection($uid,$wid,'wordpress');
+        if(!$conn){
+            // موقع PHP مربوط بملف tourfecto-connect.php: المقال بيتنشر من خلاله على /guides/{slug}
+            $site=$this->site($uid,$wid);$home=($this->reader??new SeoExpertPageContext())->fresh($site['main_url']);
+            if(!empty($home['ok'])&&($home['connector_version']??'')==='4'){
+                $slug=self::articleSlug((string)$t['title']);
+                $taken=$this->q("SELECT COUNT(*) FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND id<>? AND published_url LIKE ?",[$wid,$t['id'],'%/guides/'.$slug])->fetchColumn();
+                if($taken)$slug.='-'.(int)$t['id'];
+                $url=rtrim($site['main_url'],'/').'/guides/'.$slug;
+                $this->q("UPDATE seo_expert_tasks SET status='active',is_active=1,external_post_id=NULL,published_url=?,updated_at=UTC_TIMESTAMP() WHERE id=?",[$url,$t['id']]);
+                return;
+            }
+            $this->needsClient($t,'Connect WordPress publishing or install tourfecto-connect.php (PHP sites), then request another execution. No article was published.');return;
+        }
         $site=$this->site($uid,$wid);$target=(string)$conn['external_location_id'];if(!WordPressConnector::hostsEqual((string)parse_url($site['main_url'],PHP_URL_HOST),(string)parse_url($target,PHP_URL_HOST))||!str_starts_with($target,'https://'))throw new RuntimeException('Publishing target mismatch');
         [$username,$password]=array_pad(explode(':',(new Encryption())->decrypt($conn['access_token']),2),2,'');if(!$username||!$password)throw new RuntimeException('Publishing credentials unavailable');
         $snapshot=json_decode($r['snapshot_json'],true);$sources=array_column($snapshot['pages']??[],'url');$html=self::contentHtml($t['expected_value'],$sources);
@@ -314,10 +330,16 @@ class SeoExpertService
                     if(!$same&&$attempt<3)$pending=true;$this->q('UPDATE seo_expert_tasks SET evidence_json=?,checked_at=UTC_TIMESTAMP() WHERE id=?',[json_encode($evidence,JSON_THROW_ON_ERROR),$t['id']]);continue;
                 }
                 if($t['kind']==='content'){
-                    $expected=self::normalizeText((string)$t['expected_value']);$fragment=mb_substr($expected,0,120);$observed=self::normalizeText((string)($ctx['text']??''));$storedBody=$this->publishedBody($uid,$wid,(int)$t['external_post_id']);
+                    $expected=self::normalizeText((string)$t['expected_value']);$fragment=mb_substr($expected,0,120);$observed=self::normalizeText((string)($ctx['text']??''));$viaConnector=empty($t['external_post_id'])&&str_contains((string)$t['published_url'],'/guides/');
+                    if($viaConnector&&(empty($ctx['ok'])||!str_contains(self::normalizeText((string)($ctx['title']??'')),self::normalizeText((string)$t['title'])))){
+                        // لو السيرفر مش بيوجّه /guides/ لـ PHP، نجرب الرابط البديل اللي بيعدّي على index.php دايمًا
+                        $alt=rtrim((string)$this->site($uid,$wid)['main_url'],'/').'/?tf_article='.rawurlencode(basename((string)parse_url((string)$t['published_url'],PHP_URL_PATH)));$altCtx=$reader->fresh($alt);
+                        if(!empty($altCtx['ok'])&&str_contains(self::normalizeText((string)($altCtx['title']??'')),self::normalizeText((string)$t['title']))){$ctx=$altCtx;$url=$alt;$this->q('UPDATE seo_expert_tasks SET published_url=? WHERE id=?',[$alt,$t['id']]);}
+                    }
+                    $storedBody=$viaConnector?(string)$t['expected_value']:$this->publishedBody($uid,$wid,(int)$t['external_post_id']);
                     $whole=$storedBody!==null&&str_contains(self::normalizeText($storedBody,true),$expected);
                     $found=$whole&&!empty($ctx['ok'])&&WordPressConnector::hostsEqual((string)parse_url($url,PHP_URL_HOST),(string)parse_url($ctx['final_url']??'',PHP_URL_HOST))&&str_contains(self::normalizeText((string)$ctx['title']),self::normalizeText((string)$t['title']))&&str_contains($observed,$fragment);
-                    $check=['state'=>$found?'verified':'not_seen','reason'=>$found?'WordPress contains the approved body and the public page exposes its title and text.':'Full publication verification is incomplete. Review content, WordPress read permission or public-page cache.','observed'=>['public_title'=>$ctx['title']??null,'approved_body_matches'=>$whole]];
+                    $check=['state'=>$found?'verified':'not_seen','reason'=>$found?($viaConnector?'Published through tourfecto-connect.php; the public page exposes the approved title and text.':'WordPress contains the approved body and the public page exposes its title and text.'):'Full publication verification is incomplete. Review content, WordPress read permission or public-page cache.','observed'=>['public_title'=>$ctx['title']??null,'approved_body_matches'=>$whole]];
                 }
                 else $check=PageContext::verifyValue($t['field_name'],$t['expected_value'],$ctx);
                 $state=$check['state']==='verified'?'verified':($attempt<3?'active':'needs_client');if($state==='active')$pending=true;
