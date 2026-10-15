@@ -76,10 +76,17 @@ class SeoBusinessBriefBuilder
 
         // --- الخدمات / الرحلات: من الـ Schema ثم عناوين الصفحات المهمة ثم روابط القائمة
         $services = $offers;
+        $tours = [];
         foreach (array_slice($contexts, 1) as $ctx) {
             $h1 = trim((string) ($ctx['h1'] ?? ''));
             if ($h1 !== '' && mb_strlen($h1) <= 90) {
                 $services[] = $h1;
+            }
+            // أسماء الرحلات من كروت صفحات الأقسام
+            foreach ($ctx['headings'] ?? [] as $heading) {
+                if (self::looksLikeTrip((string) $heading)) {
+                    $tours[] = $heading;
+                }
             }
         }
         foreach ($home['links'] ?? [] as $link) {
@@ -88,12 +95,28 @@ class SeoBusinessBriefBuilder
                 $services[] = $title;
             }
         }
-        $services = self::unique($services, 12);
+        $services = self::unique(array_filter($services, [self::class, 'isRealService']), 12);
         if ($services) {
-            $lines[] = $L('الخدمات والرحلات: ', 'Services & tours: ') . implode($sep, $services);
+            $lines[] = $L('الخدمات: ', 'Services: ') . implode($sep, $services);
+        }
+        $tours = self::unique(array_filter($tours, [self::class, 'isRealService']), 15);
+        if ($tours) {
+            $lines[] = $L('رحلات معروضة على الموقع: ', 'Tours listed on the site: ') . implode($sep, $tours);
         }
 
-        // --- الوجهات
+        // --- الوجهات: من الـ Schema ومن روابط زي /tours/luxor أو /destinations/aswan
+        foreach ($contexts as $ctx) {
+            $urls = [(string) ($ctx['final_url'] ?? '')];
+            foreach ($ctx['links'] ?? [] as $link) {
+                $urls[] = is_array($link) ? (string) ($link['url'] ?? '') : (string) $link;
+            }
+            foreach ($urls as $u) {
+                if (preg_match('#/(?:tours|destinations?|trips|excursions)/([a-z][a-z\-]{2,24})/?$#i', (string) parse_url($u, PHP_URL_PATH), $dm)
+                    && !preg_match('/^(all|search|book|booking|private|group|day|cheap|best|new|popular)|cruise|safari|balloon|diving|snorkel|transfer|package/i', $dm[1])) {
+                    $places[] = ucwords(str_replace('-', ' ', strtolower($dm[1])));
+                }
+            }
+        }
         $places = self::unique($places, 10);
         if ($places) {
             $lines[] = $L('الوجهات: ', 'Destinations: ') . implode($sep, $places);
@@ -123,7 +146,7 @@ class SeoBusinessBriefBuilder
             $contact[] = $L('إيميل ', 'Email ') . implode(' / ', $emails);
         }
         $address = self::address($org['address'] ?? null);
-        if ($address !== '') {
+        if (mb_strlen($address) > 3) {
             $contact[] = $L('العنوان ', 'Address ') . $address;
         }
         if ($contact) {
@@ -188,6 +211,21 @@ class SeoBusinessBriefBuilder
             'audience' => mb_substr($audience, 0, 700),
             'goal' => mb_substr($goal . '.', 0, 700),
         ];
+    }
+
+    /** عناوين الأزرار والفلاتر مش خدمات ("All Tours", "Find my tour" ...) */
+    public static function isRealService($text): bool
+    {
+        $t = mb_strtolower(trim((string) $text));
+        return $t !== '' && !preg_match('/^(all|our|view|see|browse|find|search|explore|discover|book now|more|popular|featured|latest|top)\b|\b(quiz|filter|sort by|results?)\b|^(tours?|trips?|services?|home|contact|about|blog|faq)$/iu', $t);
+    }
+
+    /** عنوان كارت شكله اسم رحلة */
+    private static function looksLikeTrip(string $text): bool
+    {
+        return mb_strlen($text) >= 8
+            && (bool) preg_match('/tour|trip|cruise|excursion|safari|day|night|temple|pyramid|balloon|felucca|valley|museum|snorkel|diving|desert|oasis|رحل|جول|كروز|معبد|أهرام|سفاري|منطاد/iu', $text)
+            && !preg_match('/\?|why|how|what|reviews?|testimonials?|contact|newsletter|faq|لماذا|إزاي|آراء/iu', $text);
     }
 
     private static function walkSchema($node, ?array &$org, array &$offers, array &$places, array &$faqs): void

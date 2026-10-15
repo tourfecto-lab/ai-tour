@@ -49,6 +49,7 @@ final class SeoBusinessBriefBuilderTest extends TestCase
         $this->assertStringContainsString('Karnak Temple Tour', $b['business_facts']);
         $this->assertStringContainsString('Luxor & Aswan 4-Day Nile Cruise', $b['business_facts']);
         $this->assertStringContainsString('Destinations: Luxor', $b['business_facts']);
+        $this->assertStringNotContainsString('Address EG', $b['business_facts']);
         $this->assertStringContainsString('WhatsApp +201000000000', $b['business_facts']);
         $this->assertStringContainsString('info@t.com', $b['business_facts']);
         $this->assertStringContainsString('Is cancellation free? — Yes, up to 24 hours before.', $b['business_facts']);
@@ -57,10 +58,30 @@ final class SeoBusinessBriefBuilderTest extends TestCase
         $this->assertStringContainsString('WhatsApp', $b['goal']);
     }
 
+    public function testRealSiteShape(): void
+    {
+        // نفس شكل tourfecto.com الحقيقي: صفحات أقسام + زراير بحث
+        $home = ['title' => 'Tourfecto Travel', 'lang' => 'en', 'description' => 'Egypt tour operator.',
+            'links' => [['title' => 'Luxor Tours', 'url' => 'https://t.com/tours/luxor'], ['title' => 'Aswan Tours', 'url' => 'https://t.com/tours/aswan'],
+                ['title' => 'Find my tour', 'url' => 'https://t.com/quiz'], ['title' => 'Nile Cruises', 'url' => 'https://t.com/tours/nile-cruises']]];
+        $luxor = ['h1' => 'Luxor Tours', 'final_url' => 'https://t.com/tours/luxor',
+            'headings' => ['Luxor East & West Bank Full-Day Tour', 'Hot Air Balloon Ride over Luxor', 'Why book with us?', 'Guest reviews']];
+        $all = ['h1' => 'All Tours', 'final_url' => 'https://t.com/tours'];
+        $quiz = ['h1' => 'Find Your Perfect Tour', 'final_url' => 'https://t.com/quiz'];
+        $b = SeoBusinessBriefBuilder::build([$home, $luxor, $all, $quiz], 'x', false);
+        $this->assertStringContainsString('Services: Luxor Tours', $b['business_facts']);
+        $this->assertStringNotContainsString('All Tours', $b['business_facts']);
+        $this->assertStringNotContainsString('Find', $b['business_facts']);
+        $this->assertStringContainsString('Tours listed on the site: Luxor East & West Bank Full-Day Tour, Hot Air Balloon Ride over Luxor', $b['business_facts']);
+        $this->assertStringNotContainsString('Why book', $b['business_facts']);
+        $this->assertStringContainsString('Destinations: Luxor, Aswan', $b['business_facts']);
+        $this->assertStringNotContainsString('Destinations: Luxor, Aswan, Nile', $b['business_facts']);
+    }
+
     public function testArabicLabels(): void
     {
         $b = SeoBusinessBriefBuilder::build($this->site(), 'fallback', true);
-        $this->assertStringContainsString('الخدمات والرحلات: ', $b['business_facts']);
+        $this->assertStringContainsString('الخدمات: ', $b['business_facts']);
         $this->assertStringContainsString('الإنجليزي', $b['audience']);
     }
 

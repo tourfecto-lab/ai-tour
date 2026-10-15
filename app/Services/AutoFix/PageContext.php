@@ -42,6 +42,13 @@ class PageContext
 
         $out['title'] = $this->clean($xp->evaluate('string(//title)'));
         $out['h1'] = $this->clean($xp->evaluate('string((//h1)[1])'));
+        // عناوين الأقسام والكروت (أسماء الرحلات غالبًا بتبقى h2/h3 في صفحات الأقسام)
+        $out['headings'] = [];
+        foreach ($xp->query('//h2|//h3') as $hn) {
+            $hv = $this->clean($hn->textContent);
+            if ($hv !== '' && mb_strlen($hv) <= 90) { $out['headings'][] = $hv; }
+            if (count($out['headings']) >= 30) { break; }
+        }
         $htmlNode = $doc->getElementsByTagName('html')->item(0);
         $out['lang'] = $htmlNode ? strtolower(trim($htmlNode->getAttribute('lang'))) : '';
         foreach ($doc->getElementsByTagName('meta') as $m) {
