@@ -254,7 +254,16 @@ class SeoBusinessBriefBuilder
         }
         $logoCandidates = $home['logo_candidates'] ?? [];
         // اللوجو الحقيقي قبل أيقونة المتصفح (favicon .ico)
-        usort($logoCandidates, static fn ($a, $b) => (int) (bool) preg_match('/\.ico(\?|$)|favicon/i', (string) $a) <=> (int) (bool) preg_match('/\.ico(\?|$)|favicon/i', (string) $b));
+        // ترتيب: لوجو حقيقي، ثم apple-touch-icon (كبير)، ثم أيقونات كبيرة، وأخيرًا الصغيرة و .ico
+        $rank = static function (string $u): int {
+            if (preg_match('/logo/i', $u)) { return 0; }
+            if (preg_match('/apple-touch|180|192|256|512/i', $u)) { return 1; }
+            if (preg_match('/\.ico(\?|$)|favicon|(?:^|[^0-9])(?:16|32|48)(?:[^0-9]|$)/i', $u)) { return 3; }
+            return 2;
+        };
+        usort($logoCandidates, static fn ($a, $b) => $rank((string) $a) <=> $rank((string) $b));
+        // أيقونة 32 بكسل مش لوجو: أحسن الخانة تفضل فاضية والعميل يحط لوجو حقيقي
+        $logoCandidates = array_values(array_filter($logoCandidates, static fn ($u) => $rank((string) $u) < 3));
         foreach (array_merge([(string) $schemaLogo, (string) ($home['logo'] ?? '')], $logoCandidates) as $candidate) {
             if (preg_match('#^https://#i', (string) $candidate)) {
                 $logo = $candidate;
@@ -295,6 +304,9 @@ class SeoBusinessBriefBuilder
     /** عنوان كارت شكله اسم رحلة */
     private static function looksLikeTrip(string $text): bool
     {
+        if (preg_match('/^(choose|select|find|filter|search|pick|browse|view|see|all)\b/i', trim($text))) {
+            return false;
+        }
         return mb_strlen($text) >= 8
             && (bool) preg_match('/tour|trip|cruise|excursion|safari|day|night|temple|pyramid|balloon|felucca|valley|museum|snorkel|diving|desert|oasis|رحل|جول|كروز|معبد|أهرام|سفاري|منطاد/iu', $text)
             && !preg_match('/\?|why|how|what|reviews?|testimonials?|contact|newsletter|faq|لماذا|إزاي|آراء/iu', $text);
