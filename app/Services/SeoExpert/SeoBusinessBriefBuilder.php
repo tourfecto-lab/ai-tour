@@ -55,8 +55,9 @@ class SeoBusinessBriefBuilder
         $offers = [];
         $places = [];
         $faqs = [];
+        $prices = [];
         foreach ($contexts as $ctx) {
-            self::walkSchema($ctx['schema'] ?? [], $org, $offers, $places, $faqs);
+            self::walkSchema($ctx['schema'] ?? [], $org, $offers, $places, $faqs, $prices);
         }
         $name = trim((string) ($org['name'] ?? ($home['site_name'] ?? '')));
         if ($name === '') {
@@ -99,10 +100,7 @@ class SeoBusinessBriefBuilder
         if ($services) {
             $lines[] = $L('الخدمات: ', 'Services: ') . implode($sep, $services);
         }
-        $tours = self::unique(array_filter($tours, [self::class, 'isRealService']), 15);
-        if ($tours) {
-            $lines[] = $L('رحلات معروضة على الموقع: ', 'Tours listed on the site: ') . implode($sep, $tours);
-        }
+        $tours = self::unique(array_filter($tours, [self::class, 'isRealService']), 10);
 
         // --- الوجهات: من الـ Schema ومن روابط زي /tours/luxor أو /destinations/aswan
         foreach ($contexts as $ctx) {
@@ -120,6 +118,10 @@ class SeoBusinessBriefBuilder
         $places = self::unique($places, 10);
         if ($places) {
             $lines[] = $L('الوجهات: ', 'Destinations: ') . implode($sep, $places);
+        }
+
+        if ($tours) {
+            $lines[] = $L('رحلات معروضة على الموقع: ', 'Tours listed on the site: ') . implode($sep, $tours);
         }
 
         // --- التواصل والعنوان
@@ -183,11 +185,26 @@ class SeoBusinessBriefBuilder
         $langNames = ['en' => ['الإنجليزي', 'English'], 'ar' => ['العربي', 'Arabic'], 'de' => ['الألماني', 'German'], 'fr' => ['الفرنساوي', 'French'],
             'es' => ['الإسباني', 'Spanish'], 'it' => ['الإيطالي', 'Italian'], 'ru' => ['الروسي', 'Russian'], 'zh' => ['الصيني', 'Chinese']];
         $spoken = array_map(static fn ($l) => $langNames[$l][$ar ? 0 : 1] ?? $l, array_values($langs));
+        // دول مقترحة حسب لغة الموقع - اقتراح واضح إن العميل يعدّله
+        $markets = ['en' => [['أمريكا', 'بريطانيا', 'كندا', 'أستراليا'], ['United States', 'United Kingdom', 'Canada', 'Australia']],
+            'de' => [['ألمانيا', 'النمسا', 'سويسرا'], ['Germany', 'Austria', 'Switzerland']],
+            'fr' => [['فرنسا', 'بلجيكا', 'كندا'], ['France', 'Belgium', 'Canada']],
+            'es' => [['إسبانيا', 'المكسيك', 'الأرجنتين'], ['Spain', 'Mexico', 'Argentina']],
+            'it' => [['إيطاليا'], ['Italy']], 'ru' => [['روسيا'], ['Russia']], 'zh' => [['الصين'], ['China']],
+            'ar' => [['السعودية', 'الإمارات', 'الكويت', 'مصر'], ['Saudi Arabia', 'UAE', 'Kuwait', 'Egypt']]];
+        $countries = [];
+        foreach (array_values($langs) as $lang) {
+            foreach ($markets[$lang][$ar ? 0 : 1] ?? [] as $c) {
+                $countries[$c] = $c;
+            }
+        }
+        $interest = $services ? implode($sep, array_slice($services, 0, 3)) : $L('الخدمات المعروضة', 'the listed services');
         $audience = $spoken
-            ? $L('مسافرين بيتكلموا ', 'Travelers who speak ') . implode($L(' و', ' and '), $spoken)
-                . $L(' ومهتمين بـ ', ' interested in ') . ($services ? implode($sep, array_slice($services, 0, 3)) : $L('الخدمات المعروضة', 'the listed services'))
-                . $L('. حدّد الدول اللي عايز تستهدفها.', '. Confirm your target countries.')
-            : $L('مسافرين مهتمين بالخدمات المعروضة على الموقع. حدّد الدول واللغات المستهدفة.', 'Travelers interested in the services on the site. Confirm target countries and languages.');
+            ? $L('مسافرين بيتكلموا ', 'Travelers who speak ') . implode($L(' و', ' and '), $spoken) . $L(' ومهتمين بـ ', ' interested in ') . $interest . '.'
+            : $L('مسافرين مهتمين بـ ', 'Travelers interested in ') . $interest . '.';
+        $audience .= $countries
+            ? $L(' دول مقترحة (عدّلها): ', ' Suggested countries (edit as needed): ') . implode($sep, array_values($countries)) . '.'
+            : $L(' حدّد الدول المستهدفة.', ' Add your target countries.');
 
         // --- الهدف: حجز مباشر لو الموقع فيه حجز، وإلا استفسارات
         $allText = '';
@@ -205,7 +222,49 @@ class SeoBusinessBriefBuilder
             $goal .= $L(' ورسايل واتساب', ' and WhatsApp inquiries');
         }
 
+        // --- حقول ملف الشركة: تليفون، إيميل، رابط الحجز، اللوجو، الأسعار المعلنة
+        $siteUrl = (string) ($home['final_url'] ?? '');
+        $cta = '';
+        foreach ($contexts as $ctx) {
+            foreach ($ctx['links'] ?? [] as $link) {
+                $u = is_array($link) ? (string) ($link['url'] ?? '') : (string) $link;
+                $title = is_array($link) ? (string) ($link['title'] ?? '') : '';
+                if ($u !== '' && preg_match('#book|reserv|checkout|احجز|حجز#iu', $u . ' ' . $title)) {
+                    $cta = $u;
+                    break 2;
+                }
+            }
+        }
+        if ($cta === '' && $whats) {
+            $cta = 'https://wa.me/' . ltrim($whats[0], '+');
+        }
+        if ($cta === '') {
+            foreach ($home['links'] ?? [] as $link) {
+                $u = is_array($link) ? (string) ($link['url'] ?? '') : (string) $link;
+                if (preg_match('#contact|اتصل#iu', $u . ' ' . (is_array($link) ? ($link['title'] ?? '') : ''))) {
+                    $cta = $u;
+                    break;
+                }
+            }
+        }
+        $logo = '';
+        $schemaLogo = $org['logo'] ?? '';
+        if (is_array($schemaLogo)) {
+            $schemaLogo = $schemaLogo['url'] ?? '';
+        }
+        foreach ([(string) $schemaLogo, (string) ($home['logo'] ?? '')] as $candidate) {
+            if (preg_match('#^https://#i', $candidate)) {
+                $logo = $candidate;
+                break;
+            }
+        }
+
         return [
+            'phone' => $phones[0] ?? ($whats[0] ?? ''),
+            'email' => $emails[0] ?? '',
+            'cta' => mb_substr($cta, 0, 300),
+            'logo_url' => mb_substr($logo, 0, 500),
+            'offers' => mb_substr(implode("\n", self::unique($prices, 10)), 0, 1500),
             'business_name' => mb_substr(strip_tags($name), 0, 150),
             'business_facts' => mb_substr(implode("\n", $lines), 0, 2500),
             'audience' => mb_substr($audience, 0, 700),
@@ -228,7 +287,7 @@ class SeoBusinessBriefBuilder
             && !preg_match('/\?|why|how|what|reviews?|testimonials?|contact|newsletter|faq|لماذا|إزاي|آراء/iu', $text);
     }
 
-    private static function walkSchema($node, ?array &$org, array &$offers, array &$places, array &$faqs): void
+    private static function walkSchema($node, ?array &$org, array &$offers, array &$places, array &$faqs, array &$prices): void
     {
         if (!is_array($node)) {
             return;
@@ -241,6 +300,19 @@ class SeoBusinessBriefBuilder
         if ($name !== '' && array_intersect($types, ['TouristTrip', 'Product', 'Service', 'Offer', 'Trip'])) {
             $offers[] = $name;
         }
+        // سعر معلن في الـ Schema بتاع الموقع نفسه (العميل يأكد ويضيف تاريخ الصلاحية)
+        if ($name !== '' && array_intersect($types, ['TouristTrip', 'Product', 'Service', 'Trip'])) {
+            $offer = $node['offers'] ?? null;
+            if (is_array($offer) && isset($offer[0]) && is_array($offer[0])) {
+                $offer = $offer[0];
+            }
+            $price = is_array($offer) ? ($offer['price'] ?? ($offer['lowPrice'] ?? null)) : null;
+            if (is_scalar($price) && is_numeric($price) && (float) $price > 0) {
+                $cur = is_array($offer) && is_string($offer['priceCurrency'] ?? null) ? $offer['priceCurrency'] : '';
+                $valid = is_array($offer) && is_string($offer['priceValidUntil'] ?? null) ? ' (valid until ' . $offer['priceValidUntil'] . ')' : '';
+                $prices[] = $name . ' — ' . trim($price . ' ' . $cur) . $valid;
+            }
+        }
         if ($name !== '' && array_intersect($types, ['TouristDestination', 'TouristAttraction', 'City', 'Place', 'LandmarksOrHistoricalBuildings'])) {
             $places[] = $name;
         }
@@ -252,7 +324,7 @@ class SeoBusinessBriefBuilder
         }
         foreach ($node as $value) {
             if (is_array($value)) {
-                self::walkSchema($value, $org, $offers, $places, $faqs);
+                self::walkSchema($value, $org, $offers, $places, $faqs, $prices);
             }
         }
     }

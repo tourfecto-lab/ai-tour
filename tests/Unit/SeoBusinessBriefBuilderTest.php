@@ -30,7 +30,7 @@ final class SeoBusinessBriefBuilderTest extends TestCase
             'contacts' => ['phones' => ['+201000000000'], 'emails' => ['info@t.com'], 'whatsapp' => ['+201000000000']],
             'social' => ['https://facebook.com/tourfecto'], 'text' => 'Book now your Luxor day tour.',
         ];
-        $tour = ['h1' => 'Luxor & Aswan 4-Day Nile Cruise', 'lang' => 'en', 'schema' => [['@type' => 'TouristTrip', 'name' => 'Karnak Temple Tour'], ['@type' => 'TouristDestination', 'name' => 'Luxor']]];
+        $tour = ['h1' => 'Luxor & Aswan 4-Day Nile Cruise', 'lang' => 'en', 'schema' => [['@type' => 'TouristTrip', 'name' => 'Karnak Temple Tour', 'offers' => ['@type' => 'Offer', 'price' => '45', 'priceCurrency' => 'USD']], ['@type' => 'TouristDestination', 'name' => 'Luxor']]];
         return [$home, $tour];
     }
 
@@ -55,6 +55,10 @@ final class SeoBusinessBriefBuilderTest extends TestCase
         $this->assertStringContainsString('Is cancellation free? — Yes, up to 24 hours before.', $b['business_facts']);
         $this->assertStringContainsString('English', $b['audience']);
         $this->assertStringContainsString('direct bookings', $b['goal']);
+        $this->assertSame('+201000000000', $b['phone']);
+        $this->assertSame('info@t.com', $b['email']);
+        $this->assertSame('https://wa.me/201000000000', $b['cta']);
+        $this->assertSame('Karnak Temple Tour — 45 USD', $b['offers']);
         $this->assertStringContainsString('WhatsApp', $b['goal']);
     }
 
@@ -75,6 +79,7 @@ final class SeoBusinessBriefBuilderTest extends TestCase
         $this->assertStringContainsString('Tours listed on the site: Luxor East & West Bank Full-Day Tour, Hot Air Balloon Ride over Luxor', $b['business_facts']);
         $this->assertStringNotContainsString('Why book', $b['business_facts']);
         $this->assertStringContainsString('Destinations: Luxor, Aswan', $b['business_facts']);
+        $this->assertTrue(strpos($b['business_facts'], 'Destinations:') < strpos($b['business_facts'], 'Tours listed'));
         $this->assertStringNotContainsString('Destinations: Luxor, Aswan, Nile', $b['business_facts']);
     }
 
