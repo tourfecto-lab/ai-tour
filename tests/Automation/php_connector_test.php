@@ -51,6 +51,7 @@ check(strpos($other, '<title>Old</title>') !== false, 'homepage values not appli
 // مقالات منشورة من خلال ملف الربط
 file_put_contents($cache, json_encode(['t' => time(), 'f' => 0, 'rules' => ['articles' => [
     'discover-egypt' => ['title' => 'Discover Egypt', 'description' => 'Guide to Egypt tours.', 'published_at' => '2026-10-15',
+        'image' => 'https://example.com/img/luxor.jpg', 'image_alt' => 'Luxor "temple"',
         'body' => "Egypt is wonderful.\n\n**Luxor Tours**: temples <script>alert(1)</script> and balloons.\n\n- Valley of the Kings\n- Karnak"],
 ]]]));
 $art = (string) render($connector, '/guides/discover-egypt', $page);
@@ -59,6 +60,8 @@ check(strpos($art, '<strong>Luxor Tours</strong>') !== false && strpos($art, '<l
 check(strpos($art, '<script>alert(1)</script>') === false && strpos($art, '&lt;script&gt;') !== false, 'article text is escaped');
 check(strpos($art, 'rel="canonical" href="http://127.0.0.1:' . $port . '/guides/discover-egypt"') !== false, 'article canonical');
 check(strpos($art, '"@type":"Article"') !== false && strpos($art, 'tourfecto-connector') !== false, 'Article schema and connector marker');
+check(strpos($art, '<img src="https://example.com/img/luxor.jpg" alt="Luxor &quot;temple&quot;"') !== false, 'featured image with escaped alt');
+check(strpos($art, '<meta property="og:image" content="https://example.com/img/luxor.jpg">') !== false && strpos($art, '"image":"https://example.com/img/luxor.jpg"') !== false, 'og:image and schema image');
 $fallback = (string) render($connector, '/?tf_article=discover-egypt', $page);
 check(strpos($fallback, '<h1>Discover Egypt</h1>') !== false, 'fallback ?tf_article= works');
 $index = (string) render($connector, '/guides', $page);

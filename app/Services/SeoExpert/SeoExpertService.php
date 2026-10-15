@@ -273,7 +273,13 @@ class SeoExpertService
                 $taken=$this->q("SELECT COUNT(*) FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND id<>? AND published_url LIKE ?",[$wid,$t['id'],'%/guides/'.$slug])->fetchColumn();
                 if($taken)$slug.='-'.(int)$t['id'];
                 $url=rtrim($site['main_url'],'/').'/guides/'.$slug;
-                $this->q("UPDATE seo_expert_tasks SET status='active',is_active=1,external_post_id=NULL,published_url=?,updated_at=UTC_TIMESTAMP() WHERE id=?",[$url,$t['id']]);
+                // صورة حقيقية من صفحات الموقع الأقرب لموضوع المقال (before_json مش مستخدم للمقالات)
+                require_once __DIR__.'/ArticleImagePicker.php';$image=null;
+                try{$snapshot=json_decode((string)$r['snapshot_json'],true)?:[];$reader=$this->reader??new SeoExpertPageContext();
+                    foreach(ArticleImagePicker::rankPages((string)$t['title'],(string)$t['expected_value'],$snapshot['pages']??[]) as $pageUrl){if(!WordPressConnector::hostsEqual((string)parse_url($pageUrl,PHP_URL_HOST),(string)parse_url($site['main_url'],PHP_URL_HOST)))continue;$ctx=rtrim($pageUrl,'/')===rtrim($site['main_url'],'/')?$home:$reader->fresh($pageUrl);if(!empty($ctx['ok'])&&($image=ArticleImagePicker::fromContext($ctx)))break;}
+                    if(!$image)$image=ArticleImagePicker::fromContext($home);
+                }catch(Throwable $e){$image=null;}
+                $this->q("UPDATE seo_expert_tasks SET status='active',is_active=1,external_post_id=NULL,published_url=?,before_json=?,updated_at=UTC_TIMESTAMP() WHERE id=?",[$url,json_encode(['article_image'=>$image],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$t['id']]);
                 return;
             }
             $this->needsClient($t,'Connect WordPress publishing or install tourfecto-connect.php (PHP sites), then request another execution. No article was published.');return;

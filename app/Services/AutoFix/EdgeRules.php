@@ -142,12 +142,14 @@ class EdgeRules
             if($pageRules)$rules['page_rules']=$pageRules;
             // مقالات معتمدة بتتنشر من خلال ملف الربط في مواقع PHP (/guides/{slug}) - نص بس
             $articles=[];
-            foreach($db->query("SELECT title,expected_value,published_url,updated_at FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified') AND published_url LIKE '%/guides/%' ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
+            foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified') AND published_url LIKE '%/guides/%' ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
                 $slug=basename((string)parse_url((string)$a['published_url'],PHP_URL_PATH));
                 if(!preg_match('/^[a-z0-9][a-z0-9-]{0,120}$/',$slug))continue;
                 $title=self::line((string)$a['title']);$body=trim(str_replace("\r",'',strip_tags((string)$a['expected_value'])));
                 if($title===''||$body==='')continue;
                 $articles[$slug]=['title'=>mb_substr($title,0,150),'description'=>mb_substr(self::line(preg_replace('/\*\*/','',$body)),0,155),'body'=>mb_substr($body,0,12000),'published_at'=>substr((string)$a['updated_at'],0,10)];
+                $img=(json_decode((string)$a['before_json'],true)?:[])['article_image']??null;
+                if(is_array($img)&&preg_match('#^https://[^\s"<>]{8,490}$#',(string)($img['src']??''))){$articles[$slug]['image']=(string)$img['src'];$articles[$slug]['image_alt']=mb_substr(self::line((string)($img['alt']??'')),0,150);}
             }
             if($articles)$rules['articles']=$articles;
         }
@@ -585,7 +587,7 @@ function tf_edge_article_html($text)
     return $html;
 }
 
-function tf_edge_page($title, $description, $canonical, $main, $jsonld = '')
+function tf_edge_page($title, $description, $canonical, $main, $jsonld = '', $image = '')
 {
     $host = preg_replace('/^www\./', '', parse_url(tf_edge_site(), PHP_URL_HOST) ?: '');
     if (!headers_sent()) {
@@ -596,10 +598,12 @@ function tf_edge_page($title, $description, $canonical, $main, $jsonld = '')
         . '<meta name="tourfecto-connector" content="4"><title>' . tf_edge_e($title) . '</title>'
         . '<meta name="description" content="' . tf_edge_e($description) . '"><link rel="canonical" href="' . tf_edge_e($canonical) . '">'
         . '<meta property="og:type" content="article"><meta property="og:title" content="' . tf_edge_e($title) . '"><meta property="og:description" content="' . tf_edge_e($description) . '">'
+        . ($image !== '' ? '<meta property="og:image" content="' . tf_edge_e($image) . '"><meta name="twitter:card" content="summary_large_image">' : '')
         . ($jsonld !== '' ? '<script type="application/ld+json">' . str_replace('</', '<\/', $jsonld) . '</script>' : '')
         . '<style>body{margin:0;font:17px/1.75 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1d2433;background:#fbfaf7}'
         . 'header,main,footer{max-width:760px;margin:0 auto;padding:0 20px}header{display:flex;justify-content:space-between;align-items:center;padding-top:22px;padding-bottom:22px;border-bottom:1px solid #e7e2d8}'
         . 'header a{color:#1d2433;text-decoration:none;font-weight:700}nav a{font-weight:500;margin-left:16px;color:#5b6475}h1{font-size:2.1rem;line-height:1.25;margin:34px 0 8px}'
+        . 'figure{margin:0 0 26px}figure img{width:100%;height:auto;max-height:440px;object-fit:cover;border-radius:12px;display:block}'
         . 'h2{font-size:1.35rem;margin:30px 0 6px}.meta{color:#7a8291;font-size:.9rem;margin-bottom:24px}main a{color:#a35a14}ul{padding-left:22px}'
         . '.list a{display:block;padding:18px 0;border-bottom:1px solid #e7e2d8;text-decoration:none;color:#1d2433}.list span{display:block;color:#5b6475;font-size:.95rem}'
         . 'footer{color:#7a8291;font-size:.9rem;padding-top:40px;padding-bottom:40px}</style></head><body>'
@@ -630,12 +634,14 @@ function tf_edge_articles_route()
     $title = (string) ($a['title'] ?? '');
     $canonical = $base . '/guides/' . $slug;
     $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($a['published_at'] ?? '')) ? $a['published_at'] : '';
-    $jsonld = json_encode(['@context' => 'https://schema.org', '@type' => 'Article', 'headline' => $title, 'description' => (string) ($a['description'] ?? ''),
+    $image = (is_string($a['image'] ?? null) && preg_match('#^https://[^\s"<>]+$#', $a['image'])) ? $a['image'] : '';
+    $figure = $image !== '' ? '<figure><img src="' . tf_edge_e($image) . '" alt="' . tf_edge_e($a['image_alt'] ?? $title) . '" loading="eager"></figure>' : '';
+    $jsonld = json_encode(array_filter(['@context' => 'https://schema.org', '@type' => 'Article', 'headline' => $title, 'description' => (string) ($a['description'] ?? ''), 'image' => $image ?: null,
         'mainEntityOfPage' => $canonical, 'datePublished' => $date ?: null, 'publisher' => ['@type' => 'Organization', 'name' => parse_url($base, PHP_URL_HOST), 'url' => $base]],
-        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        function ($v) { return $v !== null && $v !== ''; }), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     tf_edge_page($title, (string) ($a['description'] ?? ''), $canonical,
-        '<article><h1>' . tf_edge_e($title) . '</h1>' . ($date ? '<div class="meta">' . tf_edge_e($date) . '</div>' : '')
-        . tf_edge_article_html((string) ($a['body'] ?? '')) . '</article><p><a href="/guides">&larr; All guides</a></p>', (string) $jsonld);
+        '<article><h1>' . tf_edge_e($title) . '</h1>' . ($date ? '<div class="meta">' . tf_edge_e($date) . '</div>' : '') . $figure
+        . tf_edge_article_html((string) ($a['body'] ?? '')) . '</article><p><a href="/guides">&larr; All guides</a></p>', (string) $jsonld, $image);
 }
 
 if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)) {

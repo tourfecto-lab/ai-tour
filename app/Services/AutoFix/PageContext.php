@@ -168,6 +168,18 @@ class PageContext
         foreach ($xp->query('//link[contains(@rel,"icon") and @href]') as $l) {
             $candidates['logo'][] = $l->getAttribute('href');
         }
+        // صور المحتوى (مش لوجو ولا أيقونات) - لاختيار صورة حقيقية للمقالات
+        $out['content_images'] = [];
+        foreach ($xp->query('//img[@src or @data-src]') as $img) {
+            $src = trim($img->getAttribute('src') ?: $img->getAttribute('data-src'));
+            $abs = $this->absolute($out['final_url'], $src);
+            $w = (int) $img->getAttribute('width');
+            if ($abs === '' || strpos($abs, 'https://') !== 0 || preg_match('/logo|icon|sprite|avatar|flag|\.svg(\?|$)|data:/i', $abs . ' ' . $img->getAttribute('class')) || ($w > 0 && $w < 300)) {
+                continue;
+            }
+            $out['content_images'][] = ['src' => $abs, 'alt' => $this->clean($img->getAttribute('alt'))];
+            if (count($out['content_images']) >= 5) { break; }
+        }
         // روابط اللوجو المرشحة (من غير تحقق إنها صورة) - لملء ملف الشركة، والعميل بيراجع
         $out['logo_candidates'] = [];
         foreach (array_unique($candidates['logo'] ?? []) as $c) {
