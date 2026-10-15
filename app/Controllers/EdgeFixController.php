@@ -186,6 +186,29 @@ class EdgeFixController extends Controller
         exit;
     }
 
+    /**
+     * GET /api/website-optimizer/edge/php-connector?website_id=
+     * ملف ربط لمواقع PHP المبرمجة خصيصًا (نفس عمل إضافة WordPress).
+     */
+    public function phpConnector(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        $websiteId = (int) $this->get('website_id', 0);
+        $site = $this->db->query('SELECT id FROM websites WHERE id = ? AND user_id = ? LIMIT 1', [$websiteId, $this->uid()]);
+        if (empty($site)) {
+            return $this->error('Not found', 404);
+        }
+        $code = EdgeRules::phpConnector($websiteId, $this->appUrl());
+        header('Content-Type: application/x-httpd-php; charset=utf-8');
+        header('Content-Disposition: attachment; filename="tourfecto-connect.php"');
+        header('Content-Length: ' . strlen($code));
+        header('Cache-Control: no-store');
+        echo $code;
+        exit;
+    }
+
     // ------------------------------------------------------------------ معاينة
 
     public function preview(array $params = []): array

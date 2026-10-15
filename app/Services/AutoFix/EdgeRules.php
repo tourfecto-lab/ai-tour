@@ -313,6 +313,246 @@ PHP;
     }
 
     /**
+     * ملف ربط لمواقع PHP المبرمجة خصيصًا (مش WordPress): نفس عمل إضافة
+     * WordPress - بيسحب نفس القواعد المعتمدة (بيانات بس، مش كود) ويطبّقها
+     * على <head> كل صفحة، وبيطلع نفس علامة tourfecto-connector=4 عشان
+     * خبير SEO يعرف إن الربط شغّال. بيتحط مرة واحدة في ملف مشترك بين
+     * الصفحات (زي inc.php / header.php) أو auto_prepend_file.
+     * الكود كله إنجليزي عمدًا: بيتحمّل كملف ومش لازم يعدّي على الترجمة.
+     */
+    public static function phpConnector(int $websiteId, string $endpoint): string
+    {
+        $token = self::token($websiteId);
+        $endpoint = rtrim($endpoint, '/') . '/api/edge/rules';
+        $code = <<<'PHPCODE'
+<?php
+/**
+ * Tourfecto Connect for PHP websites (protocol v4)
+ *
+ * Applies SEO updates you approved in Tourfecto (title, description,
+ * canonical, robots, viewport, language, Open Graph, JSON-LD, HSTS,
+ * llms.txt). The server sends data only, never code. If Tourfecto is
+ * unreachable your site keeps working exactly as before.
+ *
+ * Install (choose one):
+ *   A) First line of a file every page loads (e.g. inc.php, header.php):
+ *        require_once __DIR__ . '/tourfecto-connect.php';
+ *   B) In .user.ini or php.ini:
+ *        auto_prepend_file = /full/path/to/tourfecto-connect.php
+ */
+if (defined('TF_EDGE_RUNTIME_V4') || PHP_SAPI === 'cli') {
+    return;
+}
+define('TF_EDGE_RUNTIME_V4', true);
+define('TF_EDGE_ENDPOINT', '__ENDPOINT__');
+define('TF_EDGE_TOKEN', '__TOKEN__');
+
+function tf_edge_cache_file()
+{
+    return rtrim(sys_get_temp_dir(), '/\\') . '/tourfecto-edge-' . md5(TF_EDGE_TOKEN) . '.json';
+}
+
+function tf_edge_site()
+{
+    $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    $host = preg_replace('/[^A-Za-z0-9.\-:]/', '', (string) ($_SERVER['HTTP_HOST'] ?? ''));
+    return ($https ? 'https' : 'http') . '://' . $host;
+}
+
+function tf_edge_fetch($url)
+{
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 2, CURLOPT_CONNECTTIMEOUT => 2,
+            CURLOPT_FOLLOWLOCATION => false, CURLOPT_HTTPHEADER => ['Accept: application/json', 'Cache-Control: no-cache']]);
+        $body = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ($code === 200 && is_string($body)) ? $body : null;
+    }
+    $ctx = stream_context_create(['http' => ['timeout' => 2, 'follow_location' => 0, 'ignore_errors' => true]]);
+    $body = @file_get_contents($url, false, $ctx);
+    $ok = isset($http_response_header[0]) && strpos($http_response_header[0], ' 200') !== false;
+    return ($ok && is_string($body)) ? $body : null;
+}
+
+/** Approved rules, cached 2 minutes; on failure keep the last good rules and retry after 15 seconds. */
+function tf_edge_rules()
+{
+    static $rules = null;
+    if ($rules !== null) {
+        return $rules;
+    }
+    $file = tf_edge_cache_file();
+    $cache = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
+    $cache = is_array($cache) ? $cache : ['t' => 0, 'f' => 0, 'rules' => []];
+    $last = is_array($cache['rules'] ?? null) ? $cache['rules'] : [];
+    $now = time();
+    if ($now - (int) ($cache['t'] ?? 0) < 120 || $now - (int) ($cache['f'] ?? 0) < 15) {
+        return $rules = $last;
+    }
+    $body = tf_edge_fetch(TF_EDGE_ENDPOINT . '?token=' . rawurlencode(TF_EDGE_TOKEN) . '&cv=4&site=' . rawurlencode(tf_edge_site()));
+    $data = $body !== null ? json_decode($body, true) : null;
+    if (is_array($data) && isset($data['data']['rules']) && is_array($data['data']['rules'])) {
+        $rules = $data['data']['rules'];
+        @file_put_contents($file, json_encode(['t' => $now, 'f' => 0, 'rules' => $rules]), LOCK_EX);
+        return $rules;
+    }
+    $cache['f'] = $now;
+    @file_put_contents($file, json_encode($cache), LOCK_EX);
+    return $rules = $last;
+}
+
+function tf_edge_path()
+{
+    $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+    $path = rtrim($path, '/');
+    return $path === '' ? '/' : $path;
+}
+
+/** Homepage values apply only to the homepage; page_rules apply to their exact path. */
+function tf_edge_page_rules()
+{
+    $all = tf_edge_rules();
+    $path = tf_edge_path();
+    $page = [];
+    if ($path === '/' || $path === '/index.php') {
+        foreach (['title', 'description', 'canonical', 'robots', 'viewport', 'lang', 'og', 'jsonld'] as $k) {
+            if (isset($all[$k])) {
+                $page[$k] = $all[$k];
+            }
+        }
+    }
+    if (isset($all['page_rules'][$path]) && is_array($all['page_rules'][$path])) {
+        foreach (['title', 'description', 'canonical', 'viewport', 'lang', 'jsonld'] as $k) {
+            if (isset($all['page_rules'][$path][$k])) {
+                $page[$k] = $all['page_rules'][$path][$k];
+            }
+        }
+    }
+    return $page;
+}
+
+function tf_edge_e($v)
+{
+    return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+}
+
+function tf_edge_apply_head($head, array $r)
+{
+    $protected = [];
+    if (!empty($r['jsonld'])) {
+        $head = preg_replace('/<script\b[^>]*\bid=["\']tourfecto-schema["\'][^>]*>.*?<\/script>/is', '', $head);
+    }
+    $head = preg_replace_callback('/<(script|style)\b[^>]*>.*?<\/\1>/is', function ($m) use (&$protected) {
+        $key = '<!--tf-protected-' . count($protected) . '-->';
+        $protected[$key] = $m[0];
+        return $key;
+    }, $head);
+    $extra = '';
+    if (!empty($r['title']) && is_string($r['title'])) {
+        $head = preg_replace('/<title\b[^>]*>.*?<\/title>/is', '', $head);
+        $extra .= '<title>' . tf_edge_e($r['title']) . "</title>\n";
+    }
+    foreach (['description', 'robots', 'viewport'] as $field) {
+        if (empty($r[$field]) || !is_string($r[$field])) {
+            continue;
+        }
+        $head = preg_replace_callback('/<meta\b[^>]*>/i', function ($m) use ($field) {
+            return preg_match('/\bname\s*=\s*(["\'])' . preg_quote($field, '/') . '\1/i', $m[0]) ? '' : $m[0];
+        }, $head);
+        $extra .= '<meta name="' . $field . '" content="' . tf_edge_e($r[$field]) . "\">\n";
+    }
+    if (!empty($r['canonical']) && is_string($r['canonical']) && preg_match('#^https?://#i', $r['canonical'])) {
+        $head = preg_replace_callback('/<link\b[^>]*>/i', function ($m) {
+            return preg_match('/\brel\s*=\s*(["\'])canonical\1/i', $m[0]) ? '' : $m[0];
+        }, $head);
+        $extra .= '<link rel="canonical" href="' . tf_edge_e($r['canonical']) . "\">\n";
+    }
+    if (!empty($r['og']) && is_array($r['og'])) {
+        foreach ($r['og'] as $key => $value) {
+            if (!preg_match('/^(og|twitter|article):[a-z_:]{1,40}$/', (string) $key) || !is_scalar($value)) {
+                continue;
+            }
+            $head = preg_replace_callback('/<meta\b[^>]*>/i', function ($m) use ($key) {
+                return preg_match('/\b(?:name|property)\s*=\s*(["\'])' . preg_quote((string) $key, '/') . '\1/i', $m[0]) ? '' : $m[0];
+            }, $head);
+            $attr = strpos((string) $key, 'twitter:') === 0 ? 'name' : 'property';
+            $extra .= '<meta ' . $attr . '="' . tf_edge_e($key) . '" content="' . tf_edge_e($value) . "\">\n";
+        }
+    }
+    if (!empty($r['jsonld']) && is_string($r['jsonld']) && is_array(json_decode($r['jsonld'], true))) {
+        $extra .= '<script id="tourfecto-schema" type="application/ld+json">' . str_replace('</', '<\/', $r['jsonld']) . "</script>\n";
+    }
+    return strtr($head, $protected) . $extra;
+}
+
+function tf_edge_buffer($html)
+{
+    if (!is_string($html) || stripos($html, '<head') === false) {
+        return $html;
+    }
+    foreach (headers_list() as $h) {
+        if (stripos($h, 'content-type:') === 0 && stripos($h, 'text/html') === false) {
+            return $html;
+        }
+    }
+    try {
+        $r = tf_edge_page_rules();
+        if (!empty($r['lang']) && is_string($r['lang']) && preg_match('/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/', $r['lang'])) {
+            $html = preg_replace_callback('/<html\b[^>]*>/i', function ($m) use ($r) {
+                $tag = preg_replace('/\slang\s*=\s*(["\'])[^"\']*\1/i', '', $m[0]);
+                return substr($tag, 0, -1) . ' lang="' . $r['lang'] . '">';
+            }, $html, 1);
+        }
+        // Hide scripts/styles first so "</head>" inside JavaScript is never mistaken for the real one.
+        $hidden = [];
+        $masked = preg_replace_callback('/<(script|style)\b[^>]*>.*?<\/\1>/is', function ($m) use (&$hidden) {
+            $key = '<!--tf-page-' . count($hidden) . '-->';
+            $hidden[$key] = $m[0];
+            return $key;
+        }, $html);
+        if (!is_string($masked)) {
+            return $html;
+        }
+        if (!preg_match('/<head\b[^>]*>/i', $masked, $m, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        $open = $m[0][1] + strlen($m[0][0]);
+        $close = stripos($masked, '</head>', $open);
+        if ($close === false) {
+            return $html;
+        }
+        $head = strtr(substr($masked, $open, $close - $open), $hidden);
+        $marker = "\n<meta name=\"tourfecto-connector\" content=\"4\">\n";
+        $newHead = $marker . ($r ? tf_edge_apply_head($head, $r) : $head);
+        return strtr(substr($masked, 0, $open), $hidden) . $newHead . strtr(substr($masked, $close), $hidden);
+    } catch (\Throwable $e) {
+        return $html;
+    }
+}
+
+if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)) {
+    if (tf_edge_path() === '/llms.txt') {
+        $r = tf_edge_rules();
+        if (!empty($r['llms_txt']) && is_string($r['llms_txt'])) {
+            header('Content-Type: text/plain; charset=utf-8');
+            echo $r['llms_txt'];
+            exit;
+        }
+    }
+    $r = tf_edge_rules();
+    if (!empty($r['hsts']) && is_string($r['hsts']) && preg_match('/^max-age=\d{1,10}(; ?includeSubDomains)?(; ?preload)?$/', $r['hsts'])
+        && !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' && !headers_sent()) {
+        header('Strict-Transport-Security: ' . $r['hsts']);
+    }
+    ob_start('tf_edge_buffer');
+}
+PHPCODE;
+        return strtr($code, ['__ENDPOINT__' => addslashes($endpoint), '__TOKEN__' => addslashes($token)]);
+    }
+
+    /**
      * نفس الكود بس كإضافة WordPress كاملة (تترفع من Plugins ← Add New ← Upload)
      * بدل ما العميل يحتاج يسطّب Code Snippets ويلصق كود.
      * @return array{php:string, readme:string}
