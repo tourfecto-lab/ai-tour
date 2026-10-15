@@ -116,18 +116,28 @@
         const d = new Date(dateStr.replace(' ', 'T'));
         if (isNaN(d.getTime())) return esc(dateStr);
         const diff = Math.floor((Date.now() - d.getTime()) / 1000);
-        if (diff < 60) return 'الآن';
-        if (diff < 3600) return 'منذ ' + Math.floor(diff / 60) + ' دقيقة';
-        if (diff < 86400) return 'منذ ' + Math.floor(diff / 3600) + ' ساعة';
-        if (diff < 2592000) return 'منذ ' + Math.floor(diff / 86400) + ' يوم';
-        return d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+        const ar = uiLocale().startsWith('ar');
+        if (diff < 60) return ar ? 'الآن' : 'just now';
+        try {
+            const rtf = new Intl.RelativeTimeFormat(uiLocale(), { numeric: 'auto' });
+            if (diff < 3600) return rtf.format(-Math.floor(diff / 60), 'minute');
+            if (diff < 86400) return rtf.format(-Math.floor(diff / 3600), 'hour');
+            if (diff < 2592000) return rtf.format(-Math.floor(diff / 86400), 'day');
+        } catch (e) { /* متصفح قديم: نعرض التاريخ */ }
+        return d.toLocaleDateString(uiLocale(), { year: 'numeric', month: 'short', day: 'numeric' });
     }
 
     function formatDate(dateStr) {
         if (!dateStr) return '-';
         const d = new Date(dateStr.replace(' ', 'T'));
         if (isNaN(d.getTime())) return esc(dateStr);
-        return d.toLocaleString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        return d.toLocaleString(uiLocale(), { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    /** لغة التواريخ حسب لغة الواجهة (كانت عربي دايمًا حتى في الإنجليزي)، بأرقام 0-9 زي باقي اللوحة */
+    function uiLocale() {
+        const lang = (document.documentElement.lang || 'ar').slice(0, 2).toLowerCase();
+        return ({ ar: 'ar-EG-u-nu-latn', en: 'en-GB', fr: 'fr-FR', de: 'de-DE' })[lang] || 'en-GB';
     }
 
     function initSidebar() {

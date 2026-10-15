@@ -33,7 +33,7 @@ class GbpProfileService
     {
         $connection = $this->sync->findConnection($websiteId, $userId);
         if (!$connection) {
-            return ['success' => false, 'error' => 'Not Connected - اربط Google Business Profile أولاً'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
 
         try {
@@ -93,7 +93,7 @@ class GbpProfileService
 
         $connection = $this->sync->findConnection($websiteId, $userId);
         if (!$connection) {
-            return ['success' => false, 'error' => 'Not Connected - اربط Google Business Profile أولاً'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
 
         try {
@@ -157,7 +157,7 @@ class GbpProfileService
     {
         $connection = $this->sync->findConnection($websiteId, $userId);
         if (!$connection) {
-            return ['success' => false, 'error' => 'Not Connected - اربط Google Business Profile أولاً'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
 
         try {
@@ -214,7 +214,7 @@ class GbpProfileService
     {
         $connection = $this->sync->findConnection($websiteId, $userId);
         if (!$connection) {
-            return ['success' => false, 'error' => 'Not Connected - اربط Google Business Profile أولاً'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
 
         $allowed = array_intersect_key($fields, array_flip(['description', 'phone', 'website', 'regular_hours']));

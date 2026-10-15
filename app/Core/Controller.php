@@ -757,6 +757,10 @@ abstract class Controller
         $styleCssUrl = asset_v('/assets/css/style.css');
         $panelCssUrl = asset_v('/assets/css/panel.css');
         $panelJsUrl = asset_v('/assets/js/panel.js');
+        // الواجهة العربية: ترجمة النصوص الإنجليزي اللي بتترسم بالـ JavaScript
+        $arTranslateTags = (function_exists('current_lang') && current_lang() === 'ar')
+            ? '    <script src="' . asset_v('/assets/i18n/ar-dict.js') . '"></script>' . "\n" . '    <script src="' . asset_v('/assets/js/ar-translate.js') . '"></script>' . "\n"
+            : '';
         $tfThemeCssUrl = asset_v('/assets/css/tf-theme.css');
         $tfThemeJsUrl = asset_v('/assets/js/tf-theme.js');
         // وحدة الشات: طبقة مكوّنات احترافية (chat.css + chat-panel.js)
@@ -908,6 +912,7 @@ abstract class Controller
     <script src="{$panelJsUrl}"></script>
     <script src="{$tfThemeJsUrl}"></script>
 {$chatAssetsFoot}    <script>{$scriptJs}</script>
+{$arTranslateTags}
 <button id="pwaInstallBtn" class="pwa-install-fab" type="button" aria-label="تثبيت التطبيق" title="تثبيت التطبيق">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <span>تثبيت التطبيق</span>

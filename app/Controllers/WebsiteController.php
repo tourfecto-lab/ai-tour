@@ -534,7 +534,7 @@ HTML;
                 <td>\${esc(w.company_name || '-')}</td>
                 <td>\${w.is_verified == 1 ? '<span class="pill green">✔ ' + {$tVerified} + '</span>' : '<span class="pill">' + {$tUnverified} + '</span>'}</td>
                 <td class="p-cell-muted">\${formatDate(w.created_at)}</td>
-                <td><a href="/websites/\${w.id}" class="p-btn outline xs">{$tManage}</a></td>
+                <td><a href="/websites/\${w.id}" class="p-btn outline xs">\${{$tManage}}</a></td>
             </tr>`).join('');
     }
     renderRows();

@@ -488,7 +488,7 @@ HTML;
     const ST_LABEL = { published: 'اتنشر', scheduled: 'مجدول', pending: 'في الانتظار', publishing: 'جارِ النشر', failed: 'فشل' };
     const ST_PILL = { published: 'green', scheduled: 'orange', pending: 'orange', publishing: 'orange', failed: 'red' };
     const PLAT = { facebook: '📘 فيسبوك', instagram: '📸 انستجرام', tiktok: '🎵 تيك توك', youtube: '▶️ يوتيوب' };
-    const nf = n => Number(n || 0).toLocaleString('ar-EG');
+    const nf = n => Number(n || 0).toLocaleString((document.documentElement.lang || 'ar').slice(0, 2) === 'ar' ? 'ar-EG-u-nu-latn' : 'en-GB');
 
     function kpi(label, value, sub) {
         return `<div class="p-card" style="text-align:center;"><div class="p-cell-muted" style="font-size:12px;">${label}</div><div style="font-size:28px;font-weight:700;margin:4px 0;">${value}</div><div class="p-cell-muted" style="font-size:11.5px;">${sub || '&nbsp;'}</div></div>`;

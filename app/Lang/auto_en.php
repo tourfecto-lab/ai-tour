@@ -6784,4 +6784,10 @@ return [
     'الإصلاحات النشطة' => 'Active fixes',
     'اللقطات المسجلة' => 'Recorded snapshots',
     'غير مصرّح لك بتعديل هذا الاتصال' => 'You are not allowed to edit this connection',
+    'اربط حساب Google Business الأول' => 'Connect your Google Business account first',
+    'اربط حساب Google Business' => 'Connect your Google Business account',
+    'بعد الربط المنصة هتسحب تقييماتك من Google وترد عليها، وتوريك متوسط التقييم وسرعة الرد والمخاطر ومقارنتك بالمنافسين - كله لوحده.' => 'Once connected, the platform pulls your Google reviews and replies to them, and shows your average rating, reply speed, risks and how you compare with competitors - all automatically.',
+    'هتختار حساب Google اللي عليه نشاطك وتوافق - مش محتاجين كلمة السر.' => 'You choose the Google account that manages your business and approve - we never need your password.',
+    'أضف موقعك الأول' => 'Add your website first',
+    'مؤشرات تقييماتك على Google ومخاطرها ومنافسيك' => 'Your Google rating indicators, risks and competitors',
 ];

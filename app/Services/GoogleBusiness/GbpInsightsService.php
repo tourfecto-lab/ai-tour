@@ -39,7 +39,7 @@ class GbpInsightsService
     {
         $connection = $this->sync->findConnection($websiteId, $userId);
         if (!$connection) {
-            return ['success' => false, 'error' => 'Not Connected - اربط Google Business Profile أولاً'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
         if ($connection->getAttribute('status') !== 'connected') {
             return ['success' => false, 'error' => 'الاتصال غير نشط حاليًا (' . $connection->getAttribute('last_error') . ')'];

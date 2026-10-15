@@ -61,7 +61,7 @@ class GbpPhotoService
 
         $connection = $this->sync->findConnection($websiteId, $userId);
         if (!$connection) {
-            return ['success' => false, 'error' => 'Not Connected - اربط Google Business Profile أولاً'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
 
         try {
@@ -108,7 +108,7 @@ class GbpPhotoService
         $connection = $this->sync->findConnection((int) $photo['website_id'], (int) $photo['user_id']);
         if (!$connection) {
             $this->markFailed($photoId, 'الاتصال بـ Google Business Profile اتفصل قبل ما الرفع يخلص');
-            return ['success' => false, 'error' => 'Not Connected'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
 
         try {
@@ -214,7 +214,7 @@ class GbpPhotoService
 
         $connection = $this->sync->findConnection($websiteId, $userId);
         if (!$connection) {
-            return ['success' => false, 'error' => 'Not Connected'];
+            return ['success' => false, 'error' => 'اربط حساب Google Business الأول'];
         }
 
         try {

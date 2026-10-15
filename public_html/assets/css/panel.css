@@ -857,3 +857,40 @@ pre, code { white-space: pre-wrap; word-break: break-word; overflow-wrap: break-
 @media (prefers-reduced-motion: reduce) {
     .dashboard-value-pending { animation: none; }
 }
+
+/* ============ عناصر من غير كلاس (صفحات اتكتبت HTML خام) ============
+   صفحات زي مركز التشغيل وتسويق واتساب كانت بتطلع جداول وحقول وزراير
+   بشكل المتصفح الافتراضي. هنا بنديها نفس شكل اللوحة من غير ما نلمس
+   أي عنصر ليه كلاس خاص بيه. */
+.panel-content input:not([class]):not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]):not([type=range]):not([type=color]),
+.panel-content select:not([class]),
+.panel-content textarea:not([class]),
+.panel-content .op-card input:not([type=checkbox]):not([type=radio]),
+.panel-content .op-card select {
+    padding: 8px 12px; border-radius: 9px; border: 1px solid var(--panel-border);
+    font-family: var(--font-family); font-size: 13.5px; background: var(--panel-card-bg); color: var(--panel-text);
+    max-width: 100%; box-sizing: border-box;
+}
+.panel-content input:not([class]):focus, .panel-content select:not([class]):focus, .panel-content textarea:not([class]):focus { outline: none; border-color: var(--panel-accent); }
+.panel-content button:not([class]), .panel-content .op-card button {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px;
+    font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font-family);
+    background: var(--panel-card-bg); border: 1px solid var(--panel-border); color: var(--panel-text); margin: 4px 0;
+}
+.panel-content button:not([class]):hover, .panel-content .op-card button:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+.panel-content button:not([class]):disabled { opacity: .55; cursor: not-allowed; }
+.panel-content table:not([class]), .panel-content .op-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.panel-content table:not([class]) th, .panel-content .op-table th {
+    text-align: start; padding: 10px 12px; font-size: 12px; font-weight: 700; color: var(--panel-text-muted);
+    background: var(--panel-card-bg-2); border-bottom: 1px solid var(--panel-border); white-space: nowrap;
+}
+.panel-content table:not([class]) td, .panel-content .op-table td { padding: 10px 12px; border-bottom: 1px solid var(--panel-border); }
+.panel-content .op-card { background: var(--panel-card-bg); border-color: var(--panel-border) !important; }
+/* مركز التشغيل: كل قسم كارت زي باقي اللوحة */
+.panel-content section[id^="op-"] {
+    background: var(--panel-card-bg); border: 1px solid var(--panel-border); border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow); padding: 20px; margin-bottom: 18px;
+}
+.panel-content section[id^="op-"] h2 { font-size: 17px; margin: 0 0 8px; }
+.panel-content section[id^="op-"] > p { color: var(--panel-text-muted); font-size: 13px; }
+.panel-content section[id^="op-"] label { display: block; margin: 10px 0; font-size: 13px; }

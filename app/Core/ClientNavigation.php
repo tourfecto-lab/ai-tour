@@ -43,8 +43,7 @@ class ClientNavigation
                 'operations'=>[$l('تشغيل الرحلات','Trip operations'),'/operations'],
                 'website_optimizer'=>[$l('تحسين الموقع','Website optimization'),'/website-optimizer'],
                 'website_builder'=>[$l('إنشاء موقع','Build a website'),'/website-builder'],
-                'business_center'=>[$l('إدارة النشاط','Business management'),'/business-center'],
-                'service_center'=>[$l('الخدمات المرتبطة','Connected services'),'/service-center']]],
+                'business_center'=>[$l('إدارة النشاط','Business management'),'/business-center']]],
             'content'=>[$l('مكتبة المحتوى','Content library'),'palette',[
                 'creative_studio'=>[$l('الصور والفيديو','Images and video'),'/creative-studio'],
                 'ai_articles'=>[$l('المقالات','Articles'),'/ai/articles'],

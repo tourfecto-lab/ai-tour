@@ -605,6 +605,14 @@ class GbpProfileController extends Controller
      */
     public function showReputationIntelligence(array $params = []): array
     {
+        // كل بيانات الصفحة دي جاية من Google Business: من غير ربط كانت الكروت
+        // كلها فاضية ورسائل خطأ بتطلع. بدلها شاشة واحدة واضحة فيها زرار الربط.
+        $gate = self::connectGateHtml((int) $this->user['id']);
+        if ($gate !== null) {
+            header('Content-Type: text/html; charset=utf-8');
+            echo $this->renderPanelPage('reputation_intelligence', $this->tr('sidebar.reputation_intelligence'), 'مؤشرات تقييماتك على Google ومخاطرها ومنافسيك', $gate);
+            exit;
+        }
         $assetCss = asset_v('/assets/css/reputation-intelligence.css');
 
         $body = <<<HTML
@@ -1273,6 +1281,39 @@ JS;
             $script
         );
         exit;
+    }
+
+    /**
+     * شاشة "اربط Google Business" لو مفيش ولا موقع مربوط (null = مربوط).
+     */
+    public static function connectGateHtml(int $userId): ?string
+    {
+        try {
+            $db = Database::getInstance();
+            $linked = $db->query("SELECT 1 FROM platform_connections WHERE user_id = ? AND platform = 'google_business' AND status = 'connected' LIMIT 1", [$userId]);
+            if ($linked) {
+                return null;
+            }
+            $sites = $db->query('SELECT id, main_url FROM websites WHERE user_id = ? ORDER BY id DESC LIMIT 10', [$userId]);
+        } catch (Throwable $e) {
+            return null;
+        }
+        $e = static fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $buttons = '';
+        foreach ($sites as $site) {
+            $host = preg_replace('#^https?://(www\.)?#i', '', rtrim((string) $site['main_url'], '/'));
+            $buttons .= '<a class="p-btn primary" href="/reputation/connect/google/' . (int) $site['id'] . '">ربط Google Business لـ ' . $e($host) . '</a> ';
+        }
+        if ($buttons === '') {
+            $buttons = '<a class="p-btn primary" href="/websites">أضف موقعك الأول</a>';
+        }
+        return '<div class="p-card" style="max-width:720px;margin:20px auto;text-align:center;padding:36px 24px">'
+            . '<div style="font-size:42px;margin-bottom:8px">📍</div>'
+            . '<h2 style="margin:0 0 10px">اربط حساب Google Business</h2>'
+            . '<p class="p-cell-muted" style="line-height:1.9;margin:0 auto 18px;max-width:520px">بعد الربط المنصة هتسحب تقييماتك من Google وترد عليها، وتوريك متوسط التقييم وسرعة الرد والمخاطر ومقارنتك بالمنافسين - كله لوحده.</p>'
+            . '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' . $buttons . '</div>'
+            . '<p class="p-cell-muted" style="font-size:12px;margin-top:16px">هتختار حساب Google اللي عليه نشاطك وتوافق - مش محتاجين كلمة السر.</p>'
+            . '</div>';
     }
 
     /**
