@@ -27,6 +27,8 @@
   for(const [key,label] of pages){const a=link(key,label);a.className='se-navigation-link';if(key==='tours')a.classList.add('se-navigation-tours');navMain.append(a);}
   navigation.append(navMain);
   const head=root.querySelector('.se-head');if(head)head.after(navigation);else root.prepend(navigation);
+  // عنوان واحد بس: عنوان الصفحة فوق كفاية، فبنخفي هيدر الخدمة المكرر ونحط زرار التحديث جنب التبويبات
+  if(head){const refresh=document.getElementById('seRefresh');if(refresh){refresh.classList.add('se-navigation-refresh');navigation.append(refresh);}head.hidden=true;}
   const pageHead=make('div','se-page-heading');
   const heading=make('h2');heading.id='sePageHeading';heading.tabIndex=-1;
   const description=make('p');pageHead.append(heading,description);navigation.after(pageHead);
@@ -36,7 +38,7 @@
   const panels=new Map();
   for(const [key,label] of pages){const pane=make('section','se-workspace-page');pane.id='sePage-'+key;pane.dataset.sePanel=key;pane.setAttribute('aria-label',label);panels.set(key,pane);(key==='execute'||key==='results'||key==='tours'?addonPages:corePages).append(pane);}
   const move=(id,page)=>{const n=document.getElementById(id),dest=panels.get(page);if(n&&!dest.contains(n))dest.append(n);};
-  for(const id of ['seWorker','seScope'])move(id,'overview');
+  move('seWorker','overview');move('seScope','settings');
   for(const id of ['seManageConnections','seConnectionGrid','seProbe','seProbeResults','seConfig'])move(id,'settings');
   move('seQuote','scan');
   const confirm=document.getElementById('seGenerateConfirm')?.closest('label');if(confirm)panels.get('scan').append(confirm);
@@ -51,9 +53,38 @@
   const overviewCard=make('article','se-card se-overview-card');
   const nextHeading=make('h3','',t('الخطوة التالية','Next step'));const nextText=make('p');nextText.id='seNextStep';
   const nextActions=make('div','se-actions');overviewCard.append(nextHeading,nextText,nextActions);panels.get('overview').prepend(overviewCard);
-  const quick=make('div','se-grid se-overview-grid');
-  for(const key of ['scan','plan','execute','results']){const p=pages.find(x=>x[0]===key),card=make('article','se-card');card.append(make('h3','',p[1]),make('p','',p[2]),link(key,t('افتح الصفحة','Open page')));quick.append(card);}
-  panels.get('overview').append(quick);
+  // بدل 4 كروت بتكرر التبويبات: ملخص باللي المنصة عملته فعلًا على الموقع
+  const results=make('article','se-card se-results-card');
+  const resultsTitle=make('h3','',t('اللي اتعمل على موقعك','What was done on your website'));
+  const stats=make('div','se-stats');const recent=make('ul','se-recent');
+  const statBox=(id,label)=>{const box=make('div','se-stat');const v=make('strong','','—');v.id=id;box.append(v,make('span','',label));stats.append(box);};
+  statBox('seStatChanges',t('تعديلات اتطبقت واتأكد منها','Changes applied and verified'));
+  statBox('seStatArticles',t('مقالات منشورة','Articles published'));
+  statBox('seStatPages',t('صفحات اتفحصت في آخر فحص','Pages checked in last scan'));
+  results.append(resultsTitle,stats,recent);panels.get('overview').append(results);
+  let summaryFor='';
+  const loadSummary=async()=>{
+   if(!state||state.websiteId!==selected())return;const key=state.websiteId+':'+state.runs.map(r=>r.id+r.status).join(',');if(key===summaryFor)return;summaryFor=key;
+   const ids=state.runs.slice(0,5).map(r=>r.id);let changes=0,articles=0,pagesScanned=null;const items=[];
+   for(const id of ids){
+    let d;try{d=await (await fetch('/api/seo-expert/runs/'+id,{credentials:'same-origin',headers:{Accept:'application/json'}})).json();}catch(e){continue;}
+    if(!d||!d.success)continue;const run=d.data.run||{},tasks=d.data.tasks||[];
+    if(pagesScanned===null){let snap=run.snapshot;if(typeof snap==='string'){try{snap=JSON.parse(snap);}catch(e){snap=null;}}if(snap&&Array.isArray(snap.pages))pagesScanned=snap.pages.length;}
+    for(const task of tasks){
+     const done=task.status==='verified'||(task.kind==='content'&&task.status==='active'&&task.published_url);
+     if(!done)continue;
+     if(task.kind==='content'){articles++;items.push({text:t('مقال: ','Article: ')+task.title,url:task.published_url});}
+     else if(task.kind==='metadata'){changes++;items.push({text:({title:t('عنوان','Title'),description:t('وصف','Description')}[task.field_name]||task.field_name)+' — '+(task.page_path||'/'),url:task.page_url});}
+    }
+   }
+   if(key!==summaryFor)return;
+   document.getElementById('seStatChanges').textContent=String(changes);
+   document.getElementById('seStatArticles').textContent=String(articles);
+   document.getElementById('seStatPages').textContent=pagesScanned===null?'—':String(pagesScanned);
+   recent.replaceChildren();
+   for(const item of items.slice(0,6)){const li=make('li');if(item.url&&/^https:\/\//.test(item.url)){const a=make('a','',item.text);a.href=item.url;a.target='_blank';a.rel='noopener noreferrer';li.append(a);}else li.textContent=item.text;recent.append(li);}
+   if(!items.length)recent.append(make('li','p-cell-muted',t('لسه مفيش تعديلات اتطبقت. ابدأ فحص واعتمد الخطة.','No changes applied yet. Start an inspection and approve the plan.')));
+  };
   const research=make('article','se-card');research.append(make('h3','',t('بحث المنافسين والكلمات','Competitor & keyword research')),make('p','',t('افتح أدوات البحث الموجودة في المنصة. بدء تحليل جديد يتبع التكلفة والموافقة المعروضة في أداته.','Open the existing research tools. New analysis follows the cost and approval shown by each tool.')));
   const researchLinks=make('div','se-actions');
   for(const [href,label] of [['/competitors',t('تحليل المنافسين','Competitor analysis')],['/keywords',t('بحث الكلمات','Keyword research')]]){const a=make('a','p-btn outline',label);a.href=href;a.target='_blank';a.rel='noopener noreferrer';researchLinks.append(a);}
@@ -74,10 +105,10 @@
    if(!state||state.websiteId!==selected()){nextText.textContent=t('جارٍ تحميل حالة الموقع. لو استمر الانتظار، اضغط تحديث الحالة.','Loading website state. If this continues, choose Refresh status.');return;}
    if(!state.configured){nextText.textContent=t('أكمل بيانات الشركة وحدود العمل، ثم ابدأ أول فحص.','Complete company facts and work limits, then start your first inspection.');nextActions.append(link('settings',t('أكمل الإعداد','Complete setup')));}
    else if(!state.workerReady){nextText.textContent=t('المتابعة في الخلفية تحتاج مراجعة مهام السيرفر. راجع التنبيه أدناه قبل بدء دورة.','Background work requires attention to the server worker. Review the notice below before starting a cycle.');nextActions.append(link('settings',t('راجع الإعدادات','Review settings')));}
-   else if(state.cycleBlock){nextText.textContent=state.cycleBlock;nextActions.append(link('plan',t('تابع الدورات الحالية','Follow existing cycles')),link('settings',t('راجع الحدود','Review limits')));}
+   else if(state.cycleBlock&&/limit|الحد/i.test(state.cycleBlock)){nextText.textContent=t('خلصت الدورات المسموحة الشهر ده. التعديلات اللي اتعملت شغالة على موقعك — شوفها تحت. لو عايز فحص جديد دلوقتي علّي الحد من الإعدادات، وإلا هتتجدد الشهر الجاي.','You used this month’s cycles. Applied changes stay live on your site — see below. To scan again now, raise the limit in settings; otherwise it renews next month.');nextActions.append(link('settings',t('علّي الحد','Raise the limit')),link('results',t('النتائج','Results')));}
+   else if(state.cycleBlock){nextText.textContent=state.cycleBlock;nextActions.append(link('plan',t('تابع الدورة الحالية','Follow the current cycle')));}
    else if(state.runs.length){nextText.textContent=t('راجع آخر دورة والمهام المطلوبة قبل بدء دورة جديدة.','Review your latest cycle and required tasks before starting a new one.');nextActions.append(runLink(state.runs[0]));}
    else {nextText.textContent=t('إعداداتك محفوظة. افتح الفحص وراجع الاستخدام المعروض قبل البدء.','Setup is saved. Open inspection and review the displayed usage before starting.');nextActions.append(link('scan',t('ابدأ الفحص','Start inspection')));}
-   nextActions.append(link('tours',t('إدارة الرحلات','Tour management')));
   };
   const runLink=run=>{const source=root.querySelector('#seRuns [data-run="'+run.id+'"]');const a=link('plan',source?.textContent||'#'+run.id);a.dataset.seOpenRun=String(run.id);return a;};
   const renderRuns=()=>{
@@ -97,7 +128,7 @@
    event.preventDefault();if(a.dataset.seOpenRun){const b=root.querySelector('#seRuns [data-run="'+Number(a.dataset.seOpenRun)+'"]');if(b&&!b.disabled)b.click();}go(a.dataset.sePage);
   });
   window.addEventListener('popstate',()=>{const page=pageFromURL();history.replaceState(null,'',urlFor(page));show(page,true);});
-  window.addEventListener('tourfecto-seo-overview',event=>{const d=event.detail;if(!d||d.websiteId!==selected())return;state=d;renderNext();renderRuns();updateLinks();history.replaceState(null,'',urlFor(active));});
+  window.addEventListener('tourfecto-seo-overview',event=>{const d=event.detail;if(!d||d.websiteId!==selected())return;state=d;const worker=document.getElementById('seWorker');if(worker)worker.hidden=!!d.workerReady;renderNext();renderRuns();updateLinks();loadSummary();history.replaceState(null,'',urlFor(active));});
   document.getElementById('seWebsite').addEventListener('change',()=>{state=null;renderNext();renderRuns();updateLinks();history.replaceState(null,'',urlFor(active));});
   // Existing transfers keep their content and permissions; navigation only reveals the destination.
   for(const name of ['tourfecto-editor-open','tourfecto-editor-draft','tourfecto-editor-task'])window.addEventListener(name,()=>go('execute'));

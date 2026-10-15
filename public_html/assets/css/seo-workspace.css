@@ -16,7 +16,18 @@
 #seoExpertRoot .se-navigation-link:focus-visible,#seoExpertRoot .se-page-heading h2:focus-visible{outline:2px solid #b08a46;outline-offset:3px}
 #seoExpertRoot #seoPageEditor,#seoExpertRoot #seoImpact,#seoExpertRoot #tfTourDraft{margin-block:12px}
 #seoExpertRoot #sePage-settings #seConfig{margin-block:20px}
+#seoExpertRoot .se-navigation{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#seoExpertRoot .se-navigation-main{flex:1}
+#seoExpertRoot .se-navigation-refresh{margin-inline-start:auto}
+#seoExpertRoot .se-results-card h3{margin-top:0}
+#seoExpertRoot .se-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+#seoExpertRoot .se-stat{padding:14px;border:1px solid var(--panel-border);border-radius:10px;background:var(--panel-card-bg-2)}
+#seoExpertRoot .se-stat strong{display:block;font-size:28px;line-height:1.2}
+#seoExpertRoot .se-stat span{font-size:13px;opacity:.8}
+#seoExpertRoot .se-recent{margin:0;padding-inline-start:18px;line-height:2}
+#seoExpertRoot .se-recent a{color:inherit;text-underline-offset:3px}
 @media(max-width:700px){
+ #seoExpertRoot .se-stats{grid-template-columns:1fr}
  #seoExpertRoot .se-navigation-main{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
  #seoExpertRoot .se-navigation-link{padding:9px 10px;font-size:12px;justify-content:center;text-align:center;overflow-wrap:anywhere}
  #seoExpertRoot .se-navigation-tours{margin-inline-start:0;grid-column:1/-1}
