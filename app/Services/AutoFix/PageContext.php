@@ -94,6 +94,23 @@ class PageContext
         }
         $out['links'] = array_values($links);
 
+        // وسائل التواصل الحقيقية (تليفون / إيميل / واتساب) لملء بيانات النشاط تلقائيًا.
+        // قبل حذف الـ footer/nav تحت، لأن بيانات التواصل غالبًا هناك.
+        $contacts = ['phones' => [], 'emails' => [], 'whatsapp' => []];
+        foreach ($doc->getElementsByTagName('a') as $a) {
+            $href = trim($a->getAttribute('href'));
+            if (stripos($href, 'tel:') === 0) {
+                $v = preg_replace('/[^0-9+]/', '', substr($href, 4));
+                if (strlen($v) >= 7) { $contacts['phones'][$v] = $v; }
+            } elseif (stripos($href, 'mailto:') === 0) {
+                $v = strtolower(trim(strtok(substr($href, 7), '?')));
+                if (filter_var($v, FILTER_VALIDATE_EMAIL)) { $contacts['emails'][$v] = $v; }
+            } elseif (preg_match('#^https://(?:wa\.me/|api\.whatsapp\.com/send\?phone=)\+?([0-9]{7,15})#i', $href, $wm)) {
+                $contacts['whatsapp'][$wm[1]] = '+' . $wm[1];
+            }
+        }
+        $out['contacts'] = array_map(static fn ($l) => array_slice(array_values($l), 0, 3), $contacts);
+
         // نص مختصر للفهم (من غير سكريبت وستايل)
         foreach (['script', 'style', 'noscript', 'nav', 'footer'] as $tag) {
             foreach (iterator_to_array($doc->getElementsByTagName($tag)) as $n) {

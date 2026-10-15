@@ -1,0 +1,74 @@
+<?php
+
+/**
+ * Tourfecto - تعريف النشاط التلقائي من صفحات الموقع
+ * التشغيل: phpunit --configuration tests/phpunit.xml --filter SeoBusinessBriefBuilderTest
+ */
+
+use PHPUnit\Framework\TestCase;
+
+require_once __DIR__ . '/../../app/Services/SeoExpert/SeoBusinessBriefBuilder.php';
+
+final class SeoBusinessBriefBuilderTest extends TestCase
+{
+    private function site(): array
+    {
+        $home = [
+            'title' => 'Luxury Egypt Tours & Nile Cruises | Tourfecto Travel', 'site_name' => '', 'lang' => 'en',
+            'description' => 'Private Luxor, Aswan and Cairo tours with licensed Egyptologist guides.',
+            'links' => [
+                ['title' => 'Blog', 'url' => 'https://t.com/blog'],
+                ['title' => 'Nile Cruises', 'url' => 'https://t.com/tours/nile-cruise'],
+                ['title' => 'About us', 'url' => 'https://t.com/about'],
+                ['title' => 'Contact', 'url' => 'https://t.com/contact'],
+            ],
+            'schema' => [
+                ['@type' => 'TravelAgency', 'name' => 'Tourfecto Travel', 'telephone' => '+201000000000',
+                    'address' => ['@type' => 'PostalAddress', 'addressLocality' => 'Luxor', 'addressCountry' => 'EG']],
+                ['@type' => 'FAQPage', 'mainEntity' => [['@type' => 'Question', 'name' => 'Is cancellation free?', 'acceptedAnswer' => ['@type' => 'Answer', 'text' => 'Yes, up to 24 hours before.']]]],
+            ],
+            'contacts' => ['phones' => ['+201000000000'], 'emails' => ['info@t.com'], 'whatsapp' => ['+201000000000']],
+            'social' => ['https://facebook.com/tourfecto'], 'text' => 'Book now your Luxor day tour.',
+        ];
+        $tour = ['h1' => 'Luxor & Aswan 4-Day Nile Cruise', 'lang' => 'en', 'schema' => [['@type' => 'TouristTrip', 'name' => 'Karnak Temple Tour'], ['@type' => 'TouristDestination', 'name' => 'Luxor']]];
+        return [$home, $tour];
+    }
+
+    public function testImportantPagesComeFirst(): void
+    {
+        $ranked = SeoBusinessBriefBuilder::rankLinks($this->site()[0]['links']);
+        $this->assertSame('https://t.com/about', $ranked[0]);
+        $this->assertSame('https://t.com/blog', end($ranked));
+    }
+
+    public function testBuildsStructuredFactsFromRealPageData(): void
+    {
+        $b = SeoBusinessBriefBuilder::build($this->site(), 'fallback', false);
+        $this->assertSame('Tourfecto Travel', $b['business_name']);
+        $this->assertStringContainsString('About: Private Luxor, Aswan and Cairo tours', $b['business_facts']);
+        $this->assertStringContainsString('Karnak Temple Tour', $b['business_facts']);
+        $this->assertStringContainsString('Luxor & Aswan 4-Day Nile Cruise', $b['business_facts']);
+        $this->assertStringContainsString('Destinations: Luxor', $b['business_facts']);
+        $this->assertStringContainsString('WhatsApp +201000000000', $b['business_facts']);
+        $this->assertStringContainsString('info@t.com', $b['business_facts']);
+        $this->assertStringContainsString('Is cancellation free? — Yes, up to 24 hours before.', $b['business_facts']);
+        $this->assertStringContainsString('English', $b['audience']);
+        $this->assertStringContainsString('direct bookings', $b['goal']);
+        $this->assertStringContainsString('WhatsApp', $b['goal']);
+    }
+
+    public function testArabicLabels(): void
+    {
+        $b = SeoBusinessBriefBuilder::build($this->site(), 'fallback', true);
+        $this->assertStringContainsString('الخدمات والرحلات: ', $b['business_facts']);
+        $this->assertStringContainsString('الإنجليزي', $b['audience']);
+    }
+
+    public function testFallbackNameAndTextWhenNoStructuredData(): void
+    {
+        $b = SeoBusinessBriefBuilder::build([['title' => '', 'text' => 'We run desert safaris in Hurghada.']], 'My Co', false);
+        $this->assertSame('My Co', $b['business_name']);
+        $this->assertStringContainsString('desert safaris', $b['business_facts']);
+        $this->assertStringContainsString('inquiries', $b['goal']);
+    }
+}
