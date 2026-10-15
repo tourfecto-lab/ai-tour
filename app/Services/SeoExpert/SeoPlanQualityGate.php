@@ -123,9 +123,24 @@ class SeoPlanQualityGate
         return $kept;
     }
 
-    /** بيشيل المهام العامة اللي مش مبنية على حاجة في الموقع */
+    /**
+     * بيشيل المهام العامة اللي مش مبنية على حاجة في الموقع. المهمة بتفضل بس
+     * لو بتشاور على حاجة اتلقت فعلًا: صفحة محددة (/tours/cairo) أو عنصر تقني
+     * (H1، noindex، canonical، redirect، 404، hreflang، schema، alt، sitemap...).
+     * نصايح زي "حسّن السرعة" أو "اعمل باك لينكات" أو "انشر على السوشيال"
+     * مش مهمة للعميل - والسوشيال والمنافسين وجوجل بيزنس خدمات المنصة نفسها.
+     */
     public static function filterClientTasks(array $tasks): array
     {
-        return array_values(array_filter($tasks, static fn ($t) => !preg_match(self::GENERIC_TASK, trim((string) ($t['title'] ?? '')))));
+        return array_values(array_filter($tasks, static function ($t): bool {
+            $title = trim((string) ($t['title'] ?? ''));
+            if (preg_match(self::GENERIC_TASK, $title)) {
+                return false;
+            }
+            $text = $title . ' ' . (string) ($t['instructions'] ?? '');
+            $pointsToPage = (bool) preg_match('#(?:^|[\s(\'"])/[a-z0-9][a-z0-9\-/]*#i', $text);
+            $technical = (bool) preg_match('/\b(h1|noindex|canonical|redirects?|404|hreflang|schema|alt[\s-]?text|sitemap|robots\.txt|lcp|cls|ttfb|https|mixed content)\b/i', $text);
+            return $pointsToPage || $technical;
+        }));
     }
 }
