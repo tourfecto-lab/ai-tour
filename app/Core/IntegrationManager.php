@@ -80,6 +80,13 @@ class IntegrationManager
                 if ($dbValue !== '') {
                     return $dbValue;
                 }
+                // صفحة إعدادات الأدمن العامة بتحفظ مفاتيح Google/Meta باسمها
+                // من غير "integration_" (google_client_id)، وده اللي الربط نفسه
+                // بيقراه. من غيره الصفحة كانت بتقول "جاري التجهيز" والربط شغال.
+                $dbValue = (new SystemSettingsService())->get(strtolower($envKey), '');
+                if ($dbValue !== '') {
+                    return $dbValue;
+                }
             } catch (Throwable $e) {
                 // نتجاهل - بنكمل على الـ env
             }
