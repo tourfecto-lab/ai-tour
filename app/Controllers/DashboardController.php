@@ -1382,12 +1382,22 @@ JS;
             $subtitle = 'خلّص الخطوات دي وموقعك يبدأ يستقبل حجوزات لوحده';
             $dismiss = $this->tr('onboarding.dismiss');
 
+            $hintsEn = [
+                '🌐' => 'A ready site with your tours and a Book button — built in minutes with AI.',
+                '🧳' => 'Every tour on your site becomes bookable online on its own.',
+                '📅' => 'Set how many bookings you accept per day so you never overbook.',
+                '💳' => 'A booking request you follow up yourself, or online payment to your own Stripe account.',
+                '🤖' => 'Add your About page link or a PDF brochure and the bot learns from it.',
+                '🎉' => 'Share your booking site link on WhatsApp, Facebook and your bio.',
+            ];
             $itemsHtml = '';
             $nextHint = '';
             foreach ($steps as $step) {
                 $isNext = !$step['done'] && $nextHint === '';
                 if ($isNext) {
-                    $nextHint = '<div class="onboarding-next">👉 <b>الخطوة الجاية:</b> ' . htmlspecialchars($step['label'] . ' - ' . $step['hint'], ENT_QUOTES, 'UTF-8') . '</div>';
+                    // الجملة المركّبة (عنوان - شرح) مش في قاموس الترجمة فكانت بتظهر عربي في الواجهة الإنجليزي
+                    $hint = current_lang() === 'ar' ? $step['hint'] : ($hintsEn[$step['icon']] ?? '');
+                    $nextHint = '<div class="onboarding-next">👉 <b>الخطوة الجاية:</b> <span>' . htmlspecialchars($step['label'], ENT_QUOTES, 'UTF-8') . '</span>' . ($hint !== '' ? ' — <span>' . htmlspecialchars($hint, ENT_QUOTES, 'UTF-8') . '</span>' : '') . '</div>';
                 }
                 $doneClass = $step['done'] ? ' onboarding-done' : ($isNext ? ' onboarding-next-step' : '');
                 $checkIcon = $step['done'] ? '✔' : $step['icon'];
@@ -1412,8 +1422,8 @@ JS;
     if (!el) return;
     el.innerHTML = `
         <div class="p-card" style="margin-bottom:18px;border:1px solid var(--panel-accent);position:relative;">
-            <button onclick="this.closest('.p-card').remove();try{localStorage.setItem('onboarding_booking_dismissed','1');}catch(e){}" style="position:absolute;top:12px;left:12px;background:none;border:none;color:var(--panel-text-muted);cursor:pointer;font-size:13px;">✕ {$dismissEsc}</button>
-            <div class="p-card-head"><h3>👋 {$titleEsc}</h3><span class="p-card-sub">{$subtitleEsc}</span></div>
+            <button onclick="this.closest('.p-card').remove();try{localStorage.setItem('onboarding_booking_dismissed','1');}catch(e){}" style="position:absolute;top:12px;inset-inline-end:12px;background:none;border:none;color:var(--panel-text-muted);cursor:pointer;font-size:13px;">✕ {$dismissEsc}</button>
+            <div class="p-card-head" style="padding-inline-end:80px"><h3>👋 {$titleEsc}</h3><span class="p-card-sub">{$subtitleEsc}</span></div>
             <div style="height:6px;background:var(--panel-border);border-radius:3px;overflow:hidden;margin-bottom:16px;">
                 <div style="height:100%;width:{$progressPct}%;background:var(--panel-accent);"></div>
             </div>

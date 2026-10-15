@@ -8,12 +8,12 @@
   const t=(a,e)=>ar?a:e;
   const pages=[
    ['overview',t('نظرة عامة','Overview'),t('حالة الخدمة والخطوة التالية لموقعك.','Your service state and next step.')],
-   ['scan',t('فحص الموقع والمنافسين','Site & competitor research'),t('ابدأ الفحص، ثم انتقل للخطة لمراجعة المقترحات.','Start an inspection, then review the proposals in Plan.')],
-   ['plan',t('خطة التحسين','Improvement plan'),t('اختر دورة، راجع المهام والحقائق، واعتمد التعديلات المناسبة.','Choose a cycle, review tasks and facts, then approve appropriate changes.')],
-   ['execute',t('تنفيذ التحسينات','Apply improvements'),t('حرّر صفحة أو رحلة موجودة، وراجع المعاينة قبل الحفظ.','Edit an existing page or tour and review the preview before saving.')],
-   ['results',t('النتائج والسجل','Results & history'),t('راجع نتائج الدورات، وقارن الأداء بالبيانات المتاحة.','Review cycle outcomes and compare performance using available data.')],
-   ['settings',t('الربط والإعدادات','Connections & settings'),t('إدارة الربط، وبيانات الشركة، وحدود العمل وتكلفته.','Manage connections, company facts, work limits and cost.')],
-   ['tours',t('إدارة الرحلات','Tour management'),t('جهّز رحلة جديدة كمسودة، ثم استكمل بيانات الحجز قبل نشرها.','Prepare a new tour draft and complete booking details before publishing.')]
+   ['scan',t('الفحص','Research'),t('ابدأ الفحص، ثم انتقل للخطة لمراجعة المقترحات.','Start an inspection, then review the proposals in Plan.')],
+   ['plan',t('الخطة','Plan'),t('اختر دورة، راجع المهام والحقائق، واعتمد التعديلات المناسبة.','Choose a cycle, review tasks and facts, then approve appropriate changes.')],
+   ['execute',t('التنفيذ','Apply'),t('حرّر صفحة أو رحلة موجودة، وراجع المعاينة قبل الحفظ.','Edit an existing page or tour and review the preview before saving.')],
+   ['results',t('النتائج','Results'),t('راجع نتائج الدورات، وقارن الأداء بالبيانات المتاحة.','Review cycle outcomes and compare performance using available data.')],
+   ['settings',t('الإعدادات','Settings'),t('إدارة الربط، وبيانات الشركة، وحدود العمل وتكلفته.','Manage connections, company facts, work limits and cost.')],
+   ['tours',t('الرحلات','Tours'),t('جهّز رحلة جديدة كمسودة، ثم استكمل بيانات الحجز قبل نشرها.','Prepare a new tour draft and complete booking details before publishing.')]
   ];
   const allowed=new Set(pages.map(p=>p[0]));
   const selected=()=>Number(document.getElementById('seWebsite')?.value||0);
@@ -24,7 +24,7 @@
   const link=(page,text)=>{const a=make('a','p-btn outline',text);a.dataset.sePage=page;a.href=urlFor(page);return a;};
   const navigation=make('nav','se-navigation');navigation.id='seNavigation';navigation.setAttribute('aria-label',t('صفحات خدمة SEO وإدارة الرحلات','SEO service pages and tour management'));
   const navMain=make('div','se-navigation-main');
-  for(const [key,label] of pages){const a=link(key,label);a.className='se-navigation-link';if(key==='tours')a.classList.add('se-navigation-tours');navMain.append(a);}
+  for(const [key,label] of pages){const a=link(key,label);a.className='se-navigation-link';navMain.append(a);}
   navigation.append(navMain);
   const head=root.querySelector('.se-head');if(head)head.after(navigation);else root.prepend(navigation);
   // عنوان واحد بس: عنوان الصفحة فوق كفاية، فبنخفي هيدر الخدمة المكرر ونحط زرار التحديث جنب التبويبات
@@ -63,6 +63,7 @@
   statBox('seStatPages',t('صفحات اتفحصت في آخر فحص','Pages checked in last scan'));
   results.append(resultsTitle,stats,recent);panels.get('overview').append(results);
   let summaryFor='';
+  const siteUrl=path=>{const o=document.getElementById('seWebsite')?.selectedOptions?.[0];const host=(o?.textContent||'').trim();return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)?'https://'+host+(path||'/'):'';};
   const loadSummary=async()=>{
    if(!state||state.websiteId!==selected())return;const key=state.websiteId+':'+state.runs.map(r=>r.id+r.status).join(',');if(key===summaryFor)return;summaryFor=key;
    const ids=state.runs.slice(0,5).map(r=>r.id);let changes=0,articles=0,pagesScanned=null;const items=[];
@@ -74,7 +75,7 @@
      const done=task.status==='verified'||(task.kind==='content'&&task.status==='active'&&task.published_url);
      if(!done)continue;
      if(task.kind==='content'){articles++;items.push({text:t('مقال: ','Article: ')+task.title,url:task.published_url});}
-     else if(task.kind==='metadata'){changes++;items.push({text:({title:t('عنوان','Title'),description:t('وصف','Description')}[task.field_name]||task.field_name)+' — '+(task.page_path||'/'),url:task.page_url});}
+     else if(task.kind==='metadata'){changes++;items.push({text:({title:t('عنوان','Title'),description:t('وصف','Description')}[task.field_name]||task.field_name)+' — '+(task.page_path||'/'),url:task.page_url||siteUrl(task.page_path)});}
     }
    }
    if(key!==summaryFor)return;
@@ -117,7 +118,7 @@
   const show=(page,focus=false)=>{
    active=allowed.has(page)?page:'overview';const info=pages.find(p=>p[0]===active);
    for(const [key,pane] of panels)pane.hidden=key!==active;
-   heading.textContent=info[1];description.textContent=info[2];root.dataset.sePage=active;
+   heading.textContent=info[1];description.textContent=info[2];pageHead.hidden=active==='overview';root.dataset.sePage=active;
    document.title=info[1]+' | Tourfecto';updateLinks();adoptModules();
    window.dispatchEvent(new CustomEvent('tourfecto-seo-page',{detail:{page:active,websiteId:selected()}}));
    if(focus)heading.focus({preventScroll:true});

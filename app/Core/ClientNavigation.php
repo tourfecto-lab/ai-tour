@@ -70,7 +70,8 @@ class ClientNavigation
     }
     public static function workspace(string $active,bool $ar,array $flags): string{
         foreach(self::groups($ar) as [$title,$icon,$items]){if(!array_key_exists($active,$items))continue;$links=[];$more=[];$index=0;foreach($items as $key=>[$label,$url]){if(!self::enabled($key,$flags))continue;$on=$key===$active;$link='<a class="p-btn outline sm'.($on?' on':'').'" href="'.self::esc($url).'"'.($on?' aria-current="page"':'').'>'.self::esc($label).'</a>';if($index++<3||$on)$links[]=$link;else $more[]=$link;}
-            return '<nav aria-label="'.self::esc($title).'" class="p-card" style="margin-bottom:16px;padding:14px"><strong>'.self::esc($title).'</strong><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'.implode('',$links).'</div>'.($more?'<details style="margin-top:12px"><summary>'.($ar?'أدوات إضافية':'Additional tools').'</summary><div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:10px">'.implode('',$more).'</div></details>':'').'</nav>';}
+            // شريط خفيف من غير كارت ولا عنوان: اسم القسم ظاهر في القائمة الجانبية وعنوان الصفحة
+            return '<nav aria-label="'.self::esc($title).'" class="panel-subnav" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">'.implode('',$links).($more?'<details style="position:relative"><summary class="p-btn outline sm" style="list-style:none;cursor:pointer">'.($ar?'المزيد ▾':'More ▾').'</summary><div class="p-card" style="position:absolute;z-index:20;inset-inline-start:0;margin-top:6px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:220px">'.implode('',$more).'</div></details>':'').'</nav>';}
         return '';
     }
 }

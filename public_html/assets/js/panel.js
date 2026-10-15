@@ -381,7 +381,8 @@
             if (!sites.length) return; // مفيش مواقع لسه - سيبها مخفية
 
             sel.innerHTML = sites.map(function (w) {
-                return '<option value="' + w.id + '">' + esc(w.company_name || w.main_url) + '</option>';
+                var host = String(w.main_url || '').replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
+                return '<option value="' + w.id + '">' + esc(host || w.company_name || ('#' + w.id)) + '</option>';
             }).join('');
 
             var saved = getCurrentWebsiteId();
@@ -391,7 +392,8 @@
                 setCurrentWebsiteId(saved);
             }
             sel.value = saved;
-            sel.style.display = 'block';
+            // موقع واحد بس: مفيش حاجة تختارها، فالقائمة بتفضل مخفية
+            if (sites.length > 1) sel.style.display = 'block';
 
             sel.addEventListener('change', function () {
                 setCurrentWebsiteId(sel.value);
