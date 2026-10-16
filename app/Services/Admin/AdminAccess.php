@@ -234,6 +234,7 @@ class AdminAccess
                 '#^/admin/health$#' => 'system.view',
                 '#^/admin/emails$#' => 'system.view',
                 '#^/admin/growth$#' => 'settings.manage',
+                '#^/admin/plans-studio$#' => 'billing.view',
                 '#^/admin/metrics$#' => 'billing.view',
                 '#^/admin/customers-health$#' => 'users.view',
                 '#^/admin/adoption$#' => 'users.view',
@@ -318,6 +319,9 @@ class AdminAccess
             return $write ? 'users.edit' : 'users.view';
         }
         if ($rel === '/broadcast') return 'broadcast.send';
+
+        // ---- الباقات المرنة والعملات
+        if ($rel === '/plans-studio' || strpos($rel, '/plans-studio/') === 0 || strpos($rel, '/currency/') === 0) return $write ? 'billing.settings' : 'billing.view';
 
         // ---- تسويق المنصة بالإيميل
         if ($rel === '/growth' || strpos($rel, '/growth/') === 0) return 'settings.manage';

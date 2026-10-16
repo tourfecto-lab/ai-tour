@@ -291,12 +291,23 @@ class MarketingController extends Controller
         $featuredKey = isset($plans['professional']) ? 'professional' : ($keys[(int) floor(count($keys) / 2)] ?? '');
         $maxSave = 0;
 
+        require_once __DIR__ . '/../Services/Payment/CurrencyService.php';
+        $viewCur = CurrencyService::forViewer($this->user ?? null);
+        header('Vary: Cookie, Accept-Language'); // السعر بيختلف حسب عملة الزائر
+        $isAr = $this->t(['ar', 'en']) === 'ar';
         $cards = '';
         foreach ($plans as $key => $p) {
             $f = $p['features'];
             $sym = $this->e($p['currency_symbol'] ?? '$');
             $m = (float) $p['price_monthly'];
             $y = (float) $p['price_yearly'];
+            // عرض بعملة الزائر (الجنيه المصري مثلًا) محسوبة من سعر الدولار
+            if ($viewCur !== 'USD' && ($p['currency'] ?? 'USD') === 'USD') {
+                $meta = CurrencyService::CURRENCIES[$viewCur];
+                $sym = $this->e(($isAr ? $meta['ar_symbol'] : $meta['symbol']) . ' ');
+                $m = CurrencyService::fromUsd($m, $viewCur);
+                $y = CurrencyService::fromUsd($y, $viewCur);
+            }
             $save = $m > 0 ? max(0, (int) round((1 - $y / ($m * 12)) * 100)) : 0;
             $maxSave = max($maxSave, $save);
             $name = MarketingContent::planName($key, (string) $p['name']);
@@ -393,6 +404,9 @@ class MarketingController extends Controller
             . '<section class="blk tight" style="padding-top:0"><div style="text-align:center"><div class="cycle" role="group" aria-label="' . $this->te(['دورة الدفع', 'Billing cycle']) . '">'
             . '<button type="button" data-cycle="m" aria-pressed="true">' . $this->te(['شهري', 'Monthly']) . '</button>'
             . '<button type="button" data-cycle="y" aria-pressed="false">' . $this->te(['سنوي', 'Yearly']) . $saveLbl . '</button></div></div>'
+            . '<div style="text-align:center;margin:-6px 0 14px;font-size:13px"><label>' . $this->te(['العملة', 'Currency']) . ' <select id="tfCur" style="padding:5px 8px;border-radius:8px">' . implode('', array_map(fn ($c) => '<option value="' . $this->e($c['code']) . '"' . ($c['code'] === $viewCur ? ' selected' : '') . '>' . $this->e($c['name'] . ' (' . $c['symbol'] . ')') . '</option>', CurrencyService::publicList($isAr))) . '</select></label>'
+            . ($viewCur !== 'USD' ? '<div style="opacity:.7;margin-top:4px">' . $this->e(sprintf($this->t(['محسوبة بسعر الصرف النهارده (1$ = %s)', 'Converted at today’s rate ($1 = %s)']), CurrencyService::format(1, $viewCur, $isAr))) . '</div>' : '')
+            . '</div><script>document.getElementById("tfCur").addEventListener("change",function(e){fetch("/api/currency",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:e.target.value})}).then(function(){location.reload();});});</script>'
             . '<div class="plans">' . $cards . '</div></section>'
             . '<section class="blk"><div class="sec-head"><h2 class="sec-title">' . $this->te(['موجود في كل الباقات', 'Included in every plan']) . '</h2></div><div class="incl">' . $incl . '</div></section>'
             . $cmp

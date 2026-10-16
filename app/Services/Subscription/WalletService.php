@@ -943,6 +943,46 @@ class WalletService
      * @param string|null $idempotencyKey مفتاح فريد اختياري لمنع تكرار
      *        نفس الخصم لو نفس الطلب اتبعت مرتين (شبكة/دبل-كليك).
      */
+    /**
+     * خصم مبلغ محدد من المحفظة (الإضافات والباقات المخصصة) - نفس ضمانات chargeForUsage
+     * (قفل المستخدم، إعادة حساب الرصيد جوه القفل، idempotency).
+     */
+    public function chargeAmount(int $userId, float $amount, string $featureKey, string $note = '', ?string $idempotencyKey = null): bool
+    {
+        if ($amount <= 0 || !is_finite($amount)) {
+            return $amount == 0.0;
+        }
+        try {
+            return $this->db->transaction(function () use ($userId, $amount, $featureKey, $note, $idempotencyKey) {
+                $this->db->query("SELECT id FROM users WHERE id = ? FOR UPDATE", [$userId]);
+                if ($idempotencyKey && $this->db->query("SELECT id FROM wallet_transactions WHERE idempotency_key = ? LIMIT 1", [$idempotencyKey])) {
+                    return true;
+                }
+                if ($this->getBalance($userId) < $amount) {
+                    return false;
+                }
+                $tx = new WalletTransaction();
+                $tx->fill([
+                    'user_id' => $userId,
+                    'type' => 'subscription_charge',
+                    'amount' => -round($amount, 2),
+                    'currency' => 'USD',
+                    'status' => 'completed',
+                    'reference_note' => $note ?: $featureKey,
+                    'feature_key' => mb_substr($featureKey, 0, 60),
+                    'approved_at' => date('Y-m-d H:i:s'),
+                    'idempotency_key' => $idempotencyKey,
+                ]);
+                if (!$tx->save()) throw new RuntimeException('Charge transaction was not persisted');
+                $this->checkLowBalanceAndNotify($userId);
+                return true;
+            });
+        } catch (Exception $e) {
+            Logger::error('chargeAmount failed', ['user_id' => $userId, 'feature' => $featureKey, 'message' => $e->getMessage()]);
+            return false;
+        }
+    }
+
     public function chargeForUsage(int $userId, string $featureKey, string $note = '', ?string $idempotencyKey = null): bool
     {
         $pricing = $this->getUsagePricing();
@@ -1060,6 +1100,12 @@ class WalletService
                 $planType = $sub['billing_cycle'] === 'yearly' ? 'yearly' : 'monthly';
                 if (($sub['renewal_currency']??'') !== 'USD' || ($sub['currency']??'') !== 'USD') return ['success'=>false,'reason'=>'currency_mismatch','subscription_id'=>$subscriptionId];
                 $price = (float) $sub['price'];
+                // الباقة المخصصة (ابني باقتك) بتتجدد بسعرها هي، مش سعر الباقة الأساسية
+                require_once __DIR__ . '/PlanExtras.php';
+                $customPrice = PlanExtras::renewalPrice($subscriptionId);
+                if ($customPrice !== null) {
+                    $price = $customPrice;
+                }
 
                 if ($price < 0 || !is_finite($price)) {
                     return ['success' => false, 'reason' => 'invalid_price', 'subscription_id' => $subscriptionId];
@@ -1134,6 +1180,9 @@ class WalletService
 
                 // Renewal invoice is atomic with the renewal debit.
                 $this->createInvoiceForCharge($userId, $planKey, ['name' => $sub['plan_display_name'] ?: $planKey], $planType, $price, $chargeTx);
+                if ($customPrice !== null) {
+                    PlanExtras::onRenewed($subscriptionId, $userId, (string) $newEnd);
+                }
 
                 ActivityLog::record('wallet', 'wallet.subscription_renewed', [
                     'user_id' => $userId,

@@ -132,6 +132,13 @@ class SubscriptionValidator
             $sub = $subscription;
             $this->subscription = $sub;
 
+            // إضافات العميل (باكدجات + باقة مخصصة) فوق رصيد الباقة
+            require_once __DIR__ . '/PlanExtras.php';
+            foreach (['ai_credits' => 'ai_analysis', 'chat_credits' => 'chat', 'review_credits' => 'review', 'competitor_analysis_limit' => 'competitor'] as $col => $extraKey) {
+                $sub[$col] = (int) ($sub[$col] ?? 0) + PlanExtras::extra((int) ($sub['id'] ?? 0), $extraKey);
+            }
+            $this->subscription = $sub;
+
             // التحقق من الـ Credits المتبقية
             $aiRemaining = max(0, $sub['ai_credits'] - $sub['ai_credits_used']);
             $chatRemaining = max(0, $sub['chat_credits'] - $sub['chat_credits_used']);

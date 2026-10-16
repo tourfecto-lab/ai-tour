@@ -58,6 +58,10 @@ class PlanUsage
             return $none;
         }
         $limit = self::limitFor($sub, self::FEATURES[$feature]);
+        // إضافات العميل (باكدجات + باقة مخصصة) فوق حصة الباقة
+        if ($limit >= 0) {
+            $limit += self::extraFor((int) $sub['id'], $feature);
+        }
         if ($limit === 0) {
             return ['subscription_id' => (int) $sub['id']] + $none;
         }
@@ -125,6 +129,10 @@ class PlanUsage
             return false;
         }
         $limit = self::limitFor($sub, self::FEATURES[$feature]);
+        // إضافات العميل (باكدجات + باقة مخصصة) فوق حصة الباقة
+        if ($limit >= 0) {
+            $limit += self::extraFor((int) $sub['id'], $feature);
+        }
         if ($limit === 0) {
             return false;
         }
@@ -214,6 +222,12 @@ class PlanUsage
     }
 
     // ------------------------------------------------------------------
+
+    private static function extraFor(int $subId, string $feature): int
+    {
+        require_once __DIR__ . '/PlanExtras.php';
+        return PlanExtras::extra($subId, $feature);
+    }
 
     private static function limitFor(array $sub, string $jsonKey): int
     {

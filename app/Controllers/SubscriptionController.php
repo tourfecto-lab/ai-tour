@@ -549,6 +549,7 @@ class SubscriptionController extends Controller
             $tNoActiveSub = $this->tr('subscription.no_active');
             $tSeePlans = $this->tr('subscription.see_plans');
             $body = '<div class="p-card"><div class="p-empty"><div class="p-empty-icon">💳</div>' . $tNoActiveSub . '<br><a href="/plans" class="p-btn primary" style="margin-top:14px;">' . $tSeePlans . ' ←</a></div></div>';
+            $body .= self::plansStudioBlock();
             $body .= $this->renderWalletCardHtml();
             header('Content-Type: text/html; charset=utf-8');
             echo $this->renderPanelPage('_subscription', $this->tr('subscription.page_title'), $this->tr('subscription.page_subtitle'), $body, $this->buildWalletOnlyScript());
@@ -979,9 +980,29 @@ HTML;
 })();
 JS;
 
+        $body .= self::plansStudioBlock();
         header('Content-Type: text/html; charset=utf-8');
         echo $this->renderPanelPage('_subscription', $this->tr('subscription.page_title'), $this->tr('subscription.page_subtitle_active'), $body, $script);
         exit;
+    }
+
+    /** التجربة المجانية + الإضافات + ابني باقتك + العملة (assets/js/plans-studio.js) */
+    private static function plansStudioBlock(): string
+    {
+        $css = htmlspecialchars(asset_v('/assets/css/plans-studio.css'), ENT_QUOTES, 'UTF-8');
+        $js = htmlspecialchars(asset_v('/assets/js/plans-studio.js'), ENT_QUOTES, 'UTF-8');
+        return '<link rel="stylesheet" href="' . $css . '"><section id="plansStudio" class="ps" aria-live="polite"></section><script defer src="' . $js . '"></script>';
+    }
+
+    /** السعر بعملة العميل تحت السعر بالدولار */
+    private function localPrice(float $usd): string
+    {
+        require_once __DIR__ . '/../Services/Payment/CurrencyService.php';
+        $cur = CurrencyService::forViewer($this->user ?? null);
+        if ($cur === 'USD') {
+            return '';
+        }
+        return '<div class="p-cell-muted" style="margin:-6px 0 10px;font-size:13px">≈ ' . htmlspecialchars(CurrencyService::format($usd, $cur), ENT_QUOTES, 'UTF-8') . ' بسعر النهارده</div>';
     }
 
     /** GET /plans (عام - بدون تسجيل دخول) */
@@ -1000,6 +1021,8 @@ JS;
         foreach ($plans as $key => $plan) {
             $name = htmlspecialchars($plan['name'], ENT_QUOTES, 'UTF-8');
             $priceMonthly = number_format($plan['price_monthly'], 2);
+            $localMonthly = $this->localPrice((float) $plan['price_monthly']);
+            $localYearly = $this->localPrice((float) $plan['price_yearly']);
             $priceYearly = number_format($plan['price_yearly'], 2);
             // تصحيح باغ عملة حقيقي: كانت مكتوبة "جنيه" (EGP) بشكل ثابت
             // بجانب أسعار مقصود بيها أصلاً تكون بالدولار ($49، $99، $299)
@@ -1052,6 +1075,7 @@ JS;
 
                 <div class="plan-cycle-block" data-cycle-block="monthly">
                     <div style="font-size:32px;font-weight:700;margin:10px 0;">{$currencySymbol}{$priceMonthly} <span style="font-size:14px;font-weight:400;">/شهر</span></div>
+                    {$localMonthly}
                     <ul style="margin:0 0 16px;padding-inline-start:20px;line-height:2;">{$featuresHtml}</ul>
                     <a href="{$whatsappMonthly}" target="_blank" rel="noopener" class="p-btn primary btn-block">💬 اشترك عبر واتساب</a>
                     {$walletButtonsMonthly}
@@ -1059,6 +1083,7 @@ JS;
 
                 <div class="plan-cycle-block" data-cycle-block="yearly" style="display:none;">
                     <div style="font-size:32px;font-weight:700;margin:10px 0;">{$currencySymbol}{$priceYearly} <span style="font-size:14px;font-weight:400;">/سنة</span> {$savingsBadge}</div>
+                    {$localYearly}
                     <ul style="margin:0 0 16px;padding-inline-start:20px;line-height:2;">{$featuresHtml}</ul>
                     <a href="{$whatsappYearly}" target="_blank" rel="noopener" class="p-btn primary btn-block">💬 اشترك عبر واتساب</a>
                     {$walletButtonsYearly}
@@ -1075,6 +1100,9 @@ HTML;
         </div>
 HTML;
         $body = $billingToggleHtml . '<div class="p-grid cols-3">' . $cardsHtml . '</div>';
+        if ($isAuth) {
+            $body .= self::plansStudioBlock();
+        }
         // تحذير المالك (إعداد داخلي) - يظهر للأدمن بس، مش للزوار العاديين
         // أو العملاء، عشان يبقى الموقع نظيف أمام الجمهور.
         $isAdminUser = $isAuth && in_array($this->user['role'] ?? '', ['super_admin', 'admin'], true);

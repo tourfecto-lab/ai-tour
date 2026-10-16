@@ -379,6 +379,7 @@ $router->get('/admin/creative-studio', 'CreativeAdminController', 'index', ['Aut
 
 $router->get('/admin/ai-routing', 'AiRoutingAdminController', 'index', ['AuthMiddleware','AdminMiddleware']);
 $router->get('/admin/growth', 'PlatformOutreachController', 'index', ['AuthMiddleware','AdminMiddleware']);
+$router->get('/admin/plans-studio', 'PlansStudioController', 'adminPage', ['AuthMiddleware','AdminMiddleware']);
 
 $router->get('/admin/usage-reservations', 'UsageReservationAdminController', 'index', ['AuthMiddleware','BillingAdminMiddleware']);
 

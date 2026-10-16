@@ -1667,6 +1667,18 @@ $router->add('HEAD','/api/admin/creative-studio/media/{id}/content','CreativeAdm
 
 $router->get('/api/admin/ai-routing', 'AiRoutingAdminController', 'listing', ['AuthMiddleware','AdminMiddleware']);
 $router->get('/api/admin/growth', 'PlatformOutreachController', 'overview', ['AuthMiddleware','AdminMiddleware']);
+$router->get('/api/admin/plans-studio', 'PlansStudioController', 'adminData', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/plans-studio/config', 'PlansStudioController', 'adminSaveConfig', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/plans-studio/preset', 'PlansStudioController', 'adminPreset', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/currency/rates', 'PlansStudioController', 'adminSaveRates', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/currency/refresh', 'PlansStudioController', 'adminRefreshRates', ['AuthMiddleware','AdminMiddleware']);
+// الباقات المرنة والعملات (العميل)
+$router->post('/api/currency', 'PlansStudioController', 'setCurrency', []);
+$router->get('/api/plans/overview', 'PlansStudioController', 'overview', ['AuthMiddleware']);
+$router->post('/api/plans/trial', 'PlansStudioController', 'trial', ['AuthMiddleware']);
+$router->post('/api/plans/addon', 'PlansStudioController', 'addon', ['AuthMiddleware']);
+$router->post('/api/plans/custom/quote', 'PlansStudioController', 'customQuote', ['AuthMiddleware']);
+$router->post('/api/plans/custom/buy', 'PlansStudioController', 'customBuy', ['AuthMiddleware']);
 $router->get('/api/admin/growth/leads', 'PlatformOutreachController', 'leads', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/growth/settings', 'PlatformOutreachController', 'saveSettings', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/growth/import', 'PlatformOutreachController', 'import', ['AuthMiddleware','AdminMiddleware']);
