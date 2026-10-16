@@ -38,6 +38,10 @@ class CreativeStudioController extends Controller
         <script src="{$studioJs}"></script>
         <section class="cs-hero" id="csHero" data-account="{$studioUserId}">
             <div><span class="cs-eyebrow">TOURFECTO CREATIVE STUDIO</span><h2 data-cs-title>من الفكرة إلى حملة بصرية</h2><p data-cs-intro>صمّم صورًا وفيديوهات تعبر عن وجهتك وهويتك. وجّه الإضاءة والتكوين، تابع مراحل التوليد، وحمّل النتيجة الأصلية أو انشرها.</p></div><div class="cs-emblem" aria-hidden="true">✦</div>
+            </section>
+            <section class="p-card" style="padding:14px 18px;margin:12px 0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+                <div><b>📷 عندك صور حقيقية لرحلاتك؟ دي أحلى من أي صورة متولدة</b><div class="p-cell-muted" style="font-size:13px">ارفع صورك في "خطة الشهر" والذكاء الصناعي بيتعلم منها ويعمل بوستات بلوجو شركتك وألوانها - مجانًا من غير توليد صور.</div></div>
+                <a class="p-btn" href="/social">صمّم بوستات من صوري</a>
         </section>
         <div class="p-toolbar">
             <button class="p-btn" onclick="document.getElementById('mediaModal').classList.add('open')">🎨 توليد صورة</button>

@@ -159,6 +159,34 @@ class GeminiClient
     }
 
     /**
+     * يوصف صورة (رؤية): بيبعت الصورة مع السؤال ويرجّع النص. بيستخدم نفس
+     * مفتاح وموديلات النص (Gemini Flash بيفهم الصور).
+     * @return array ['success'=>bool, 'data'=>?string, 'error'=>?string]
+     */
+    public function describeImage(string $binary, string $mime, string $prompt, array $options = []): array
+    {
+        if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp'], true) || $binary === '' || strlen($binary) > 7000000) {
+            return ['success' => false, 'error' => 'unsupported image'];
+        }
+        $this->meta = ['task' => 'media_vision', 'user_id' => isset($options['user_id']) ? (int) $options['user_id'] : null];
+        try {
+            $config = $this->sanitizeGenerationConfig(array_merge($this->config, ['temperature' => 0.2, 'maxOutputTokens' => 1024], $options));
+            $response = $this->sendRequest([
+                'contents' => [['parts' => [
+                    ['inlineData' => ['mimeType' => $mime, 'data' => base64_encode($binary)]],
+                    ['text' => $prompt],
+                ]]],
+                'generationConfig' => $config,
+                'safetySettings' => GEMINI_SAFETY_SETTINGS,
+            ]);
+            $this->logUsage($response, 0);
+            return $response;
+        } catch (Throwable $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * توليد صورة حقيقية من وصف نصي، بنفس مفتاح Gemini API المستخدم
      * للنصوص - مفيش حاجة تضاف في .env. بيستخدم موديل gemini-2.5-flash-image
      * ("Nano Banana")، فيه حصة مجانية سخية (لحد 500 طلب/يوم وقت كتابة

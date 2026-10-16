@@ -560,6 +560,73 @@ JS;
         return $this->success(['item' => $r['item']], 'اترفع', 201);
     }
 
+    /** POST /api/social/brand-kit - لوجو وألوان الشركة اللي بتتحط على التصميمات */
+    public function saveBrandKit(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if (($error = $this->verifyCsrf()) || ($error = $this->rateLimitGuard('user', 'social_brand_kit', 20, 60))) {
+            return $error;
+        }
+        try {
+            $kit = (new SocialBrandStudio())->saveKit((int) $this->user['id'], (int) ($_POST['website_id'] ?? $this->get('website_id', 0)), $_FILES['logo'] ?? null, (string) ($_POST['primary'] ?? $this->get('primary', '')), (string) ($_POST['accent'] ?? $this->get('accent', '')));
+            return $this->success(['brand' => $kit], 'اتحفظت هوية الشركة');
+        } catch (InvalidArgumentException $e) {
+            return $this->error($e->getMessage(), 422);
+        } catch (Throwable $e) {
+            Logger::error('Brand kit save failed', ['error' => $e->getMessage()]);
+            return $this->error('مقدرناش نحفظ الهوية دلوقتي، جرّب تاني', 500);
+        }
+    }
+
+    /** POST /api/social/media/{id}/learn - الذكاء الصناعي يشوف الصورة ويفهمها */
+    public function learnMedia(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if (($error = $this->verifyCsrf()) || ($error = $this->rateLimitGuard('user', 'social_learn', 40, 60))) {
+            return $error;
+        }
+        try {
+            $v = (new SocialBrandStudio())->learn((int) $this->user['id'], (int) ($params['id'] ?? 0));
+            return $this->success(['vision' => $v]);
+        } catch (InvalidArgumentException $e) {
+            return $this->error('الصورة مش موجودة', 404);
+        } catch (Throwable $e) {
+            return $this->success(['vision' => null]);
+        }
+    }
+
+    /** POST /api/social/design - تصميم بوست واحد بهوية الشركة من صورة العميل (مجانًا - مفيش توليد صور) */
+    public function designPost(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if (($error = $this->verifyCsrf()) || ($error = $this->rateLimitGuard('user', 'social_design', 20, 60))) {
+            return $error;
+        }
+        $headline = trim((string) $this->get('headline', ''));
+        if (mb_strlen($headline) < 3 || mb_strlen($headline) > 90) {
+            return $this->error('اكتب عنوان قصير للتصميم (من 3 لـ 90 حرف)', 422);
+        }
+        $uid = (int) $this->user['id'];
+        $mediaId = (int) $this->get('media_id', 0);
+        try {
+            $studio = new SocialBrandStudio();
+            $id = $studio->design($uid, (int) $this->get('website_id', 0), (string) $this->get('format', 'design'), $headline, (string) $this->get('subline', ''), $mediaId > 0 ? $mediaId : null, (int) $this->get('variant', 0));
+            $row = PrivateMedia::owned($uid, $id);
+            return $this->success(['id' => $id, 'preview_url' => $row['file_path']], 'التصميم جاهز', 201);
+        } catch (InvalidArgumentException $e) {
+            return $this->error($e->getMessage() === 'Website unavailable' ? 'اختار الموقع' : 'الصورة مش موجودة', 422);
+        } catch (Throwable $e) {
+            Logger::error('Design post failed', ['error' => $e->getMessage()]);
+            return $this->error('مقدرناش نعمل التصميم دلوقتي، جرّب تاني', 500);
+        }
+    }
+
     /** POST /api/social/posts/{id}/retry - إعادة نشر الأهداف اللي فشلت */
     public function retryPost(array $params = []): array
     {
