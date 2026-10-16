@@ -153,6 +153,11 @@ abstract class Controller
         }
 
         $submitted = (string) $this->get('csrf_token');
+        // صفحات كتير كانت بتبعت الطلب من غير التوكن في البيانات (فالعميل يطلع له "انتهت الجلسة"
+        // وهو لسه داخل). Panel.fetchJSON بقى يبعته في الهيدر مع كل طلب.
+        if ($submitted === '') {
+            $submitted = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+        }
         if (!class_exists('Csrf') || !Csrf::verify($submitted)) {
             return $this->error('انتهت صلاحية الجلسة، حدّث الصفحة وحاول تاني', 419);
         }
@@ -821,12 +826,14 @@ abstract class Controller
         $iconUser = icon_svg('user');
 
         $internationalLocaleJson=json_encode(['language'=>$lang,'timezone'=>$_SESSION['user']['timezone']??'UTC','currency'=>$_SESSION['user']['currency']??'USD'],JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT);
+        $csrfMeta = class_exists('Csrf') ? htmlspecialchars(Csrf::token(), ENT_QUOTES, 'UTF-8') : '';
         return <<<HTML
 <!DOCTYPE html>
 <html lang="{$lang}" dir="{$dir}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{$csrfMeta}">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#F4F5F8">
     <meta name="apple-mobile-web-app-capable" content="yes">

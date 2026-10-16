@@ -20,7 +20,9 @@ class SocialMonthlyPlanService
     }
     public static function quoteHash(array $q): string { return hash('sha256',json_encode(['source'=>$q['source']??'none','price'=>($q['source']??'')==='wallet'?number_format((float)($q['price']??0),2,'.',''):null])); }
     public function setup(int $uid): array {
-        $sites=$this->q('SELECT id,domain,company_name FROM websites WHERE user_id=? ORDER BY id DESC',[$uid])->fetchAll(PDO::FETCH_ASSOC);
+        $sites=$this->q('SELECT id,domain,company_name,main_url FROM websites WHERE user_id=? ORDER BY id DESC',[$uid])->fetchAll(PDO::FETCH_ASSOC);
+        // لغة المحتوى = لغة جمهور الموقع (مش لغة لوحة التحكم): شركة بتستهدف سياح إنجليز كانت بتاخد بوستات عربي
+        foreach($sites as &$site){$site['language']=class_exists('ContentLanguageService')?ContentLanguageService::forWebsite((int)$site['id'],$uid):'en';if(!$site['domain'])$site['domain']=preg_replace('#^https?://(www\.)?#i','',rtrim((string)$site['main_url'],'/'));unset($site['main_url']);}unset($site);
         $connections=$this->q("SELECT c.id,c.website_id,c.platform,c.external_location_name AS name,c.status,c.token_expires_at FROM platform_connections c JOIN websites w ON w.id=c.website_id WHERE w.user_id=? AND c.platform IN ('facebook','instagram') ORDER BY c.id",[$uid])->fetchAll(PDO::FETCH_ASSOC);
         $media=$this->q("SELECT id,type,prompt,width,height,file_path FROM media_items WHERE user_id=? AND status='completed' AND deleted_at IS NULL ORDER BY id DESC LIMIT 120",[$uid])->fetchAll(PDO::FETCH_ASSOC);
         foreach($media as &$m){$m['preview_url']=PrivateMedia::valid((string)$m['file_path'])?PrivateMedia::preview((int)$m['id']):(preg_match('#^/uploads/social/'.$uid.'/[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|mp4|mov)$#D',(string)$m['file_path'])?$m['file_path']:null);unset($m['file_path']);$m['prompt']=mb_substr((string)$m['prompt'],0,160);}unset($m);

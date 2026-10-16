@@ -1438,7 +1438,7 @@ JS;
         </div>
 
         <div class="p-card">
-            <div class="p-card-head"><h3>🏁 روابط الـ 3 منافسين</h3><span class="p-card-sub">لازم الثلاثة عشان يبدأ تحليل الذكاء الاصطناعي</span></div>
+            <div class="p-card-head"><h3>🏁 روابط المنافسين (اختياري)</h3><span class="p-card-sub">حط لحد 3 منافسين عشان الاقتراحات تبقى أدق</span></div>
             <div class="kw-comp-grid">
                 <input type="url" id="c1" class="form-control" placeholder="https://competitor1.com">
                 <input type="url" id="c2" class="form-control" placeholder="https://competitor2.com">
@@ -2128,9 +2128,8 @@ PROMPT;
         if (!$targetUrl) {
             return $this->error('رابط الموقع نفسه غير صحيح، راجعه من صفحة إدارة المواقع', 422);
         }
-        if (count($competitorUrls) !== 3) {
-            return $this->error('حط روابط الـ 3 منافسين كاملة الأول (تقدر تحفظهم من هنا تحت) عشان يبدأ التحليل', 422);
-        }
+        // المنافسين اختياريين (زي التحليل التفصيلي): كانت بتطلب 3 بالظبط فالعميل اللي عنده
+        // منافس أو اتنين كان بيتوقف. أي عدد بيشتغل، وكل ما زادوا الاقتراحات أدق.
 
         $targetLanguage = ContentLanguageService::forWebsite((int)$website->getAttribute('id'), (int)$this->user['id']);
 

@@ -232,4 +232,9 @@ return [
     'Set the official brand colors' => 'حدد ألوان البراند الرسمية',
     'Set the approved writing style (formal, friendly...)' => 'حدد أسلوب الكتابة المعتمد (رسمي، ودود...)',
     'Set preferred terms to ensure consistent messaging' => 'حدد المصطلحات المفضلة عشان رسايلك تبقى متسقة',
+    'We found no useful information for the bot in this source' => 'مالقيناش معلومات مفيدة للبوت في المصدر ده. جرّب صفحة تانية فيها تفاصيل رحلاتك أو أسعارك.',
+    'Add a page link or upload a file' => 'حط رابط صفحة أو ارفع ملف',
+    'Add a link or choose a file' => 'حط رابط أو اختار ملف',
+    'Pick at least one item' => 'اختار عنصر واحد على الأقل',
+    'Knowledge extraction provider is unavailable.' => 'خدمة الاستخراج مش متاحة دلوقتي. جرّب كمان شوية.',
 ];

@@ -14,7 +14,7 @@ class KnowledgeImportService
         'cancellation_policy', 'contact_info', 'business_hours',
     ];
     private const MAX_TEXT = 24000;
-    private const MAX_ENTRIES = 30;
+    private const MAX_ENTRIES = 20;
 
     /** @return array{ok:bool, text?:string, title?:string, error?:string} */
     public function textFromUrl(string $url): array
@@ -145,13 +145,13 @@ class KnowledgeImportService
             . "- One entry per distinct topic (one tour, one policy, one FAQ question...). Max " . self::MAX_ENTRIES . " entries.\n"
             . "- section must be one of: {$sections}\n"
             . "- title: short (max 80 chars). For faq, the title is the question.\n"
-            . "- content: complete, self-contained, max 800 chars, written in {$langName}.\n"
+            . "- content: complete, self-contained, max 500 chars, written in {$langName}.\n"
             . "- Skip navigation text, cookie notices, legal boilerplate and marketing fluff.\n"
             . "Return JSON only: {\"entries\":[{\"section\":\"...\",\"title\":\"...\",\"content\":\"...\"}]}\n\n"
             . "SOURCE TEXT:\n\"\"\"\n" . $text . "\n\"\"\"";
 
         $ai = $ai ?: (class_exists('AIOrchestrator') ? new AIOrchestrator() : new GeminiClient());
-        $res = $ai->generateContent($prompt, ['responseMimeType' => 'application/json', 'maxOutputTokens' => 6000, 'temperature' => 0.2, 'task' => 'knowledge_import']);
+        $res = $ai->generateContent($prompt, ['responseMimeType' => 'application/json', 'maxOutputTokens' => 8192, 'temperature' => 0.2, 'task' => 'knowledge_import']);
         if (empty($res['success'])) {
             return ['ok'=>false,'uncertain'=>preg_match('/timeout|timed out|connection reset|uncertain/i',(string)($res['error']??''))===1,'error'=>'Knowledge extraction provider is unavailable.'];
         }
@@ -162,10 +162,31 @@ class KnowledgeImportService
             $json = json_decode($m[0], true);
         }
         $list = is_array($json) ? ($json['entries'] ?? (array_is_list($json) ? $json : [])) : [];
+        if (!$list) {
+            $list = self::salvageEntries($raw);
+        }
         return ['ok' => true, 'entries' => self::sanitizeEntries($list)];
     }
 
     /** تنضيف وتوحيد المعلومات (من الـ AI أو من المتصفح قبل الحفظ) */
+    /**
+     * الرد اتقطع قبل ما يخلص (حد طول الرد) فالـ JSON كله بيبقى غير صالح وكنا
+     * بنرمي كل حاجة ونقول للعميل "مالقيناش معلومات". هنا بناخد كل عنصر كامل.
+     */
+    public static function salvageEntries(string $raw): array
+    {
+        $out = [];
+        if (preg_match_all('/\{[^{}]*"content"\s*:\s*"(?:[^"\\\\]|\\\\.)*"[^{}]*\}/u', $raw, $m)) {
+            foreach ($m[0] as $obj) {
+                $e = json_decode($obj, true);
+                if (is_array($e)) {
+                    $out[] = $e;
+                }
+            }
+        }
+        return $out;
+    }
+
     public static function sanitizeEntries(array $list): array
     {
         $out = [];

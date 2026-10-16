@@ -6811,4 +6811,7 @@ return [
     'حاولت كذا مرة - استنى 10 دقايق وجرّب تاني' => 'Too many attempts - wait 10 minutes and try again',
     'الموقع ماردّش صح بعد التعديل، فرجّعنا index.php زي ما كان فورًا. موقعك شغال عادي.' => 'The site did not respond correctly after the change, so we restored index.php immediately. Your site is running normally.',
     'الصفحة دي مفتوحة من بدري. اعمل تحديث للصفحة (F5) وكمّل.' => 'This page has been open for a while. Refresh it (F5) and continue.',
+    '🏁 روابط المنافسين (اختياري)' => '🏁 Competitor links (optional)',
+    'حط لحد 3 منافسين عشان الاقتراحات تبقى أدق' => 'Add up to 3 competitors for more accurate suggestions',
+    'اختار الصفحات اللي هننشر عليها.' => 'Select the pages to publish on.',
 ];

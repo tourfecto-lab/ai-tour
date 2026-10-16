@@ -204,7 +204,11 @@ window.CreativeStudioPro = (() => {
             if(pending[kind])return;const prefix=kind==='image'?'csImage':'csVideo',d=read(kind),feedback=document.getElementById(prefix+'Error');
             const message=text=>{feedback.textContent=text;feedback.style.display='block';};feedback.style.display='none';
             if(Array.from(d.prompt).length<8)return message(t('اكتب وصفًا واضحًا من 8 أحرف على الأقل.','Enter a clear prompt of at least 8 characters.'));
-            const quote=quotes[kind];if(!quoteMatches(quote,d)||!document.getElementById(prefix+'Confirm').checked){if(!quote)refreshQuote(kind);return message(t('راجع التكلفة الحالية وحدد الموافقة قبل التوليد.','Review the current quote and confirm the cost before generation.'));}
+            // التكلفة لسه بتتحسب (العميل ضغط بسرعة): نستناها بدل ما نطلع رسالة
+            if(!quoteMatches(quotes[kind],d))await refreshQuote(kind);
+            const quote=quotes[kind];if(!quoteMatches(quote,d))return message(t('تعذر حساب التكلفة. راجع الإعدادات وجرّب تاني.','Could not calculate the cost. Check the settings and try again.'));
+            // الموافقة مطلوبة بس لو فيه خصم من المحفظة - من الباقة مفيش داعي
+            if(Number(quote.total)>0&&!document.getElementById(prefix+'Confirm').checked){document.getElementById(prefix+'Confirm').focus();return message(t('الطلب ده هيتخصم من محفظتك ('+Number(quote.total).toFixed(2)+' USD). علّم على الموافقة وكمّل.','This request uses your wallet ('+Number(quote.total).toFixed(2)+' USD). Tick the approval and continue.'));}
             const btn=document.getElementById(kind==='image'?'genImageBtn':'genVideoBtn');pending[kind]=true;btn.disabled=true;const label=btn.textContent;btn.textContent=t('جارِ إرسال الطلب…','Submitting…');
             const fingerprint=JSON.stringify({...d,brand_id:brandId});
             try{

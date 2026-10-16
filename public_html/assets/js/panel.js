@@ -32,8 +32,11 @@
         const readOnly = method === 'GET' || method === 'HEAD';
         let res;
         try {
+            // توكن الحماية مع كل طلب بيغيّر بيانات (كتير من الصفحات كانت بتنساه فتطلع "انتهت الجلسة")
+            const csrfMeta = readOnly ? null : document.querySelector('meta[name="csrf-token"]');
+            const extra = csrfMeta && csrfMeta.content ? { 'X-CSRF-Token': csrfMeta.content } : {};
             res = await fetch(url, Object.assign({ credentials: 'same-origin' }, opts, {
-                headers: Object.assign({ 'Accept': 'application/json' }, opts.headers || {})
+                headers: Object.assign({ 'Accept': 'application/json' }, extra, opts.headers || {})
             }));
         } catch (e) {
             return { success: false, error: readOnly
@@ -445,6 +448,37 @@
             return cur + ' ' + v.toFixed(2);
         }
     }
+
+    /**
+     * قوائم "اختار موقع": العميل اللي عنده موقع واحد كان لازم يختاره بإيده في كل
+     * صفحة (والا تطلع "اختار موقع الأول"). هنا بنختاره لوحده، ولو عنده كذا موقع
+     * بنختار آخر موقع اشتغل عليه. القائمة لازم يكون أول اختيار فيها فاضي (placeholder).
+     */
+    function autoSelectWebsite(sel) {
+        if (!sel || sel.dataset.tfAutoSite || sel.disabled || sel.multiple || sel.value !== '') return;
+        if (!/site|website|موقع/i.test((sel.id || '') + ' ' + (sel.name || '') + ' ' + (sel.options[0] ? sel.options[0].text : ''))) return;
+        if (sel.options[0] && /كل|all/i.test(sel.options[0].text)) return; // فلتر "كل المواقع" مش اختيار ناقص
+        const real = Array.prototype.filter.call(sel.options, o => o.value !== '' && !o.disabled);
+        if (!real.length) return;
+        let pick = real.length === 1 ? real[0] : null;
+        if (!pick) {
+            let current = '';
+            try { current = getCurrentWebsiteId(); } catch (e) {}
+            pick = real.find(o => o.value === String(current)) || null;
+        }
+        if (!pick) return;
+        sel.dataset.tfAutoSite = '1';
+        sel.value = pick.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    function watchWebsiteSelects() {
+        const scan = () => document.querySelectorAll('.panel-content select').forEach(autoSelectWebsite);
+        scan();
+        let queued = false;
+        new MutationObserver(() => { if (queued) return; queued = true; setTimeout(() => { queued = false; scan(); }, 150); })
+            .observe(document.body, { childList: true, subtree: true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchWebsiteSelects); else watchWebsiteSelects();
 
     /** أسماء مفهومة لأحداث سجل النشاط (كانت بتظهر زي monitoring.cycle_completed) */
     const ACTIVITY_LABELS = {
