@@ -38,6 +38,7 @@ class CompetitorIntelligenceController extends Controller
             return $this->error('Unauthorized', 401);
         }
         $userId = (int) $this->user['id'];
+        $this->seedFromWebsites($userId);
 
         // 6 استعلامات COUNT + Activity Feed على كل فتح للـ Dashboard - Cache
         // قصير (60 ثانية) بيقلل الحمل على الداتابيز لو المستخدم فاتح
@@ -103,6 +104,7 @@ class CompetitorIntelligenceController extends Controller
             return $this->error('Unauthorized', 401);
         }
         $userId = (int) $this->user['id'];
+        $this->seedFromWebsites($userId);
 
         $category = (string) $this->get('category', '');
         $search = (string) $this->get('search', '');
@@ -1501,6 +1503,58 @@ HTML;
      * مكان واحد عشان القيم الافتراضية متتكررش ولا تتحرف.
      * @return array{frequency:string, min_severity:string, channels:string}
      */
+    /**
+     * المنافسين اللي العميل كتبهم في بيانات موقعه بيتضافوا هنا لوحدهم (مرة واحدة) -
+     * كانت الصفحة بتبدأ بـ "0 منافسين" والعميل يدخلهم تاني. لو مسحهم بعد كده مش بيرجعوا.
+     */
+    private function seedFromWebsites(int $userId): void
+    {
+        try {
+            if ($this->db->query('SELECT 1 FROM competitors WHERE user_id = ? LIMIT 1', [$userId])) {
+                return;
+            }
+            if ((new ActivityLog())->where(['user_id' => $userId, 'module' => 'competitor_intelligence', 'action' => 'competitor.seeded'], [], 1)) {
+                return;
+            }
+            $sites = $this->db->query('SELECT id, competitor_1_url, competitor_2_url, competitor_3_url FROM websites WHERE user_id = ? ORDER BY id LIMIT 10', [$userId]);
+            $defaults = $this->userDefaults($userId);
+            $added = 0;
+            $candidates = 0;
+            foreach ($sites as $site) {
+                foreach (['competitor_1_url', 'competitor_2_url', 'competitor_3_url'] as $col) {
+                    if (trim((string) ($site[$col] ?? '')) !== '') {
+                        $candidates++;
+                    }
+                    $domain = CompetitorDomain::normalizeSafe(trim((string) ($site[$col] ?? '')));
+                    if ($domain === null || $domain === '') {
+                        continue;
+                    }
+                    $competitor = new Competitor([
+                        'user_id' => $userId, 'website_id' => (int) $site['id'],
+                        'competitor_name' => preg_replace('#^www\.#i', '', (string) (parse_url((strpos($domain, '://') ? '' : 'https://') . $domain, PHP_URL_HOST) ?: $domain)),
+                        'competitor_domain' => $domain, 'notes' => '', 'category' => 'direct', 'source' => 'website_settings',
+                        'monitoring_frequency' => $defaults['frequency'], 'is_active' => 1,
+                    ]);
+                    $competitor->save();
+                    (new CiWatchlistItem([
+                        'user_id' => $userId, 'competitor_id' => (int) $competitor->getAttribute('id'), 'priority' => 'medium',
+                        'alert_min_severity' => $defaults['min_severity'], 'alert_channels' => $defaults['channels'], 'is_paused' => 0,
+                    ]))->save();
+                    $added++;
+                }
+            }
+            // نعلّم إنها اتعملت بس لو اتضاف حاجة أو مفيش منافسين أصلًا (فشل مؤقت في فحص الرابط يتعاد المرة الجاية)
+            if ($added > 0 || $candidates === 0) {
+                ActivityLog::record('competitor_intelligence', 'competitor.seeded', ['user_id' => $userId, 'meta' => ['added' => $added]]);
+            }
+            if ($added) {
+                $this->invalidateDashboardCache($userId);
+            }
+        } catch (Throwable $e) {
+            Logger::warning('Competitor seeding skipped', ['user_id' => $userId, 'error' => $e->getMessage()]);
+        }
+    }
+
     private function userDefaults(int $userId): array
     {
         $prefRows = (new CiUserPreference())->where(['user_id' => $userId], [], 1);
