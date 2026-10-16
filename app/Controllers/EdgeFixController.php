@@ -226,14 +226,33 @@ class EdgeFixController extends Controller
         if (empty($site)) {
             return $this->error('Not found', 404);
         }
-        $host = strtolower(trim(preg_replace('#^(s?ftp://)#i', '', (string) $this->get('host', '')), " /"));
+        // العنوان بأي شكل: ftp://1.2.3.4:21 أو 1.2.3.4 أو اسم الموقع. ولو اتكتب مسار
+        // فولدر (/www/wwwroot/...) بالغلط بناخده كفولدر الموقع ونستخدم دومين الموقع.
+        $raw = trim((string) $this->get('host', ''));
+        $path = trim((string) $this->get('path', ''));
+        $port = (int) $this->get('port', 21);
+        $siteHost = (string) parse_url(WordPressConnector::normalizeSiteUrl((string) $site[0]['main_url']), PHP_URL_HOST);
+        $host = preg_replace('#^(s?ftps?://)#i', '', $raw);
+        if ($host === '' || $host[0] === '/' || $host[0] === '~') {
+            if ($host !== '' && $path === '') {
+                $path = $host;
+            }
+            $host = $siteHost;
+        } else {
+            $host = explode('/', $host, 2)[0];
+            if (preg_match('/^(.+):(\d{2,5})$/', $host, $m)) {
+                $host = $m[1];
+                $port = (int) $m[2];
+            }
+        }
+        $host = strtolower(trim($host, " .\t"));
         $user = trim((string) $this->get('username', ''));
         $pass = (string) $this->get('password', '');
-        if ($host === '' || $user === '' || $pass === '') {
-            return $this->error('اكتب عنوان الـ FTP واسم المستخدم وكلمة السر', 422);
+        if ($user === '' || $pass === '') {
+            return $this->error('اكتب اسم المستخدم وكلمة السر بتوع الـ FTP', 422);
         }
         if (!PhpConnectorInstaller::publicHost($host)) {
-            return $this->error('عنوان الـ FTP مش صحيح', 422);
+            return $this->error('عنوان الـ FTP مش صحيح. هتلاقيه في لوحة الاستضافة في صفحة FTP مكتوب "FTP address" - مثال: ftp://92.113.26.170', 422);
         }
         $key = 'edge_ftp_install:' . $this->uid();
         $cache = new Cache();
@@ -244,7 +263,7 @@ class EdgeFixController extends Controller
         $cache->set($key, $tries + 1, 600);
         @set_time_limit(120);
         $result = (new PhpConnectorInstaller())->install(
-            ['host' => $host, 'port' => (int) $this->get('port', 21), 'username' => $user, 'password' => $pass, 'path' => (string) $this->get('path', '')],
+            ['host' => $host, 'port' => $port, 'username' => $user, 'password' => $pass, 'path' => $path],
             WordPressConnector::normalizeSiteUrl((string) $site[0]['main_url']),
             EdgeRules::phpConnector($websiteId, $this->appUrl())
         );
