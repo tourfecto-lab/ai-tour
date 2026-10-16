@@ -170,7 +170,7 @@ HTML;
         $monthlyCss = htmlspecialchars(asset_v('/assets/css/social-monthly-plans.css'), ENT_QUOTES, 'UTF-8');
         $monthlyJs = htmlspecialchars(asset_v('/assets/js/social-monthly-plans.js'), ENT_QUOTES, 'UTF-8');
         $monthlyUid = (int)($this->user['id']??0);
-        $body = '<link rel="stylesheet" href="'.$monthlyCss.'"><section id="monthlySocialRoot" class="smp-root p-card" data-user-id="'.$monthlyUid.'" aria-label="Monthly social media plan"><p>Loading monthly plans… / جارِ تحميل الخطط الشهرية…</p></section><script defer src="'.$monthlyJs.'"></script>'.$body;
+        $body = '<link rel="stylesheet" href="'.$monthlyCss.'"><section id="monthlySocialRoot" class="smp-root p-card" data-user-id="'.$monthlyUid.'" aria-label="Monthly social media plan"><p>Loading monthly plans… / جارِ تحميل الخطط الشهرية…</p></section><script defer src="'.htmlspecialchars(asset_v('/assets/js/site-photo-picker.js'), ENT_QUOTES, 'UTF-8').'"></script><script defer src="'.$monthlyJs.'"></script>'.$body;
 
         $script = <<<'JS'
 (function () {
@@ -619,6 +619,71 @@ JS;
         } catch (Throwable $e) {
             Logger::error('Site image import failed', ['error' => $e->getMessage()]);
             return $this->error('مقدرناش نسحب الصور من موقعك دلوقتي، جرّب تاني أو ارفع صورك من جهازك', 500);
+        }
+    }
+
+    /** POST /api/social/media/site-scan - يدوّر على صور الموقع (أو روابط رحلات) ويعرضها للاختيار */
+    public function scanSiteImages(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if (($error = $this->verifyCsrf()) || ($error = $this->rateLimitGuard('user', 'social_site_scan', 10, 300))) {
+            return $error;
+        }
+        require_once __DIR__ . '/../Services/SocialMedia/SiteImageImporter.php';
+        @set_time_limit(90);
+        $uid = (int) $this->user['id'];
+        $wid = (int) $this->get('website_id', 0);
+        if ($wid < 1) {
+            $row = $this->db->query('SELECT id FROM websites WHERE user_id = ? ORDER BY id DESC LIMIT 1', [$uid]);
+            $wid = (int) ($row[0]['id'] ?? 0);
+        }
+        $urls = $this->get('urls', []);
+        $urls = is_array($urls) ? array_values(array_filter($urls, 'is_string')) : [];
+        if (!$urls && $wid < 1) {
+            return $this->error('اربط موقعك الأول، أو حط روابط الرحلات اللي عاوز صورها', 422);
+        }
+        try {
+            $r = (new SiteImageImporter())->scan($uid, $wid, $urls);
+            if (!$r['total']) {
+                return $this->error($urls ? 'مالقيناش صور في الروابط دي. اتأكد إن الروابط بتفتح.' : 'مالقيناش صور على موقعك. حط روابط صفحات الرحلات بنفسك.', 422);
+            }
+            return $this->success($r);
+        } catch (InvalidArgumentException $e) {
+            return $this->error('اختار الموقع', 422);
+        } catch (Throwable $e) {
+            Logger::error('Site image scan failed', ['error' => $e->getMessage()]);
+            return $this->error('مقدرناش نفتح الموقع دلوقتي، جرّب تاني', 500);
+        }
+    }
+
+    /** POST /api/social/media/site-import-selected - يسحب الصور اللي العميل اختارها بس */
+    public function importSelectedImages(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if (($error = $this->verifyCsrf()) || ($error = $this->rateLimitGuard('user', 'social_site_pick', 60, 300))) {
+            return $error;
+        }
+        require_once __DIR__ . '/../Services/SocialMedia/SiteImageImporter.php';
+        @set_time_limit(90);
+        $items = $this->get('items', []);
+        if (!is_array($items) || !$items || count($items) > 25) {
+            return $this->error('اختار من 1 لـ 25 صورة في المرة', 422);
+        }
+        $clean = [];
+        foreach ($items as $it) {
+            if (is_array($it) && is_string($it['src'] ?? null)) {
+                $clean[] = ['src' => $it['src'], 'alt' => is_string($it['alt'] ?? null) ? $it['alt'] : '', 'page' => is_string($it['page'] ?? null) ? $it['page'] : '', 'title' => is_string($it['title'] ?? null) ? $it['title'] : ''];
+            }
+        }
+        try {
+            return $this->success((new SiteImageImporter())->importItems((int) $this->user['id'], $clean, $this->get('folders') === true));
+        } catch (Throwable $e) {
+            Logger::error('Selected image import failed', ['error' => $e->getMessage()]);
+            return $this->error('مقدرناش نسحب الصور دلوقتي، جرّب تاني', 500);
         }
     }
 

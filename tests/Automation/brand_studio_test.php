@@ -138,6 +138,40 @@ $u2 = SocialMediaUpload::handle($uid, ['tmp_name' => $tmp . '/logo.png', 'error'
 check($u2['ok'] && empty($u2['duplicate']), 'a different photo uploads normally');
 check(PrivateMedia::socialFile('/uploads/social/5/a.jpg') === null && PrivateMedia::socialFile('/uploads/social/../x.jpg') === null, 'social paths validated');
 
+echo "pick photos\n";
+$stripes = function (bool $vertical) { $i = imagecreatetruecolor(1200, 900); imagefill($i, 0, 0, imagecolorallocate($i, 240, 240, 240)); for ($k = 0; $k < 6; $k += 2) { $vertical ? imagefilledrectangle($i, $k * 200, 0, $k * 200 + 199, 899, imagecolorallocate($i, 120, 20, 20)) : imagefilledrectangle($i, 0, $k * 150, 1199, $k * 150 + 149, imagecolorallocate($i, 20, 120, 20)); } ob_start(); imagejpeg($i); return ob_get_clean(); };
+$site = [
+    'https://luxor-test.com/' => '<title>Luxor Test | Home</title><img src="/img/hero.jpg"><img src="/img/shared.jpg"><a href="/tours/abu-simbel">Abu Simbel</a>',
+    'https://luxor-test.com/sitemap.xml' => '<sitemapindex><sitemap><loc>https://luxor-test.com/tour-sitemap.xml</loc></sitemap><sitemap><loc>https://luxor-test.com/author-sitemap.xml</loc></sitemap></sitemapindex>',
+    'https://luxor-test.com/tour-sitemap.xml' => '<urlset><url><loc>https://luxor-test.com/tours/white-desert</loc></url><url><loc>https://luxor-test.com/about-us</loc></url></urlset>',
+    'https://luxor-test.com/tours/abu-simbel' => '<meta property="og:title" content="Abu Simbel Day Trip"><img src="/img/shared.jpg" alt="temple"><img src="/img/abu2.jpg">',
+    'https://luxor-test.com/tours/white-desert' => '<h1>White Desert Safari</h1><img src="/img/desert.jpg" alt="camp">',
+    'https://luxor-test.com/img/desert.jpg' => $stripes(true),
+    'https://luxor-test.com/img/abu2.jpg' => $stripes(false),
+];
+$fetched = [];
+$imp = new SiteImageImporter($pdo, $tmp, function ($url) use ($site, &$fetched) { $fetched[] = $url; return isset($site[$url]) ? ['body' => $site[$url], 'url' => $url] : null; });
+$sc = $imp->scan($uid, $wid);
+$byTitle = []; foreach ($sc['pages'] as $pg) { $byTitle[$pg['title']] = array_column($pg['images'], 'src'); }
+check(isset($byTitle['White Desert Safari']), 'trip page found through sitemap');
+check(!in_array('https://luxor-test.com/about-us', $fetched, true) && !in_array('https://luxor-test.com/author-sitemap.xml', $fetched, true), 'non-trip pages skipped');
+check(in_array('https://luxor-test.com/img/shared.jpg', $byTitle['Abu Simbel Day Trip'] ?? [], true) && !in_array('https://luxor-test.com/img/shared.jpg', $byTitle['Luxor Test'] ?? [], true), 'photo shown under its trip, not the home page');
+$heroAlready = false; foreach ($sc['pages'] as $pg) foreach ($pg['images'] as $im) if ($im['src'] === 'https://luxor-test.com/img/hero.jpg') $heroAlready = $im['already'];
+check($heroAlready === true, 'already imported photo is marked');
+$only = $imp->scan($uid, $wid, ['https://luxor-test.com/tours/white-desert']);
+check(count($only['pages']) === 1 && $only['pages'][0]['title'] === 'White Desert Safari', 'only the pasted trip link is scanned');
+$res = $imp->importItems($uid, [
+    ['src' => 'https://luxor-test.com/img/desert.jpg', 'alt' => 'camp', 'page' => 'https://luxor-test.com/tours/white-desert', 'title' => 'White Desert Safari'],
+    ['src' => 'https://luxor-test.com/img/abu2.jpg', 'alt' => '', 'page' => 'https://luxor-test.com/tours/abu-simbel', 'title' => 'Abu Simbel Day Trip'],
+    ['src' => 'https://luxor-test.com/img/hero.jpg', 'title' => 'x'],
+    ['src' => 'https://luxor-test.com/img/missing.jpg'],
+], true);
+check(count($res['added']) === 2 && $res['duplicate'] === 1 && $res['rejected'] === 1, 'only selected photos imported (dup and broken counted)');
+$row = $pdo->query('SELECT prompt,folder_id FROM media_items WHERE id=' . $res['added'][0])->fetch(PDO::FETCH_ASSOC);
+$fname = $row['folder_id'] ? $pdo->query('SELECT name FROM creative_folders WHERE id=' . (int) $row['folder_id'])->fetchColumn() : null;
+check($row['prompt'] === 'من موقعك: camp — White Desert Safari' && $fname === 'White Desert Safari', 'trip name kept and folder per trip');
+$pdo->exec("DELETE FROM creative_folders WHERE user_id=$uid");
+
 $pdo->exec("DELETE FROM media_items WHERE user_id=$uid");
 $pdo->exec("DELETE FROM brand_profiles WHERE user_id=$uid");
 $pdo->exec("DELETE FROM websites WHERE user_id=$uid");

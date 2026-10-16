@@ -67,8 +67,8 @@ class SocialMonthlyPlanService
         $out=[];foreach($ids as $id){$r=PrivateMedia::owned($uid,$id);if(($r['status']??'')!=='completed'||empty($r['file_path']))throw new InvalidArgumentException('An asset is not ready');
             if(PrivateMedia::valid((string)$r['file_path']))PrivateMedia::resolve((string)$r['file_path']);
             elseif(!preg_match('#^/uploads/social/'.$uid.'/[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|mp4|mov)$#D',(string)$r['file_path'])||!is_file(ROOT_PATH.'/public_html'.$r['file_path']))throw new InvalidArgumentException('An asset file is unavailable');
-            $v=SocialBrandStudio::meta($r)['vision']??null;
-            $out[]=['id'=>$id,'video'=>$r['type']==='short_video','description'=>mb_substr((string)(is_array($v)?$v['description']:($r['prompt']??'')),0,220)]+(is_array($v)?['place'=>$v['place']??'','kind'=>$v['kind']??'other','tags'=>$v['tags']??[],'has_text'=>!empty($v['has_text']),'quality'=>(int)($v['quality']??3)]:[]);}return $out;
+            $am=SocialBrandStudio::meta($r);$v=$am['vision']??null;
+            $out[]=['id'=>$id,'video'=>$r['type']==='short_video','description'=>mb_substr((string)(is_array($v)?$v['description']:($r['prompt']??'')),0,220)]+(is_array($v)?['place'=>$v['place']??'','kind'=>$v['kind']??'other','tags'=>$v['tags']??[],'has_text'=>!empty($v['has_text']),'quality'=>(int)($v['quality']??3)]:[])+(!empty($am['page_title'])?['trip'=>mb_substr((string)$am['page_title'],0,120)]:[]);}return $out;
     }
     public static function compatible(string $platform,array $assets): array {
         return array_values(array_filter($assets,static fn($a)=>!in_array($platform,['tiktok','youtube'],true)||!empty($a['video'])));

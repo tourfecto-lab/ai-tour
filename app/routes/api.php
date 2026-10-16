@@ -710,6 +710,8 @@ $router->post('/api/social/posts', 'SocialMediaController', 'createPost', ['Auth
 $router->post('/api/social/generate-caption', 'SocialMediaController', 'generateCaption', ['AuthMiddleware']);
 $router->get('/api/social/calendar', 'SocialMediaController', 'getCalendar', ['AuthMiddleware']);
 $router->post('/api/social/media', 'SocialMediaController', 'uploadMedia', ['AuthMiddleware']);
+$router->post('/api/social/media/site-scan', 'SocialMediaController', 'scanSiteImages', ['AuthMiddleware']);
+$router->post('/api/social/media/site-import-selected', 'SocialMediaController', 'importSelectedImages', ['AuthMiddleware']);
 $router->post('/api/social/media/import-site', 'SocialMediaController', 'importSiteImages', ['AuthMiddleware']);
 $router->post('/api/social/media/{id}/learn', 'SocialMediaController', 'learnMedia', ['AuthMiddleware']);
 $router->post('/api/social/brand-kit', 'SocialMediaController', 'saveBrandKit', ['AuthMiddleware']);

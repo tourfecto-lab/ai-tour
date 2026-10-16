@@ -27,7 +27,7 @@ class CreativeStudioController extends Controller
     public function index(array $params = []): array
     {
         $studioCss=asset_v('/assets/css/creative-studio-pro.css');
-        $studioJs=asset_v('/assets/js/creative-studio-pro.js');
+        $studioJs=asset_v('/assets/js/creative-studio-pro.js');$pickerJs=asset_v('/assets/js/site-photo-picker.js');
         $editorJs=asset_v('/assets/js/creative-brand-editor.js');
         $videoEditorJs=asset_v('/assets/js/creative-video-editor.js');
         $studioUserId=(int)$this->user['id'];
@@ -36,6 +36,7 @@ class CreativeStudioController extends Controller
         <script src="{$videoEditorJs}"></script>
         <script src="{$editorJs}"></script>
         <script src="{$studioJs}"></script>
+        <script src="{$pickerJs}"></script>
         <section class="cs-hero" id="csHero" data-account="{$studioUserId}">
             <div><span class="cs-eyebrow">TOURFECTO CREATIVE STUDIO</span><h2 data-cs-title>من الفكرة إلى حملة بصرية</h2><p data-cs-intro>صمّم صورًا وفيديوهات تعبر عن وجهتك وهويتك. وجّه الإضاءة والتكوين، تابع مراحل التوليد، وحمّل النتيجة الأصلية أو انشرها.</p></div><div class="cs-emblem" aria-hidden="true">✦</div>
             </section>

@@ -116,6 +116,219 @@ class SiteImageImporter
         return ['added' => $added, 'found' => count($candidates), 'message' => $msg];
     }
 
+    /**
+     * يدوّر على صور الموقع ويرجّعها متقسمة حسب الصفحة (من غير تنزيل) عشان العميل يختار.
+     * @param string[] $urls روابط رحلات معينة (اختياري) - لو موجودة بنفتحها هي بس
+     * @return array{pages:array, total:int, scanned:int}
+     */
+    public function scan(int $uid, int $wid, array $urls = [], int $maxPages = 30): array
+    {
+        $start = microtime(true);
+        $queue = [];
+        $host = '';
+        foreach (array_slice($urls, 0, 15) as $u) {
+            $u = trim((string) $u);
+            if (preg_match('#^https?://[^\s]+$#i', $u)) {
+                $queue[] = $u;
+            }
+        }
+        $explicit = (bool) $queue;
+        if (!$explicit) {
+            $s = $this->pdo->prepare('SELECT main_url,domain FROM websites WHERE id=? AND user_id=?');
+            $s->execute([$wid, $uid]);
+            $site = $s->fetch(PDO::FETCH_ASSOC);
+            if (!$site) {
+                throw new InvalidArgumentException('Website unavailable');
+            }
+            $home = trim((string) ($site['main_url'] ?: 'https://' . $site['domain']));
+            $home = preg_match('#^https?://#i', $home) ? $home : 'https://' . $home;
+            if ((string) parse_url($home, PHP_URL_PATH) === '') {
+                $home .= '/';
+            }
+            $queue[] = $home;
+        }
+        $pages = [];
+        $visited = [];
+        $owner = [];
+        while ($queue && count($visited) < $maxPages && microtime(true) - $start < $this->budgetSeconds) {
+            $url = array_shift($queue);
+            $key = rtrim(preg_replace('/#.*$/', '', $url), '/');
+            if (isset($visited[$key])) {
+                continue;
+            }
+            $visited[$key] = true;
+            $page = ($this->fetch)($url, 2000000);
+            if (!$page) {
+                continue;
+            }
+            $finalHost = strtolower(preg_replace('/^www\./i', '', (string) parse_url($page['url'], PHP_URL_HOST)));
+            if ($host === '') {
+                $host = $finalHost;
+                if (!$explicit) {
+                    // صفحات الرحلات من الـ sitemap (المواقع الكبيرة فيها رحلات كتير مش كلها في الرئيسية)
+                    foreach ($this->sitemapLinks($page['url'], $host) as $link) {
+                        $queue[] = $link;
+                    }
+                }
+            }
+            if (!$explicit) {
+                foreach ($this->tourLinks($page['body'], $page['url'], $host) as $link) {
+                    $queue[] = $link;
+                }
+            }
+            $images = [];
+            foreach ($this->images($page['body'], $page['url']) as $src => $alt) {
+                // الصورة بتظهر مع أول صفحة رحلة فيها، مش مع الرئيسية
+                if (isset($owner[$src])) {
+                    if ($owner[$src]['home'] && count($pages) > 0) {
+                        $pages[$owner[$src]['page']]['images'] = array_values(array_filter($pages[$owner[$src]['page']]['images'], static fn ($i) => $i['src'] !== $src));
+                    } else {
+                        continue;
+                    }
+                }
+                $owner[$src] = ['page' => count($pages), 'home' => count($pages) === 0 && !$explicit];
+                $images[] = ['src' => $src, 'alt' => $alt, 'already' => $this->alreadyImported($uid, $src)];
+            }
+            $pages[] = ['url' => $page['url'], 'title' => self::pageTitle($page['body']), 'images' => $images];
+        }
+        $pages = array_values(array_filter($pages, static fn ($p) => $p['images']));
+        $total = array_sum(array_map(static fn ($p) => count($p['images']), $pages));
+        return ['pages' => $pages, 'total' => $total, 'scanned' => count($visited)];
+    }
+
+    /** روابط الرحلات من sitemap.xml (ووردبريس وغيره) */
+    private function sitemapLinks(string $base, string $host): array
+    {
+        $origin = preg_replace('#^(https?://[^/]+).*$#i', '$1', $base);
+        $out = [];
+        $maps = [$origin . '/sitemap.xml', $origin . '/sitemap_index.xml', $origin . '/wp-sitemap.xml'];
+        $seen = [];
+        for ($i = 0; $i < count($maps) && $i < 8; $i++) {
+            if (isset($seen[$maps[$i]])) {
+                continue;
+            }
+            $seen[$maps[$i]] = true;
+            $r = ($this->fetch)($maps[$i], 3000000);
+            if (!$r || !preg_match_all('#<loc>\s*([^<\s]+)\s*</loc>#i', $r['body'], $m)) {
+                continue;
+            }
+            foreach ($m[1] as $loc) {
+                $loc = html_entity_decode($loc);
+                $h = strtolower(preg_replace('/^www\./i', '', (string) parse_url($loc, PHP_URL_HOST)));
+                if ($h !== $host) {
+                    continue;
+                }
+                if (preg_match('/\.xml(\?|$)/i', $loc)) {
+                    // sitemap فرعي: بنفتح بتاع الرحلات/المنتجات/الصفحات بس
+                    if (preg_match('/tour|trip|product|package|excursion|page|post-type|rehla|رحل/i', $loc)) {
+                        $maps[] = $loc;
+                    }
+                } elseif (preg_match(self::PAGE_HINTS, urldecode($loc))) {
+                    $out[$loc] = true;
+                }
+            }
+            if (count($out) >= 60) {
+                break;
+            }
+        }
+        return array_slice(array_keys($out), 0, 60);
+    }
+
+    public static function pageTitle(string $html): string
+    {
+        foreach (['/<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']/i', '/<h1[^>]*>(.*?)<\/h1>/is', '/<title[^>]*>(.*?)<\/title>/is'] as $re) {
+            if (preg_match($re, $html, $m)) {
+                $t = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($m[1]), ENT_QUOTES, 'UTF-8')));
+                $t = trim(preg_replace('/\s*[|\-–—]\s*[^|\-–—]{2,40}$/u', '', $t)) ?: $t; // من غير "| اسم الموقع"
+                if ($t !== '') {
+                    return mb_substr($t, 0, 120);
+                }
+            }
+        }
+        return '';
+    }
+
+    /**
+     * يسحب الصور اللي العميل اختارها.
+     * @param array<int,array{src:string,alt?:string,page?:string,title?:string}> $items
+     * @return array{added:int[], duplicate:int, rejected:int, remaining:array}
+     */
+    public function importItems(int $uid, array $items, bool $folderPerTrip = false): array
+    {
+        $start = microtime(true);
+        $dir = $this->publicRoot . '/uploads/social/' . $uid;
+        if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+            throw new RuntimeException('Upload folder not writable');
+        }
+        $added = [];
+        $dup = 0;
+        $rejected = 0;
+        $folders = [];
+        $items = array_values($items);
+        foreach ($items as $n => $it) {
+            if (microtime(true) - $start > $this->budgetSeconds) {
+                return ['added' => $added, 'duplicate' => $dup, 'rejected' => $rejected, 'remaining' => array_slice($items, $n)];
+            }
+            $src = trim((string) ($it['src'] ?? ''));
+            if (!preg_match('#^https?://\S+$#i', $src)) {
+                $rejected++;
+                continue;
+            }
+            if ($this->alreadyImported($uid, $src)) {
+                $dup++;
+                continue;
+            }
+            $img = ($this->fetch)($src, 8000000);
+            $jpeg = $img ? self::prepare($img['body']) : null;
+            if ($jpeg === null) {
+                $rejected++;
+                continue;
+            }
+            $phash = self::phash($jpeg[0]);
+            if ($phash !== null && self::duplicateOf($this->pdo, $uid, $phash) !== null) {
+                $dup++;
+                continue;
+            }
+            $title = mb_substr(trim((string) ($it['title'] ?? '')), 0, 120);
+            $alt = mb_substr(trim((string) ($it['alt'] ?? '')), 0, 120);
+            $label = trim($alt . ($title !== '' && $title !== $alt ? ' — ' . $title : ''), ' —') ?: urldecode(pathinfo((string) parse_url($src, PHP_URL_PATH), PATHINFO_FILENAME));
+            $folderId = null;
+            if ($folderPerTrip && $title !== '') {
+                $folderId = $folders[$title] ??= $this->folderFor($uid, $title);
+            }
+            $path = '/uploads/social/' . $uid . '/site_' . date('Ymd') . '_' . bin2hex(random_bytes(6)) . '.jpg';
+            file_put_contents($this->publicRoot . $path, $jpeg[0]);
+            $meta = ['source' => 'site_import', 'src' => $src, 'page' => (string) ($it['page'] ?? ''), 'page_title' => $title, 'phash' => $phash];
+            $this->pdo->prepare("INSERT INTO media_items(user_id,type,prompt,file_path,thumbnail_path,width,height,status,generation_meta" . ($folderId ? ',folder_id' : '') . ") VALUES(?,'social_image',?,?,?,?,?,'completed',?" . ($folderId ? ',?' : '') . ")")
+                ->execute(array_merge([$uid, mb_substr('من موقعك: ' . $label, 0, 250), $path, $path, $jpeg[1], $jpeg[2], json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)], $folderId ? [$folderId] : []));
+            $added[] = (int) $this->pdo->lastInsertId();
+        }
+        return ['added' => $added, 'duplicate' => $dup, 'rejected' => $rejected, 'remaining' => []];
+    }
+
+    /** مجلد باسم الرحلة في مكتبة الاستوديو (لو المجلدات متاحة ولسه في مكان) */
+    private function folderFor(int $uid, string $title): ?int
+    {
+        try {
+            $name = mb_substr($title, 0, 100);
+            $s = $this->pdo->prepare('SELECT id FROM creative_folders WHERE user_id=? AND name=? LIMIT 1');
+            $s->execute([$uid, $name]);
+            $id = $s->fetchColumn();
+            if ($id) {
+                return (int) $id;
+            }
+            $c = $this->pdo->prepare('SELECT COUNT(*) FROM creative_folders WHERE user_id=?');
+            $c->execute([$uid]);
+            if ((int) $c->fetchColumn() >= 30) {
+                return null;
+            }
+            $this->pdo->prepare('INSERT INTO creative_folders(user_id,name,created_at,updated_at) VALUES(?,?,NOW(),NOW())')->execute([$uid, $name]);
+            return (int) $this->pdo->lastInsertId();
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
     /** بصمة الصورة (8x8): بتفضل زي ما هي لو الصورة اتصغرت أو اتضغطت */
     public static function phash(string $binary): ?string
     {

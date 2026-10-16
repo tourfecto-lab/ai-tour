@@ -78,7 +78,7 @@
             event.target.value='';const chosen=selected('[name="smpMedia"]');
             await learnAll(ids);
             await loadSetup();renderAssets([...chosen,...ids]);message(t('اترفع ','Uploaded ')+ids.length+t(' ملف واتعلمنا منهم. اختارهم للحملة أو سيبها وهنستخدم كل مكتبتك.',' file(s) and the AI learned from them. Select them for the campaign or leave none selected to use your whole library.')+(failed?t(' (فيه ',' (')+failed+t(' ملف مااترفعش)',' failed)'):''));}));
-        el('smpImportSite').addEventListener('click',()=>perform(importSite));
+        el('smpImportSite').addEventListener('click',()=>{if(!window.TFSitePicker)return perform(importSite);window.TFSitePicker.open({websiteId:Number(el('smpWebsite').value),onDone:async(ids,msg)=>{const chosen=selected('[name="smpMedia"]');await loadSetup();renderAssets([...chosen,...ids]);if(msg)message(msg);}});});
         el('smpPlans').addEventListener('click',event=>{const button=event.target.closest('[data-plan]');if(button)perform(()=>detail(Number(button.dataset.plan)));});
         el('smpDetail').addEventListener('change',event=>{if(event.target.matches('[data-media]')){const card=event.target.closest('[data-item]');const prev=card.querySelector('.smp-preview');if(prev)prev.remove();card.querySelector('h4').insertAdjacentHTML('afterend',mediaView(Number(event.target.value),'smp-preview'));}});
         el('smpDetail').addEventListener('click',event=>{
