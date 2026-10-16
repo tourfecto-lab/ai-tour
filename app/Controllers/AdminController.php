@@ -3632,6 +3632,7 @@ HTML;
                 'system' => [$this->tr('admin.nav.system_status'), 'monitor', '/admin/system'],
                 'logs' => [$this->tr('admin.nav.logs'), 'file-text', '/admin/logs'],
                 'emails' => ['سجل البريد', 'mail', '/admin/emails'],
+                'platform-growth' => ['تسويق المنصة (إيميل)', 'send', '/admin/growth'],
                 'status-page' => ['صفحة الحالة والتحديثات', 'globe', '/admin/status-page'],
                 'blog' => ['المدونة', 'edit', '/admin/blog'],
                 'jobs' => [$this->tr('admin.nav.jobs'), 'activity', '/admin/jobs'],

@@ -104,6 +104,8 @@ return [
     'AiResolutionRateController' => dirname(__DIR__,2).'/app/Controllers/AiResolutionRateController.php',
     'AiResolutionRateService' => dirname(__DIR__,2).'/app/Services/AI/AiResolutionRateService.php',
     'AiRoutingAdminController' => dirname(__DIR__,2).'/app/Controllers/AiRoutingAdminController.php',
+    'PlatformOutreachController' => dirname(__DIR__,2).'/app/Controllers/PlatformOutreachController.php',
+    'PlatformOutreachService' => dirname(__DIR__,2).'/app/Services/PlatformGrowth/PlatformOutreachService.php',
     'AiServiceRouting' => dirname(__DIR__,2).'/app/Services/AI/AiServiceRouting.php',
     'AiText' => dirname(__DIR__,2).'/app/Services/AI/AiText.php',
     'AiUsageLog' => dirname(__DIR__,2).'/app/Models/AiUsageLog.php',

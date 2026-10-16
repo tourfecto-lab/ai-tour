@@ -233,6 +233,7 @@ class AdminAccess
                 '#^/admin/ai-usage$#' => 'ai_usage.view',
                 '#^/admin/health$#' => 'system.view',
                 '#^/admin/emails$#' => 'system.view',
+                '#^/admin/growth$#' => 'settings.manage',
                 '#^/admin/metrics$#' => 'billing.view',
                 '#^/admin/customers-health$#' => 'users.view',
                 '#^/admin/adoption$#' => 'users.view',
@@ -317,6 +318,9 @@ class AdminAccess
             return $write ? 'users.edit' : 'users.view';
         }
         if ($rel === '/broadcast') return 'broadcast.send';
+
+        // ---- تسويق المنصة بالإيميل
+        if ($rel === '/growth' || strpos($rel, '/growth/') === 0) return 'settings.manage';
 
         // ---- مفاتيح الشركاء: حساسة، لصاحب إدارة الإعدادات فقط (قراءة وتعديل)
         if (strpos($rel, '/partner-keys') === 0) return 'settings.manage';

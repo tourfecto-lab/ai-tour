@@ -109,6 +109,10 @@ return [
         'file' => 'monitor_backlinks.php', 'when' => '0 5 * * 1', 'group' => 'seo',
         'title' => 'فحص الباك لينكس (أسبوعي)', 'enabled' => true, 'max_minutes' => 60,
     ],
+    'platform_outreach' => [
+        'file' => 'platform_outreach.php', 'when' => '*/5 * * * *', 'group' => 'growth',
+        'title' => 'تسويق المنصة بالإيميل (دفعات صغيرة في مواعيد العمل)', 'enabled' => true, 'max_minutes' => 4,
+    ],
     'outreach' => [
         'file' => 'generate_outreach_followups.php', 'when' => '0 4 * * *', 'group' => 'seo',
         'title' => 'مسودات متابعة لطلبات اللينكات', 'enabled' => true, 'max_minutes' => 30,

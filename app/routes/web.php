@@ -378,6 +378,7 @@ $router->get('/sites/{slug}/rooms/{roomSlug}/quote', 'WebsiteBuilderController',
 $router->get('/admin/creative-studio', 'CreativeAdminController', 'index', ['AuthMiddleware','AdminMiddleware']);
 
 $router->get('/admin/ai-routing', 'AiRoutingAdminController', 'index', ['AuthMiddleware','AdminMiddleware']);
+$router->get('/admin/growth', 'PlatformOutreachController', 'index', ['AuthMiddleware','AdminMiddleware']);
 
 $router->get('/admin/usage-reservations', 'UsageReservationAdminController', 'index', ['AuthMiddleware','BillingAdminMiddleware']);
 

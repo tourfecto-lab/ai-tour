@@ -872,6 +872,11 @@ $router->get('/api/email-marketing/track/click/{click_token}', 'EmailMarketingCo
 $router->get('/api/email-marketing/unsubscribe/{unsubscribe_token}', 'EmailMarketingController', 'unsubscribeLink', []);
 // RFC 8058 one-click: Gmail/Yahoo يرسلون POST لرابط List-Unsubscribe
 $router->post('/api/email-marketing/unsubscribe/{unsubscribe_token}', 'EmailMarketingController', 'unsubscribeLink', []);
+// تسويق المنصة: إلغاء الاشتراك وتتبع الضغطات (لينكات عامة في الإيميلات)
+$router->get('/p/u/{token}', 'PlatformOutreachController', 'unsubscribe', []);
+$router->post('/p/u/{token}', 'PlatformOutreachController', 'unsubscribe', []);
+$router->get('/p/c/{token}/{step}', 'PlatformOutreachController', 'click', []);
+$router->get('/p/o/{token}/{step}', 'PlatformOutreachController', 'open', []);
 // Automations (المرحلة 3)
 $router->get('/api/email-marketing/automations', 'EmailMarketingController', 'automations', ['AuthMiddleware']);
 $router->post('/api/email-marketing/automations', 'EmailMarketingController', 'createAutomation', ['AuthMiddleware']);
@@ -1660,6 +1665,14 @@ $router->add('HEAD','/api/creative-studio/publish-media/{id}','CreativeStudioCon
 $router->add('HEAD','/api/admin/creative-studio/media/{id}/content','CreativeAdminController','content',['AuthMiddleware','AdminMiddleware']);
 
 $router->get('/api/admin/ai-routing', 'AiRoutingAdminController', 'listing', ['AuthMiddleware','AdminMiddleware']);
+$router->get('/api/admin/growth', 'PlatformOutreachController', 'overview', ['AuthMiddleware','AdminMiddleware']);
+$router->get('/api/admin/growth/leads', 'PlatformOutreachController', 'leads', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/growth/settings', 'PlatformOutreachController', 'saveSettings', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/growth/import', 'PlatformOutreachController', 'import', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/growth/leads/{id}/status', 'PlatformOutreachController', 'leadStatus', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/growth/preview', 'PlatformOutreachController', 'preview', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/growth/test', 'PlatformOutreachController', 'test', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/growth/run', 'PlatformOutreachController', 'runNow', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/ai-routing', 'AiRoutingAdminController', 'save', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/ai-routing/check', 'AiRoutingAdminController', 'check', ['AuthMiddleware','AdminMiddleware']);
 
