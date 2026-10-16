@@ -218,21 +218,23 @@ class XPayGateway
      * جلسة دفع لشحن المحفظة.
      * @return array{checkout_url:?string, session_id:string, client_secret:?string, public_key:string, charge:array}
      */
-    public function createWalletTopUp(int $userId, float $usd, string $returnUrl, string $cancelUrl, string $email = ''): array
+    public function createWalletTopUp(int $userId, float $usd, string $returnUrl, string $cancelUrl, string $purpose = 'wallet_topup'): array
     {
         $c = $this->config();
         if (!$this->isReady()) {
             throw new DomainException('الدفع بالكارت مش متاح دلوقتي');
         }
         $usd = round($usd, 2);
-        if ($usd < $c['min_usd'] || $usd > $c['max_usd']) {
+        $purpose = $purpose === 'trial_card' ? 'trial_card' : 'wallet_topup';
+        // تأكيد الكارت للتجربة: مبلغ صغير ثابت (بيتشحن في محفظة العميل) - مش بيتقيّد بأقل مبلغ شحن
+        if ($purpose !== 'trial_card' && ($usd < $c['min_usd'] || $usd > $c['max_usd'])) {
             throw new InvalidArgumentException('المبلغ لازم يكون بين $' . $c['min_usd'] . ' و $' . $c['max_usd']);
         }
         $charge = $this->chargeFor($usd);
         $db = Database::getInstance();
         $internal = 'PTX-' . strtoupper(bin2hex(random_bytes(12)));
         $reference = 'XTX-' . strtoupper(bin2hex(random_bytes(8)));
-        $meta = ['purpose' => 'wallet_topup', 'charge_currency' => $charge['currency'], 'charge_minor' => $charge['minor'], 'rate' => $charge['currency'] === 'EGP' ? CurrencyService::rate('EGP') : 1];
+        $meta = ['purpose' => $purpose, 'charge_currency' => $charge['currency'], 'charge_minor' => $charge['minor'], 'rate' => $charge['currency'] === 'EGP' ? CurrencyService::rate('EGP') : 1];
         $db->query(
             'INSERT INTO payment_transactions (internal_transaction_id, user_id, amount, currency, payment_method, gateway, status, reference, metadata, idempotency_key) VALUES (?,?,?,?,?,?,?,?,?,?)',
             [$internal, $userId, $usd, 'USD', 'card', 'xpay', 'pending', $reference, json_encode($meta), 'xpay-' . $reference]
@@ -349,7 +351,17 @@ class XPayGateway
             throw new RuntimeException('Wallet top-up failed: ' . ($top['error'] ?? ''));
         }
         $db->query("UPDATE payment_transactions SET status = 'succeeded', related_wallet_transaction_id = ? WHERE id = ?", [$top['transaction_id'] ?? null, $tx['id']]);
-        return ['status' => 'paid', 'credited' => (float) $tx['amount'], 'balance' => $top['balance'] ?? null, 'user_id' => (int) $tx['user_id']];
+        $trial = null;
+        if (($meta['purpose'] ?? '') === 'trial_card') {
+            // الكارت اتأكد: التجربة المجانية تبدأ على طول
+            try {
+                require_once dirname(__DIR__) . '/Subscription/PlanExtras.php';
+                $trial = (new PlanExtras())->startTrial((int) $tx['user_id']);
+            } catch (Throwable $e) {
+                $trial = ['error' => $e->getMessage()];
+            }
+        }
+        return ['trial' => $trial, 'status' => 'paid', 'credited' => (float) $tx['amount'], 'balance' => $top['balance'] ?? null, 'user_id' => (int) $tx['user_id']];
     }
 
     /**

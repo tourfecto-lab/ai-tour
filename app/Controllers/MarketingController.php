@@ -60,7 +60,7 @@ class MarketingController extends Controller
             $price = CurrencyService::format($min, CurrencyService::forViewer($this->user ?? null), $isAr);
             require_once __DIR__ . '/../Services/Subscription/PlanExtras.php';
             $cfg = (new PlanExtras())->config();
-            $trial = !empty($cfg['trial_enabled']) ? sprintf($this->t([' · تجربة مجانية %d يوم', ' · %d-day free trial']), (int) $cfg['trial_days']) : '';
+            $trial = !empty($cfg['trial_enabled']) ? sprintf($this->t([((int) $cfg['trial_days'] <= 10 ? ' · تجربة مجانية %d أيام' : ' · تجربة مجانية %d يوم'), ' · %d-day free trial']), (int) $cfg['trial_days']) : '';
             return '<div class="hero-from" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;margin-top:14px;font-size:14px;opacity:.9">'
                 . '<a href="/pricing" style="color:inherit">' . $this->e(sprintf($this->t(['الباقات تبدأ من %s / شهر', 'Plans from %s / month']), $price) . $trial) . '</a>'
                 . '<span data-tf-currency="compact"></span></div>';

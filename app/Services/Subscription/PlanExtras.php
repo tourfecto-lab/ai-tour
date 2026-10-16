@@ -4,7 +4,8 @@ require_once __DIR__ . '/BillingPlanCatalog.php';
 /**
  * Tourfecto - الباقات المرنة
  *
- * 1) تجربة مجانية (14 يوم على باقة النمو) - مرة واحدة لكل حساب
+ * 1) تجربة مجانية (3 أيام على باقة النمو) - مرة واحدة لكل حساب، بعد ما العميل يدخل الكارت
+ *    (أو الأدمن يفعّلها يدوي للي مش عايز يدخل كارت)
  * 2) إضافات حسب الطلب: باكدجات تتشترى من المحفظة وتزوّد حصة الشهر (صالحة 30 يوم)
  * 3) "ابني باقتك": باقة أساسية + زيادات شهرية في الخدمات اللي محتاجها، بسعر محسوب
  *    تلقائي، وبتتجدد بنفس السعر والزيادات
@@ -61,20 +62,46 @@ class PlanExtras
             'extra' => ['ai_assistant_messages' => 3000, 'website_generations' => 20, 'website_items' => 600, 'articles' => 60, 'media_images' => 350, 'media_videos' => 12, 'marketing_tools' => 600, 'ai_tools' => 2500], 'team' => 15],
     ];
 
-    /** أقصى استخدام في التجربة المجانية للخدمات اللي بتكلّف (أقصى تكلفة للتجربة ~$4) */
+    /** استخدام بسيط لكل خدمة في التجربة المجانية (الأدمن يقدر يغيّره) - لما يخلص يخلص */
     public const TRIAL_CAPS = [
-        'article_generation' => 3, 'media_image' => 15, 'media_video' => 1, 'marketing_tool' => 10, 'ai_assistant_message' => 100,
-        'website_generation' => 1, 'website_item' => 20, 'ai_tool' => 40, 'chat' => 300, 'review' => 30, 'ai_analysis' => 3, 'competitor' => 1,
+        'article_generation' => 2, 'media_image' => 10, 'media_video' => 1, 'marketing_tool' => 5, 'ai_assistant_message' => 30,
+        'website_generation' => 1, 'website_item' => 10, 'ai_tool' => 20, 'chat' => 100, 'review' => 10, 'ai_analysis' => 2, 'competitor' => 1,
     ];
+    /** أسماء الخدمات (للأدمن) */
+    public const TRIAL_LABELS = [
+        'article_generation' => 'مقالات', 'media_image' => 'صور', 'media_video' => 'فيديو', 'marketing_tool' => 'أدوات تسويق', 'ai_assistant_message' => 'رسائل المساعد الذكي',
+        'website_generation' => 'إنشاء موقع', 'website_item' => 'عناصر الموقع', 'ai_tool' => 'أدوات AI (كابشن، إعلانات، ردود)', 'chat' => 'ردود الشات بوت', 'review' => 'ردود التقييمات', 'ai_analysis' => 'تحليلات AI', 'competitor' => 'تحليل منافسين',
+    ];
+    private static ?array $capsCache = null;
+
+    /** حدود التجربة الفعلية (افتراضي + تعديلات الأدمن) */
+    public static function trialCaps(): array
+    {
+        if (self::$capsCache !== null) {
+            return self::$capsCache;
+        }
+        $caps = self::TRIAL_CAPS;
+        try {
+            $raw = class_exists('SystemSettingsService') ? json_decode((new SystemSettingsService())->get('plan_extras_config', ''), true) : null;
+            foreach ((array) ($raw['trial_caps'] ?? []) as $k => $v) {
+                if (isset($caps[$k]) && is_numeric($v) && $v >= 0) {
+                    $caps[$k] = (int) $v;
+                }
+            }
+        } catch (Throwable $e) {
+        }
+        return self::$capsCache = $caps;
+    }
 
     /** حد التجربة: الأقل بين حصة الباقة وحد التجربة */
     public static function capForTrial(array $sub, string $feature, int $limit): int
     {
         $status = (string) ($sub['lifecycle_status'] ?? $sub['status'] ?? '');
-        if ($status !== 'trialing' || !isset(self::TRIAL_CAPS[$feature])) {
+        $caps = self::trialCaps();
+        if ($status !== 'trialing' || !isset($caps[$feature])) {
             return $limit;
         }
-        $cap = self::TRIAL_CAPS[$feature];
+        $cap = $caps[$feature];
         return $limit < 0 ? $cap : min($limit, $cap);
     }
 
@@ -177,7 +204,11 @@ class PlanExtras
         }
         return [
             'trial_enabled' => ($raw['trial_enabled'] ?? true) !== false,
-            'trial_days' => max(1, min(60, (int) ($raw['trial_days'] ?? 14))),
+            // الإعداد القديم (14 يوم) مابيتحسبش: التجربة بقت 3 أيام افتراضي لحد ما الأدمن يغيّرها
+            'trial_days' => max(1, min(60, (int) (((int) ($raw['trial_v'] ?? 1)) >= 2 ? ($raw['trial_days'] ?? 3) : 3))),
+            'trial_requires_card' => ($raw['trial_requires_card'] ?? true) !== false,
+            'trial_card_usd' => max(0.5, min(20, (float) ($raw['trial_card_usd'] ?? 1))),
+            'trial_caps' => self::trialCaps(),
             'trial_plan' => in_array($raw['trial_plan'] ?? '', ['starter', 'professional', 'enterprise'], true) ? $raw['trial_plan'] : 'professional',
             'builder_enabled' => ($raw['builder_enabled'] ?? true) !== false,
             'services' => $services,
@@ -189,14 +220,24 @@ class PlanExtras
     {
         $raw = $this->settings ? json_decode($this->settings->get('plan_extras_config', ''), true) : [];
         $raw = is_array($raw) ? $raw : [];
-        foreach (['trial_enabled', 'builder_enabled'] as $k) {
+        foreach (['trial_enabled', 'builder_enabled', 'trial_requires_card'] as $k) {
             if (array_key_exists($k, $in)) {
                 $raw[$k] = !empty($in[$k]);
             }
         }
         if (isset($in['trial_days'])) {
             $raw['trial_days'] = max(1, min(60, (int) $in['trial_days']));
+            $raw['trial_v'] = 2;
         }
+        if (isset($in['trial_card_usd']) && is_numeric($in['trial_card_usd'])) {
+            $raw['trial_card_usd'] = max(0.5, min(20, round((float) $in['trial_card_usd'], 2)));
+        }
+        foreach ((array) ($in['trial_caps'] ?? []) as $k => $v) {
+            if (isset(self::TRIAL_CAPS[$k]) && is_numeric($v)) {
+                $raw['trial_caps'][$k] = max(0, min(100000, (int) $v));
+            }
+        }
+        self::$capsCache = null;
         if (isset($in['trial_plan']) && in_array($in['trial_plan'], ['starter', 'professional', 'enterprise'], true)) {
             $raw['trial_plan'] = $in['trial_plan'];
         }
@@ -259,10 +300,32 @@ class PlanExtras
         return !(int) $this->q('SELECT COUNT(*) FROM subscriptions WHERE user_id=?', [$uid])->fetchColumn();
     }
 
-    public function startTrial(int $uid): array
+    /** العميل أكّد كارته (دفع ناجح بالكارت عن طريق XPay) */
+    public function cardVerified(int $uid): bool
     {
-        if (!$this->trialEligible($uid)) {
+        try {
+            return (bool) $this->q("SELECT 1 FROM payment_transactions WHERE user_id=? AND gateway='xpay' AND status IN ('succeeded','partially_refunded','refunded') LIMIT 1", [$uid])->fetchColumn();
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    /** التجربة محتاجة كارت الأول؟ */
+    public function trialNeedsCard(int $uid): bool
+    {
+        return $this->config()['trial_requires_card'] && !$this->cardVerified($uid);
+    }
+
+    /**
+     * @param bool $byAdmin الأدمن بيفعّلها يدوي (للعميل اللي مش عايز يدخل كارت)
+     */
+    public function startTrial(int $uid, bool $byAdmin = false): array
+    {
+        if (!$this->trialEligible($uid) && !($byAdmin && !Subscription::activeSubscriptionRow($uid) && !(int) $this->q("SELECT COUNT(*) FROM subscriptions WHERE user_id=? AND status='trialing'", [$uid])->fetchColumn())) {
             throw new InvalidArgumentException('التجربة المجانية متاحة مرة واحدة بس للحسابات الجديدة.');
+        }
+        if (!$byAdmin && $this->trialNeedsCard($uid)) {
+            throw new DomainException(json_encode(['error' => 'card_required', 'card_usd' => $this->config()['trial_card_usd']]));
         }
         $cfg = $this->config();
         $sub = Subscription::createSubscription($uid, $cfg['trial_plan'], 'monthly');
@@ -273,7 +336,7 @@ class PlanExtras
         $end = date('Y-m-d H:i:s', time() + $cfg['trial_days'] * 86400);
         $this->q("UPDATE subscriptions SET status='trialing', price=0, trial_ends_at=?, current_period_end=?, cancel_at_period_end=0 WHERE id=? AND user_id=?", [$end, $end, $id, $uid]);
         if (class_exists('ActivityLog')) {
-            ActivityLog::record('subscription', 'subscription.trial_started', ['user_id' => $uid, 'subject_type' => 'subscriptions', 'subject_id' => $id, 'meta' => ['plan' => $cfg['trial_plan'], 'days' => $cfg['trial_days']]]);
+            ActivityLog::record('subscription', 'subscription.trial_started', ['user_id' => $uid, 'subject_type' => 'subscriptions', 'subject_id' => $id, 'meta' => ['plan' => $cfg['trial_plan'], 'days' => $cfg['trial_days'], 'by_admin' => $byAdmin, 'card' => !$byAdmin && $cfg['trial_requires_card']]]);
         }
         return ['subscription_id' => $id, 'plan' => $cfg['trial_plan'], 'ends_at' => $end, 'days' => $cfg['trial_days']];
     }

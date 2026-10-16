@@ -53,7 +53,19 @@ class XPayController extends Controller
             return $e;
         }
         try {
-            $s = (new XPayGateway())->createWalletTopUp($this->owner(), (float) $this->get('amount', 0), $this->base() . '/wallet/xpay/return', $this->base() . '/subscription#wallet');
+            $amount = (float) $this->get('amount', 0);
+            $purpose = 'wallet_topup';
+            if ($this->get('purpose') === 'trial_card') {
+                // تأكيد الكارت للتجربة المجانية: المبلغ من الإعدادات مش من العميل
+                require_once __DIR__ . '/../Services/Subscription/PlanExtras.php';
+                $x = new PlanExtras();
+                if (!$x->trialEligible($this->owner())) {
+                    return $this->error('التجربة المجانية متاحة مرة واحدة بس للحسابات الجديدة.', 422);
+                }
+                $amount = $x->config()['trial_card_usd'];
+                $purpose = 'trial_card';
+            }
+            $s = (new XPayGateway())->createWalletTopUp($this->owner(), $amount, $this->base() . '/wallet/xpay/return', $this->base() . '/subscription#wallet', $purpose);
             return $this->success($s, 'جاري تحويلك لصفحة الدفع الآمنة...');
         } catch (InvalidArgumentException | DomainException $e) {
             return $this->error($e->getMessage(), 422);
@@ -76,7 +88,13 @@ class XPayController extends Controller
             Logger::error('XPay return confirm failed', ['error' => $e->getMessage()]);
         }
         $q = $state === 'paid' ? 'ok' : ($state === 'expired' ? 'cancelled' : 'pending');
-        header('Location: /subscription?topup=' . $q . '#wallet', true, 302);
+        $trial = false;
+        try {
+            $m = $this->db->query("SELECT metadata FROM payment_transactions WHERE gateway='xpay' AND gateway_transaction_id=? LIMIT 1", [$sid]);
+            $trial = (json_decode((string) ($m[0]['metadata'] ?? ''), true)['purpose'] ?? '') === 'trial_card';
+        } catch (Throwable $e) {
+        }
+        header('Location: /subscription?topup=' . $q . ($trial ? '&trial=1' : '') . '#wallet', true, 302);
         exit;
     }
 

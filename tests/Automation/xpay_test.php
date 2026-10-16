@@ -116,6 +116,20 @@ $before = $ws->getBalance($uid);
 check($g->confirm($s4['session_id'])['status'] === 'paid' && abs($ws->getBalance($uid) - $before - 10) < 0.01, 'paid in EGP: wallet +$10');
 $egpOnly = false;
 
+echo "trial card step\n";
+require_once ROOT_PATH . '/app/Services/Subscription/PlanExtras.php';
+$pdo->prepare("INSERT INTO users(company_name,email,password) VALUES('Trial Card Co',?,'x')")->execute(['xtrial' . getmypid() . '@example.com']);
+$u3 = (int) $pdo->lastInsertId();
+$st = $g->createWalletTopUp($u3, 1, 'https://t.test/r', 'https://t.test/c', 'trial_card');
+check(end($calls)[2]['lineItems'][0]['priceData']['unitAmount'] === 5000, '$1 card check sent as 50.00 EGP (below the normal minimum is allowed)');
+check(!Subscription::activeSubscriptionRow($u3), 'no trial before payment');
+$remote[$st['session_id']]['status'] = ['type' => 'complete', 'paymentStatus' => 'paid']; $remote[$st['session_id']]['paymentStatus'] = 'paid';
+$cr = $g->confirm($st['session_id']);
+$sub3 = Subscription::activeSubscriptionRow($u3);
+check($cr['status'] === 'paid' && $sub3 && $sub3['status'] === 'trialing' && abs($ws->getBalance($u3) - 1) < 0.01, 'card paid: trial started automatically and $1 is in the wallet');
+foreach (['payment_transactions', 'wallet_transactions', 'subscriptions'] as $tbl) { $pdo->exec("DELETE FROM $tbl WHERE user_id=$u3"); }
+$pdo->exec("DELETE FROM users WHERE id=$u3");
+
 try { $g->saveConfig(['api_base' => 'https://evil.example.com']); $ok = false; } catch (InvalidArgumentException $e) { $ok = true; }
 check($ok, 'API address outside xpay.app refused (secret key never sent elsewhere)');
 $g->saveConfig(['api_base' => 'https://api.xpay.app/v1/']);

@@ -44,13 +44,22 @@ echo "trial\n";
 $pdo->prepare("INSERT INTO users(company_name,email,password) VALUES('Trial Co',?,'x')")->execute(['plans' . getmypid() . '@example.com']);
 $uid = (int) $pdo->lastInsertId();
 check($x->trialEligible($uid), 'new account can start a trial');
+check($x->config()['trial_days'] === 3, 'trial is 3 days by default (old 14-day setting ignored)');
+try { $x->startTrial($uid); $ok = false; } catch (DomainException $e) { $ok = (json_decode($e->getMessage(), true)['error'] ?? '') === 'card_required'; }
+check($ok && !Subscription::activeSubscriptionRow($uid), 'no card yet: trial does not start');
+$pdo->prepare("INSERT INTO payment_transactions(internal_transaction_id,user_id,amount,currency,payment_method,gateway,status,reference,metadata) VALUES(?,?,1,'USD','card','xpay','succeeded',?,'{}')")->execute(['PTX-T' . $uid, $uid, 'XTX-T' . $uid]);
+check(!$x->trialNeedsCard($uid), 'card verified through XPay');
 $t = $x->startTrial($uid);
+check(abs(strtotime($t['ends_at']) - time() - 3 * 86400) < 60, 'trial ends after 3 days');
 $sub = Subscription::activeSubscriptionRow($uid);
 check($sub && $sub['status'] === 'trialing' && (float) $sub['price'] === 0.0 && $sub['plan_name'] === 'professional', 'trial is active on Growth, free');
 check(!$x->trialEligible($uid), 'trial only once');
-check(PlanUsage::quota($uid, 'article_generation')['limit'] === 3 && PlanUsage::quota($uid, 'media_video')['limit'] === 1, 'trial is capped for costly services (3 articles, 1 video)');
+check(PlanUsage::quota($uid, 'article_generation')['limit'] === 2 && PlanUsage::quota($uid, 'media_video')['limit'] === 1 && PlanUsage::quota($uid, 'ai_tool')['limit'] === 20, 'small trial allowance per service (2 articles, 1 video, 20 AI tools)');
+PlanUsage::consume($uid, 'article_generation'); PlanUsage::consume($uid, 'article_generation');
+check(!PlanUsage::consume($uid, 'article_generation') && PlanUsage::quota($uid, 'article_generation')['remaining'] === 0, 'trial allowance used up: stops');
+$pdo->exec("DELETE FROM plan_usage_events WHERE user_id=$uid");
 $v0 = (new SubscriptionValidator())->validateSubscription($uid);
-check(($v0['chat_credits_remaining'] ?? 0) === 300, 'trial chatbot replies capped at 300');
+check(($v0['chat_credits_remaining'] ?? 0) === 100, 'trial chatbot replies capped at 100');
 
 echo "add-ons\n";
 try { $x->buyPack($uid, 'articles_10'); $ok = false; } catch (DomainException $e) { $ok = json_decode($e->getMessage(), true)['shortfall'] == 10; }
@@ -59,10 +68,10 @@ check($ok, 'no balance: clear shortfall');
 $r = $x->buyPack($uid, 'articles_10', 'k1');
 check($r['qty'] === 10 && abs((new WalletService())->getBalance($uid) - 390) < 0.01, 'pack charged from wallet');
 check($x->buyPack($uid, 'articles_10', 'k1')['already'] ?? false, 'same request not charged twice');
-check(PlanUsage::quota($uid, 'article_generation')['limit'] === 13, 'pack adds on top of the trial cap');
+check(PlanUsage::quota($uid, 'article_generation')['limit'] === 12, 'pack adds on top of the trial cap');
 $x->buyPack($uid, 'chat_2000');
 $v = (new SubscriptionValidator())->validateSubscription($uid);
-check(($v['chat_credits_remaining'] ?? 0) === 300 + 2000, 'chatbot replies grow by the pack (' . ($v['chat_credits_remaining'] ?? 'x') . ')');
+check(($v['chat_credits_remaining'] ?? 0) === 100 + 2000, 'chatbot replies grow by the pack (' . ($v['chat_credits_remaining'] ?? 'x') . ')');
 
 echo "build your plan\n";
 $q = $x->quote('professional', 'monthly', ['article_generation' => 10, 'chat' => 1000]);
@@ -90,9 +99,23 @@ $rn = (new WalletService())->renewSubscriptionFromBalance($sid);
 check(!empty($rn['success']) && abs($balBefore - (new WalletService())->getBalance($uid) - 169) < 0.01, 'renews at the custom price $169 (' . json_encode($rn) . ')');
 check(PlanExtras::extra($sid, 'article_generation') === 20, 'custom extras granted again for the new period (+10) and pack still on (+10)');
 
+echo "admin grant without card\n";
+$pdo->prepare("INSERT INTO users(company_name,email,password) VALUES('NoCard Co',?,'x')")->execute(['nocard' . getmypid() . '@example.com']);
+$u2 = (int) $pdo->lastInsertId();
+check($x->trialNeedsCard($u2), 'new customer without card needs the card step');
+$g = $x->startTrial($u2, true);
+check(Subscription::activeSubscriptionRow($u2)['status'] === 'trialing', 'admin started the trial without a card');
+try { $x->startTrial($u2, true); $ok = false; } catch (InvalidArgumentException $e) { $ok = true; }
+check($ok, 'admin cannot stack a second trial');
+$x->saveConfig(['trial_caps' => ['article_generation' => 5]]);
+check(PlanUsage::quota($u2, 'article_generation')['limit'] === 5, 'admin can change a trial allowance');
+$x->saveConfig(['trial_days' => 7]);
+check($x->config()['trial_days'] === 7, 'admin can change trial days');
+$pdo->exec("DELETE FROM plan_usage_events WHERE user_id=$u2"); $pdo->exec("DELETE FROM subscriptions WHERE user_id=$u2"); $pdo->exec("DELETE FROM users WHERE id=$u2");
+
 // تنظيف
 $pdo->exec("DELETE FROM plan_extra_credits WHERE user_id=$uid"); $pdo->exec("DELETE FROM plan_custom WHERE user_id=$uid");
-foreach (['wallet_transactions', 'subscriptions', 'invoices'] as $tbl) { try { $pdo->exec("DELETE FROM $tbl WHERE user_id=$uid"); } catch (Throwable $e) {} }
+foreach (['wallet_transactions', 'subscriptions', 'invoices', 'payment_transactions', 'plan_usage_events'] as $tbl) { try { $pdo->exec("DELETE FROM $tbl WHERE user_id=$uid"); } catch (Throwable $e) {} }
 $pdo->exec("DELETE FROM users WHERE id=$uid");
 foreach ($plansBefore as $r) { $pdo->prepare('UPDATE subscription_plans SET name=?,price=?,ai_analysis_limit=?,ai_message_limit=?,review_auto_reply_limit=?,websites_limit=?,features_json=? WHERE id=?')->execute([$r['name'], $r['price'], $r['ai_analysis_limit'], $r['ai_message_limit'], $r['review_auto_reply_limit'], $r['websites_limit'], $r['features_json'], $r['id']]); }
 foreach ($displayBefore as $r) { $pdo->prepare('UPDATE plan_pricing_display SET name=?,price_monthly=?,price_yearly=? WHERE id=?')->execute([$r['name'], $r['price_monthly'], $r['price_yearly'], $r['id']]); }

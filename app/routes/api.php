@@ -1670,6 +1670,7 @@ $router->get('/api/admin/growth', 'PlatformOutreachController', 'overview', ['Au
 $router->get('/api/admin/plans-studio', 'PlansStudioController', 'adminData', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/plans-studio/config', 'PlansStudioController', 'adminSaveConfig', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/plans-studio/preset', 'PlansStudioController', 'adminPreset', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/plans-studio/grant-trial', 'PlansStudioController', 'adminGrantTrial', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/currency/rates', 'PlansStudioController', 'adminSaveRates', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/currency/refresh', 'PlansStudioController', 'adminRefreshRates', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/currency/auto', 'PlansStudioController', 'adminSaveAuto', ['AuthMiddleware','AdminMiddleware']);

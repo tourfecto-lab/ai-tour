@@ -27,6 +27,7 @@
         return D.currency === 'USD' ? '$' + n : (ar ? n + ' ' + c.symbol : c.symbol + ' ' + n);
     };
     const money = m => `<b>${esc(m.label)}</b>${D.currency !== 'USD' ? `<small>${esc(m.usd_label)}</small>` : (m.egp ? `<small>≈ ${esc(m.egp)}</small>` : '')}`;
+    const trialSummary = () => { const c = D.trial.caps || {}; return [[c.article_generation, t('مقالات', 'articles')], [c.media_image, t('صور', 'images')], [c.media_video, t('فيديو', 'video')], [c.chat, t('رد شات', 'chat replies')], [c.ai_tool, t('أداة AI', 'AI tools')]].filter(([v]) => v > 0).map(([v, l]) => v + ' ' + l).join('، '); };
     const PLAN_NOTE = { starter: t('لشركة بتبدأ أونلاين', 'For companies getting started'), professional: t('للشركات اللي بتكبر', 'For growing companies'), enterprise: t('للشركات الكبيرة والوكالات', 'For larger companies & agencies') };
 
     const render = () => {
@@ -40,7 +41,7 @@
 <label class="ps-cur">${t('العملة', 'Currency')} <select id="psCur" class="p-select">${D.currencies.map(c => `<option value="${c.code}" ${c.code === D.currency ? 'selected' : ''}>${esc(c.name)} (${esc(c.symbol)})</option>`).join('')}</select></label></div>
 <div id="psMsg" class="ps-msg" hidden></div>
 ${D.currency !== 'USD' ? `<p class="ps-note">${t('الأسعار محسوبة بسعر الصرف النهارده (1$ = ', 'Prices use today’s exchange rate ($1 = ')}${esc(fmtLocal(1))})${t('. المحفظة والفواتير بالدولار، والدفع بعملتك بنفس السعر.', '. Wallet and invoices are in USD; you can pay in your currency at this rate.')}</p>` : ''}
-${D.trial.eligible ? `<section class="ps-trial"><div><h3>🎁 ${t('جرّب باقة ' + esc(plan(D.trial.plan)?.name || '') + ' مجانًا ' + D.trial.days + ' يوم', 'Try ' + esc(plan(D.trial.plan)?.name || '') + ' free for ' + D.trial.days + ' days')}</h3><p>${t('جرّب كل الخدمات بنفسك (الشات بوت، المقالات، الصور، خطة السوشيال...) بحدود تجربة، من غير ما تدفع ولا تحط كارت. بعد التجربة تختار الباقة اللي تناسبك.', 'Try every service yourself (chatbot, articles, images, social plan...) with trial limits, no payment or card needed. Pick a plan when the trial ends.')}</p></div><button class="p-btn" data-trial>${t('ابدأ التجربة المجانية', 'Start free trial')}</button></section>` : ''}
+${D.trial.eligible ? `<section class="ps-trial"><div><h3>🎁 ${t('جرّب باقة ' + esc(plan(D.trial.plan)?.name || '') + ' مجانًا ' + D.trial.days + (D.trial.days <= 10 ? ' أيام' : ' يوم'), 'Try ' + esc(plan(D.trial.plan)?.name || '') + ' free for ' + D.trial.days + ' days')}</h3><p>${t('جرّب كل خدمات المنصة بنفسك باستخدام بسيط لكل خدمة (' + trialSummary() + ')، ولما الحد يخلص يخلص.', 'Try every service with a small allowance each (' + trialSummary() + '); when it runs out, it stops.')}${D.trial.needs_card ? '<br><b>' + t('بنأكد كارتك الأول بـ ' + esc(D.trial.card_money.label) + ' بيتشحنوا في محفظتك (مش رسوم).', 'We verify your card with ' + esc(D.trial.card_money.label) + ', added to your wallet (not a fee).') + '</b>' : ''}</p></div><button class="p-btn" data-trial>${D.trial.needs_card ? t('أكّد كارتك وابدأ التجربة', 'Verify card & start trial') : t('ابدأ التجربة المجانية', 'Start free trial')}</button></section>` : ''}
 ${cur ? `<section class="ps-box"><h3>${t('باقتك دلوقتي', 'Your current plan')}</h3><div class="ps-cur-plan"><span class="ps-badge">${esc(plan(cur.plan)?.name || cur.plan)}${cur.custom ? ' + ' + t('مخصصة', 'custom') : ''}</span>
 <span>${cur.status === 'trialing' ? '🎁 ' + t('تجربة مجانية لحد ', 'Free trial until ') + esc((cur.trial_ends_at || '').slice(0, 10)) : t('بتتجدد ', 'Renews ') + esc((cur.period_end || '').slice(0, 10))}</span>
 <span>${t('رصيد المحفظة: ', 'Wallet: ')}${money(D.wallet)}</span></div>
@@ -73,7 +74,18 @@ ${D.builder.enabled && services.length ? `<section class="ps-box"><h3>🧩 ${t('
 
     root.addEventListener('click', e => {
         const b = e.target.closest('button'); if (!b) return;
-        if (b.dataset.trial !== undefined) return run(b, async () => { const r = await api('/api/plans/trial', {}); await reload(); say(t('🎉 التجربة المجانية بدأت لحد ', '🎉 Free trial started until ') + r.ends_at.slice(0, 10) + t('. كل الخدمات مفتوحة دلوقتي.', '. Everything is unlocked now.')); });
+        if (b.dataset.trial !== undefined) return run(b, async () => {
+            try {
+                const r = await api('/api/plans/trial', {}); await reload();
+                say(t('🎉 التجربة المجانية بدأت لحد ', '🎉 Free trial started until ') + r.ends_at.slice(0, 10) + t('. كل الخدمات مفتوحة دلوقتي.', '. Everything is unlocked now.'));
+            } catch (e) {
+                if (!e.data?.details?.card_required && !e.data?.card_required) throw e;
+                const d = e.data.details || e.data;
+                if (!d.card_ready || !window.TFXPay) throw e;
+                if (!confirm(t('هنفتحلك صفحة الدفع الآمنة عشان تأكد كارتك بـ ' + D.trial.card_money.label + '. المبلغ بيتشحن في محفظتك وتقدر تستخدمه، والتجربة بتبدأ على طول بعد التأكيد. تكمّل؟', 'We will open the secure payment page to verify your card with ' + D.trial.card_money.label + '. It is added to your wallet and the trial starts right after. Continue?'))) return;
+                await window.TFXPay.pay({ purpose: 'trial_card' });
+            }
+        });
         if (b.dataset.pack) return run(b, async () => {
             const p = D.packs.find(x => x.key === b.dataset.pack);
             if (!confirm(t('تضيف ', 'Add ') + '+' + p.qty + ' ' + p.label + t(' بـ ', ' for ') + p.price.label + t(' من رصيد المحفظة؟', ' from your wallet?'))) return;
@@ -114,7 +126,8 @@ ${D.builder.enabled && services.length ? `<section class="ps-box"><h3>🧩 ${t('
         if (host) {
             const d = document.createElement('div');
             d.className = 'xp-banner ' + (back === 'ok' ? 'ok' : 'wait');
-            d.textContent = back === 'ok' ? t('✅ الدفع نجح ورصيد محفظتك اتشحن.', '✅ Payment received - your wallet is topped up.')
+            d.textContent = back === 'ok' && qs.get('trial') ? t('🎉 كارتك اتأكد والتجربة المجانية بدأت! المبلغ اتشحن في محفظتك.', '🎉 Card verified and your free trial has started! The amount was added to your wallet.')
+                : back === 'ok' ? t('✅ الدفع نجح ورصيد محفظتك اتشحن.', '✅ Payment received - your wallet is topped up.')
                 : back === 'cancelled' ? t('عملية الدفع اتلغت أو انتهى وقتها. تقدر تحاول تاني.', 'The payment was cancelled or expired. You can try again.')
                 : t('⏳ بنأكد الدفع مع البنك... الرصيد هيتشحن أول ما يتأكد (عادةً دقيقة).', '⏳ Confirming your payment... your balance updates as soon as it clears.');
             host.parentNode.insertBefore(d, host);
@@ -145,21 +158,32 @@ ${D.builder.enabled && services.length ? `<section class="ps-box"><h3>🧩 ${t('
             err.style.display = 'none';
             if (!(v >= S.min_usd && v <= S.max_usd)) return fail(t('اكتب مبلغ بين $', 'Enter an amount between $') + S.min_usd + t(' و $', ' and $') + S.max_usd);
             btn.disabled = true;
-            try {
-                const r = await fetch('/api/xpay/topup', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': S.csrf_token }, body: JSON.stringify({ amount: v, csrf_token: S.csrf_token }) }).then(x => x.json());
-                if (!r.success) return fail(r.error || t('حصلت مشكلة', 'Something went wrong'));
-                const d = r.data;
-                if (d.checkout_url) { location.href = d.checkout_url; return; }
-                if (!d.client_secret || !d.public_key) return fail(t('XPay مرجعش رابط دفع. كلّم الدعم.', 'XPay returned no payment link.'));
-                const s = document.createElement('script'); s.src = 'https://checkout.xpay.app/v1/sdk.js';
-                s.onload = () => {
-                    try {
-                        window.XPay(d.public_key).checkout({ clientSecret: d.client_secret, mode: 'modal', onComplete: () => { location.href = '/wallet/xpay/return?session_id=' + encodeURIComponent(d.session_id); }, onClose: () => { btn.disabled = false; } }).open();
-                    } catch (e) { fail(e.message); }
-                };
-                s.onerror = () => fail(t('مقدرناش نفتح صفحة الدفع، جرّب تاني.', 'Could not open the payment page.'));
-                document.head.appendChild(s);
-            } catch (e) { fail(e.message); }
+            try { await window.TFXPay.pay({ amount: v }); btn.disabled = false; } catch (e) { fail(e.message); }
         });
     }).catch(() => {});
+})();
+
+/* فتح دفع XPay (شحن محفظة أو تأكيد كارت التجربة) - مشترك */
+(() => {
+    'use strict';
+    const ar = !(document.documentElement.lang || 'ar').toLowerCase().startsWith('en');
+    const t = (a, e) => ar ? a : e;
+    const pay = async (body) => {
+        const st = await fetch('/api/xpay/status', { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(r => r.json()).catch(() => null);
+        const S = st && st.success && st.data;
+        if (!S || !S.enabled) throw new Error(t('الدفع بالكارت مش متاح دلوقتي.', 'Card payments are unavailable right now.'));
+        const r = await fetch('/api/xpay/topup', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': S.csrf_token }, body: JSON.stringify({ ...body, csrf_token: S.csrf_token }) }).then(x => x.json());
+        if (!r.success) throw new Error(r.error || t('حصلت مشكلة', 'Something went wrong'));
+        const d = r.data;
+        if (d.checkout_url) { location.href = d.checkout_url; return; }
+        if (!d.client_secret || !d.public_key) throw new Error(t('XPay مرجعش رابط دفع. كلّم الدعم.', 'XPay returned no payment link.'));
+        await new Promise((resolve, reject) => {
+            const go = () => { try { window.XPay(d.public_key).checkout({ clientSecret: d.client_secret, mode: 'modal', onComplete: () => { location.href = '/wallet/xpay/return?session_id=' + encodeURIComponent(d.session_id); }, onClose: () => resolve() }).open(); } catch (e) { reject(e); } };
+            if (window.XPay) return go();
+            const s = document.createElement('script'); s.src = 'https://checkout.xpay.app/v1/sdk.js';
+            s.onload = go; s.onerror = () => reject(new Error(t('مقدرناش نفتح صفحة الدفع، جرّب تاني.', 'Could not open the payment page.')));
+            document.head.appendChild(s);
+        });
+    };
+    window.TFXPay = { pay };
 })();

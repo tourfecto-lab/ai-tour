@@ -14,9 +14,13 @@
 <div class="ps-preset">${Object.entries(D.preset).map(([k, p]) => `<div><b>${esc(p.name)}</b> — $${p.price_monthly}/شهر · $${p.price_yearly}/سنة<br>${p.multiple_websites} موقع · ${p.chat_credits.toLocaleString()} رد شات · ${p.review_credits} رد تقييم · ${p.ai_analysis} تحليل · ${p.extra.articles} مقال · ${p.extra.media_images} صورة · ${p.extra.media_videos} فيديو${p.auto_pilot ? ' · الطيار الآلي' : ''}${p.advanced_analytics ? ' · تحليلات متقدمة' : ''}</div>`).join('')}</div>
 <button class="p-btn" data-preset>طبّق الباقات المقترحة</button> <span class="p-cell-muted">المشتركين الحاليين بيكملوا بسعرهم لحد التجديد.</span></section>
 
-<section class="ps-box"><h3>2) التجربة المجانية</h3><p class="p-cell-muted">التجربة ليها حدود للخدمات الغالية (3 مقالات، 15 صورة، فيديو واحد، 300 رد شات، 10 أدوات تسويق...) عشان أقصى تكلفة للحساب الواحد تبقى حوالي $4.</p><div class="ps-cur-plan"><label><input type="checkbox" id="paTrial" ${c.trial_enabled ? 'checked' : ''}> مفعّلة للحسابات الجديدة</label>
-<label>المدة <input id="paTrialDays" type="number" class="p-select" min="1" max="60" value="${c.trial_days}" style="width:70px"> يوم</label>
-<label>على باقة <select id="paTrialPlan" class="p-select">${Object.entries(plans).map(([k, p]) => `<option value="${k}" ${k === c.trial_plan ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label></div></section>
+<section class="ps-box ps-adm"><h3>2) التجربة المجانية</h3><p class="p-cell-muted">مرة واحدة لكل حساب جديد. كل خدمة ليها استخدام بسيط في التجربة، ولما يخلص يخلص (العميل يشترك أو يدفع من محفظته).</p><div class="ps-cur-plan"><label><input type="checkbox" id="paTrial" ${c.trial_enabled ? 'checked' : ''}> مفعّلة للحسابات الجديدة</label>
+<label>المدة <input id="paTrialDays" type="number" class="p-select" min="1" max="60" value="${c.trial_days}" style="width:70px"> أيام</label>
+<label>على باقة <select id="paTrialPlan" class="p-select">${Object.entries(plans).map(([k, p]) => `<option value="${k}" ${k === c.trial_plan ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label></div>
+<div class="ps-cur-plan" style="margin-top:8px"><label><input type="checkbox" id="paTrialCard" ${c.trial_requires_card ? 'checked' : ''}> لازم العميل يأكد كارته الأول (XPay)</label>
+<label>مبلغ التأكيد $ <input id="paTrialCardUsd" type="number" class="p-select" min="0.5" max="20" step="0.5" value="${c.trial_card_usd}" style="width:80px"></label><span class="p-cell-muted">المبلغ بيتشحن في محفظة العميل (مش رسوم).</span></div>
+<table><thead><tr><th>الخدمة</th><th>حد التجربة</th></tr></thead><tbody>${Object.entries(c.trial_caps || {}).map(([k, n]) => `<tr><td>${esc((D.trial_labels || {})[k] || k)}</td><td><input class="p-select" type="number" min="0" data-tc="${k}" value="${n}"></td></tr>`).join('')}</tbody></table>
+<div class="xp-urls"><b>🎁 فعّل تجربة مجانية لعميل من غير كارت</b><div class="ps-cur-plan" style="margin-top:8px"><input id="paGrantEmail" class="p-select" dir="ltr" type="email" placeholder="customer@company.com" style="max-width:280px"><button class="p-btn primary" data-grant-trial>فعّل التجربة</button></div><span class="p-cell-muted">للعميل اللي مش عايز يدخل كارت: بتبدأ له نفس التجربة بنفس الحدود.</span></div></section>
 
 <section class="ps-box ps-adm"><h3>3) إضافات حسب الطلب (مرة واحدة - 30 يوم)</h3><table><thead><tr><th>الإضافة</th><th>الكمية</th><th>السعر $</th><th>متاحة</th></tr></thead><tbody>${Object.entries(c.packs).map(([k, p]) => `<tr><td>${p.icon} ${esc(c.services[p.service].ar)}</td><td><input class="p-select" type="number" min="1" data-pq="${k}" value="${p.qty}"></td><td><input class="p-select" type="number" min="0" step="0.5" data-pp="${k}" value="${p.price}"></td><td><input type="checkbox" data-pe="${k}" ${p.enabled ? 'checked' : ''}></td></tr>`).join('')}</tbody></table></section>
 
@@ -39,11 +43,12 @@
     const bind = () => root.addEventListener('click', e => {
         const b = e.target.closest('button'); if (!b) return;
         if (b.dataset.preset !== undefined) return run(b, async () => { if (!confirm('هيتغيّر اسم وسعر وحدود الباقات التلاتة للتشكيلة المقترحة. تكمّل؟')) return; const r = await api('/api/admin/plans-studio/preset', {}); D.plans = r.data.plans; render(); msg('✅ اتطبقت: ' + r.data.applied.join('، ')); });
+        if (b.dataset.grantTrial !== undefined) return run(b, async () => { const email = v('paGrantEmail').value.trim(); if (!email) throw new Error('اكتب إيميل العميل'); if (!confirm('تفعّل تجربة مجانية ' + D.config.trial_days + ' أيام لـ ' + email + ' من غير كارت؟')) return; const r = await api('/api/admin/plans-studio/grant-trial', { email }); v('paGrantEmail').value = ''; msg('✅ ' + (r.message || 'اتفعّلت')); });
         if (b.dataset.saveConfig !== undefined) return run(b, async () => {
             const packs = {}, services = {};
             root.querySelectorAll('[data-pq]').forEach(i => { const k = i.dataset.pq; packs[k] = { qty: +i.value, price: +root.querySelector(`[data-pp="${k}"]`).value, enabled: root.querySelector(`[data-pe="${k}"]`).checked }; });
             root.querySelectorAll('[data-su]').forEach(i => { const k = i.dataset.su; services[k] = { unit: +i.value, enabled: root.querySelector(`[data-se="${k}"]`).checked }; });
-            const r = await api('/api/admin/plans-studio/config', { config: { trial_enabled: v('paTrial').checked, trial_days: +v('paTrialDays').value, trial_plan: v('paTrialPlan').value, builder_enabled: v('paBuilder').checked, packs, services } });
+            const r = await api('/api/admin/plans-studio/config', { config: { trial_enabled: v('paTrial').checked, trial_days: +v('paTrialDays').value, trial_requires_card: v('paTrialCard').checked, trial_card_usd: +v('paTrialCardUsd').value, trial_caps: Object.fromEntries([...root.querySelectorAll('[data-tc]')].map(i => [i.dataset.tc, +i.value])), trial_plan: v('paTrialPlan').value, builder_enabled: v('paBuilder').checked, packs, services } });
             D.config = r.data.config; render(); msg('✅ اتحفظ');
         });
         if (b.dataset.saveRates !== undefined) return run(b, async () => {

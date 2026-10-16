@@ -79,7 +79,7 @@ XML;
             $price = CurrencyService::format($min, CurrencyService::forViewer($this->user ?? null), $isAr);
             $cfg = (new PlanExtras())->config();
             $txt = sprintf($isAr ? 'الباقات تبدأ من %s / شهر' : 'Plans from %s / month', $price)
-                . (!empty($cfg['trial_enabled']) ? sprintf($isAr ? ' · تجربة مجانية %d يوم' : ' · %d-day free trial', (int) $cfg['trial_days']) : '');
+                . (!empty($cfg['trial_enabled']) ? sprintf($isAr ? ((int) $cfg['trial_days'] <= 10 ? ' · تجربة مجانية %d أيام' : ' · تجربة مجانية %d يوم') : ' · %d-day free trial', (int) $cfg['trial_days']) : '');
             return '<div class="hero-from" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px;font-size:14px;opacity:.92' . ($center ? ';justify-content:center' : '') . '">'
                 . '<a href="/pricing" style="color:inherit">' . htmlspecialchars($txt, ENT_QUOTES, 'UTF-8') . '</a><span data-tf-currency="compact"></span></div>';
         } catch (Throwable $e) {

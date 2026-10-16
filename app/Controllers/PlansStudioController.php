@@ -120,7 +120,7 @@ class PlansStudioController extends Controller
             $balance = (new WalletService())->getBalance($uid);
             return $this->success([
                 'currency' => $cur, 'currencies' => CurrencyService::publicList($ar), 'rate' => CurrencyService::rate($cur),
-                'plans' => $plans, 'current' => $current, 'trial' => ['eligible' => $x->trialEligible($uid), 'days' => $cfg['trial_days'], 'plan' => $cfg['trial_plan']],
+                'plans' => $plans, 'current' => $current, 'trial' => ['eligible' => $x->trialEligible($uid), 'days' => $cfg['trial_days'], 'plan' => $cfg['trial_plan'], 'needs_card' => $x->trialNeedsCard($uid), 'card_usd' => $cfg['trial_card_usd'], 'card_money' => $this->money($cfg['trial_card_usd'], $cur), 'caps' => $cfg['trial_caps']],
                 'packs' => $packs, 'builder' => ['enabled' => $cfg['builder_enabled'], 'services' => $services],
                 'wallet' => $this->money($balance, $cur), 'csrf_token' => Csrf::token(),
             ]);
@@ -141,6 +141,14 @@ class PlansStudioController extends Controller
         try {
             $r = (new PlanExtras())->startTrial($this->owner());
             return $this->success($r, 'التجربة المجانية بدأت 🎉');
+        } catch (DomainException $e) {
+            $d = json_decode($e->getMessage(), true) ?: [];
+            if (($d['error'] ?? '') === 'card_required') {
+                require_once __DIR__ . '/../Services/Payment/XPayGateway.php';
+                $ready = (new XPayGateway())->isReady();
+                return $this->error($ready ? 'التجربة المجانية بتبدأ بعد تأكيد كارتك.' : 'التجربة المجانية محتاجة تأكيد كارت، والدفع بالكارت مش متاح دلوقتي. كلّمنا على واتساب نفعّلهالك.', 402, ['card_required' => true, 'card_ready' => $ready, 'card_usd' => (float) ($d['card_usd'] ?? 1)]);
+            }
+            return $this->fail($e);
         } catch (Throwable $e) {
             return $this->fail($e);
         }
@@ -238,7 +246,7 @@ class PlansStudioController extends Controller
         }
         header('Cache-Control: private, no-store');
         $x = new PlanExtras();
-        return $this->success(['config' => $x->config(), 'preset' => PlanExtras::PRESET, 'plans' => BillingPlanCatalog::read(), 'rates' => CurrencyService::rates(), 'currencies' => CurrencyService::CURRENCIES, 'auto_local' => (new SystemSettingsService())->get('fx_auto_local', '0') === '1', 'fx_auto' => CurrencyService::autoConfig(), 'csrf_token' => Csrf::token()]);
+        return $this->success(['config' => $x->config(), 'preset' => PlanExtras::PRESET, 'trial_labels' => PlanExtras::TRIAL_LABELS, 'plans' => BillingPlanCatalog::read(), 'rates' => CurrencyService::rates(), 'currencies' => CurrencyService::CURRENCIES, 'auto_local' => (new SystemSettingsService())->get('fx_auto_local', '0') === '1', 'fx_auto' => CurrencyService::autoConfig(), 'csrf_token' => Csrf::token()]);
     }
 
     private function adminGuard(): ?array
@@ -257,6 +265,32 @@ class PlansStudioController extends Controller
         }
         $in = $this->get('config', []);
         return $this->success(['config' => (new PlanExtras())->saveConfig(is_array($in) ? $in : [])], 'اتحفظ');
+    }
+
+    /** POST /api/admin/plans-studio/grant-trial {email} - تجربة مجانية لعميل من غير كارت */
+    public function adminGrantTrial(array $params = []): array
+    {
+        if ($e = $this->adminGuard()) {
+            return $e;
+        }
+        $email = strtolower(trim((string) $this->get('email', '')));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->error('اكتب إيميل العميل صح', 422);
+        }
+        $u = $this->db->query('SELECT id, owner_user_id, company_name FROM users WHERE LOWER(email) = ? LIMIT 1', [$email]);
+        if (!$u) {
+            return $this->error('مفيش حساب بالإيميل ده', 404);
+        }
+        $uid = (int) ($u[0]['owner_user_id'] ?: $u[0]['id']);
+        try {
+            $r = (new PlanExtras())->startTrial($uid, true);
+            $this->log('Admin granted free trial without card', ['user_id' => $uid, 'days' => $r['days']]);
+            return $this->success($r + ['company' => (string) $u[0]['company_name']], 'اتفعّلت التجربة المجانية لـ ' . ($u[0]['company_name'] ?: $email) . ' لحد ' . substr($r['ends_at'], 0, 10));
+        } catch (InvalidArgumentException $e) {
+            return $this->error('العميل ده عنده اشتراك أو تجربة شغالة بالفعل.', 422);
+        } catch (Throwable $e) {
+            return $this->fail($e);
+        }
     }
 
     /** POST /api/admin/plans-studio/preset */
