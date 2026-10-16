@@ -49,3 +49,10 @@
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
 })();
+
+/* زر العملة (ملف لوحده عشان صفحات تانية تستخدمه من غير زر الوضع الداكن) */
+(function () {
+    if (window.TFCurrencyLoaded || document.querySelector('script[src*="tf-currency.js"]')) return;
+    var s = document.createElement('script'); s.src = '/assets/js/tf-currency.js?v=1'; s.defer = true;
+    (document.head || document.documentElement).appendChild(s);
+})();

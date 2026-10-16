@@ -61,12 +61,40 @@ XML;
         exit;
     }
 
+    /** "الباقات تبدأ من ..." بعملة الزائر + زر العملة */
+    private function fromPrice(bool $center): string
+    {
+        try {
+            require_once dirname(__DIR__) . '/Services/Payment/CurrencyService.php';
+            require_once dirname(__DIR__) . '/Services/Subscription/BillingPlanCatalog.php';
+            require_once dirname(__DIR__) . '/Services/Subscription/PlanExtras.php';
+            $min = 0.0;
+            foreach (BillingPlanCatalog::read() as $p) {
+                $m = (float) ($p['price_monthly'] ?? 0);
+                if ($m > 0 && ($min === 0.0 || $m < $min)) $min = $m;
+            }
+            if ($min <= 0) return '';
+            header('Vary: Cookie, Accept-Language');
+            $isAr = current_lang() === 'ar';
+            $price = CurrencyService::format($min, CurrencyService::forViewer($this->user ?? null), $isAr);
+            $cfg = (new PlanExtras())->config();
+            $txt = sprintf($isAr ? 'الباقات تبدأ من %s / شهر' : 'Plans from %s / month', $price)
+                . (!empty($cfg['trial_enabled']) ? sprintf($isAr ? ' · تجربة مجانية %d يوم' : ' · %d-day free trial', (int) $cfg['trial_days']) : '');
+            return '<div class="hero-from" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px;font-size:14px;opacity:.92' . ($center ? ';justify-content:center' : '') . '">'
+                . '<a href="/pricing" style="color:inherit">' . htmlspecialchars($txt, ENT_QUOTES, 'UTF-8') . '</a><span data-tf-currency="compact"></span></div>';
+        } catch (Throwable $e) {
+            return '';
+        }
+    }
+
     private function renderHomePage(string $appName): string
     {
         $year = date('Y');
         $lang = current_lang();
         $dir = current_dir();
 
+        $fromPriceHero = $this->fromPrice(false);
+        $fromPriceCta = $this->fromPrice(true);
         $langMenu = '';
         foreach (language_switcher_links() as $l) {
             $activeClass = $l['active'] ? ' on' : '';
@@ -121,6 +149,7 @@ XML;
     <link rel="stylesheet" href="/assets/css/compass.css">
     <link rel="stylesheet" href="/assets/css/home-pro.css">
     <link rel="stylesheet" href="/assets/css/home-3d.css">
+    <script src="/assets/js/tf-currency.js?v=1" defer></script>
 </head>
 <body class="compass">
 <script>document.documentElement.classList.add('js-ready')</script>
@@ -161,6 +190,7 @@ XML;
                 <a href="/register" class="btn-primary">{$this->tr('hero.cta_primary')}</a>
                 <a href="/help" class="cta-ghost">{$this->tr('hero.cta_secondary')}</a>
             </div>
+            {$fromPriceHero}
         </div>
 
         <div class="globe-stage" id="globeStage">
@@ -406,6 +436,7 @@ XML;
                 <a href="/register" class="btn-primary">{$this->tr('finalcta.cta')}</a>
                 <a href="/pricing" class="cta-ghost">{$this->tr('finalcta.cta_secondary')}</a>
             </div>
+            {$fromPriceCta}
         </div>
     </section>
 

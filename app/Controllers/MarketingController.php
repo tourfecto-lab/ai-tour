@@ -43,6 +43,32 @@ class MarketingController extends Controller
     // ================================================================== الرئيسية
 
     /** GET / */
+    /** الرئيسية: "الباقات تبدأ من ..." بعملة الزائر + زر العملة */
+    private function fromPrice(): string
+    {
+        try {
+            require_once __DIR__ . '/../Services/Payment/CurrencyService.php';
+            require_once __DIR__ . '/../Services/Subscription/BillingPlanCatalog.php';
+            $min = 0.0;
+            foreach (BillingPlanCatalog::read() as $p) {
+                $m = (float) ($p['price_monthly'] ?? 0);
+                if ($m > 0 && ($min === 0.0 || $m < $min)) $min = $m;
+            }
+            if ($min <= 0) return '';
+            header('Vary: Cookie, Accept-Language');
+            $isAr = $this->t(['ar', 'en']) === 'ar';
+            $price = CurrencyService::format($min, CurrencyService::forViewer($this->user ?? null), $isAr);
+            require_once __DIR__ . '/../Services/Subscription/PlanExtras.php';
+            $cfg = (new PlanExtras())->config();
+            $trial = !empty($cfg['trial_enabled']) ? sprintf($this->t([' · تجربة مجانية %d يوم', ' · %d-day free trial']), (int) $cfg['trial_days']) : '';
+            return '<div class="hero-from" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;margin-top:14px;font-size:14px;opacity:.9">'
+                . '<a href="/pricing" style="color:inherit">' . $this->e(sprintf($this->t(['الباقات تبدأ من %s / شهر', 'Plans from %s / month']), $price) . $trial) . '</a>'
+                . '<span data-tf-currency="compact"></span></div>';
+        } catch (Throwable $e) {
+            return '';
+        }
+    }
+
     public function home(array $params = []): array
     {
         $h = MarketingContent::home();
@@ -85,7 +111,7 @@ class MarketingController extends Controller
             . '<div><div class="eyebrow"><span class="p"></span>' . $this->te($h['eyebrow']) . '</div>'
             . '<h1>' . $this->e($l1) . ' <span class="grad">' . $this->e($grad) . '</span> ' . $this->e($l2) . '</h1>'
             . '<p class="sub">' . $this->te($h['sub']) . '</p>'
-            . '<div class="hero-ctas"><a href="/register" class="btn-primary">' . $this->te($h['cta1']) . '</a><a href="/demo" class="cta-ghost">' . $this->te($h['cta2']) . '</a></div></div>'
+            . '<div class="hero-ctas"><a href="/register" class="btn-primary">' . $this->te($h['cta1']) . '</a><a href="/demo" class="cta-ghost">' . $this->te($h['cta2']) . '</a></div>' . $this->fromPrice() . '</div>'
             . '<div class="globe-stage" id="globeStage"><div class="hero-map" id="heroMap" role="img" aria-label="' . $this->te($h['eyebrow']) . '"></div>'
             . '<div class="orbit-card oc1"><div class="n" data-count="48200" data-prefix="$">$0</div><div class="l">' . $this->te($cards[0]) . '</div></div>'
             . '<div class="orbit-card oc2"><div class="n" data-count="4.9" data-decimal="1">0</div><div class="l">' . $this->te($cards[1]) . '</div></div>'

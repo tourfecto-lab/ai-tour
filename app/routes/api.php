@@ -1674,6 +1674,7 @@ $router->post('/api/admin/currency/rates', 'PlansStudioController', 'adminSaveRa
 $router->post('/api/admin/currency/refresh', 'PlansStudioController', 'adminRefreshRates', ['AuthMiddleware','AdminMiddleware']);
 // الباقات المرنة والعملات (العميل)
 $router->post('/api/currency', 'PlansStudioController', 'setCurrency', []);
+$router->get('/api/currency', 'PlansStudioController', 'currencies', []);
 $router->get('/api/plans/overview', 'PlansStudioController', 'overview', ['AuthMiddleware']);
 $router->post('/api/plans/trial', 'PlansStudioController', 'trial', ['AuthMiddleware']);
 $router->post('/api/plans/addon', 'PlansStudioController', 'addon', ['AuthMiddleware']);

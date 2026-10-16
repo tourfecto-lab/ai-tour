@@ -55,6 +55,14 @@ class PlansStudioController extends Controller
     // ------------------------------------------------------------------ عام
 
     /** POST /api/currency - اختيار عملة العرض */
+    /** GET /api/currency - زر العملة في كل صفحات الموقع ولوحة العميل */
+    public function currencies(array $params = []): array
+    {
+        header('Cache-Control: private, max-age=300');
+        $ar = $this->ar();
+        return $this->success(['current' => CurrencyService::forViewer($this->user ?? null), 'list' => CurrencyService::publicList($ar)]);
+    }
+
     public function setCurrency(array $params = []): array
     {
         $code = strtoupper((string) $this->get('code', ''));
