@@ -95,13 +95,14 @@ $d2 = json_decode($pdo->query('SELECT generation_meta FROM media_items WHERE id=
 check(($d2['format'] ?? '') === 'card', 'card post rendered');
 
 echo "import from website\n";
-$jpg = function (int $w, int $h, bool $plain = false) { $i = imagecreatetruecolor($w, $h); imagefill($i, 0, 0, imagecolorallocate($i, 30, 90, 160)); if (!$plain) { imagefilledellipse($i, (int) ($w / 2), (int) ($h / 2), (int) ($w / 2), (int) ($h / 2), imagecolorallocate($i, 250, 200, 60)); } ob_start(); imagejpeg($i); return ob_get_clean(); };
+// كل صورة شكلها مختلف (عشان كشف التكرار ما يعتبرهاش نفس الصورة)
+$jpg = function (int $w, int $h, bool $plain = false, int $pos = 0) { $i = imagecreatetruecolor($w, $h); imagefill($i, 0, 0, imagecolorallocate($i, 30, 90, 160)); if (!$plain) { imagefilledellipse($i, (int) ($w * (0.2 + 0.3 * $pos)), (int) ($h * ($pos === 1 ? 0.75 : 0.3)), (int) ($w / 3), (int) ($h / 3), imagecolorallocate($i, 250, 200, 60)); } ob_start(); imagejpeg($i); return ob_get_clean(); };
 $files = [
     'https://luxor-test.com/' => '<html><head><meta property="og:image" content="/img/hero.jpg"></head><body><img src="/img/logo.png" alt="logo"><img src="/img/flag.jpg"><a href="/tours/nile-cruise">Nile cruise</a><a href="https://other.com/tours">x</a><a href="/contact">Contact</a><img src="data:image/gif;base64,R0" data-src="/img/lazy.jpg" alt="Hot air balloon"></body></html>',
     'https://luxor-test.com/tours/nile-cruise' => '<img srcset="/img/cruise-400.jpg 400w, /img/cruise-1200.jpg 1200w" alt="Nile cruise deck"><img src="/img/thumb.jpg" width="80"><div style="background-image:url(\'/img/bg.jpg\')"></div><img src="/img/small.jpg">',
     'https://luxor-test.com/img/hero.jpg' => $jpg(1600, 900),
-    'https://luxor-test.com/img/lazy.jpg' => $jpg(1000, 1000),
-    'https://luxor-test.com/img/cruise-1200.jpg' => $jpg(1200, 800),
+    'https://luxor-test.com/img/lazy.jpg' => $jpg(1000, 1000, false, 1),
+    'https://luxor-test.com/img/cruise-1200.jpg' => $jpg(1200, 800, false, 2),
     'https://luxor-test.com/img/bg.jpg' => $jpg(1400, 700, true),
     'https://luxor-test.com/img/small.jpg' => $jpg(300, 200),
 ];
@@ -118,6 +119,24 @@ $first = $pdo->query('SELECT file_path,width,height FROM media_items WHERE id=' 
 check(is_file($tmp . $first['file_path']) && $first['width'] / $first['height'] <= 1.91 && $first['width'] / $first['height'] >= 0.8, 'saved in Instagram ratio');
 $r2 = $imp->import($uid, $wid);
 check($r2['added'] === [] && strpos($r2['message'], 'موجودة') !== false, 'second import adds no duplicates');
+
+echo "no duplicates\n";
+// نفس صورة الهيرو بمقاس أصغر ورابط مختلف
+$files2 = $files;
+$big = imagecreatefromstring($files['https://luxor-test.com/img/hero.jpg']);
+$smallV = imagecreatetruecolor(1000, 563); imagecopyresampled($smallV, $big, 0, 0, 0, 0, 1000, 563, 1600, 900); ob_start(); imagejpeg($smallV, null, 70); $resized = ob_get_clean();
+$files2['https://luxor-test.com/'] = '<img src="/img/hero-1000x563.jpg" alt="hero again">';
+$files2['https://luxor-test.com/img/hero-1000x563.jpg'] = $resized;
+$r3 = (new SiteImageImporter($pdo, $tmp, function ($url) use ($files2) { return isset($files2[$url]) ? ['body' => $files2[$url], 'url' => $url] : null; }))->import($uid, $wid);
+check($r3['added'] === [], 'resized copy at another URL not imported again');
+file_put_contents($tmp . '/up.jpg', $resized);
+$before = (int) $pdo->query("SELECT COUNT(*) FROM media_items WHERE user_id=$uid")->fetchColumn();
+$u = SocialMediaUpload::handle($uid, ['tmp_name' => $tmp . '/up.jpg', 'error' => UPLOAD_ERR_OK, 'name' => 'hero.jpg', 'type' => 'image/jpeg'], $tmp);
+check(!empty($u['duplicate']) && in_array($u['item']['id'], $r['added'], true), 'uploading the same photo returns the existing one');
+check((int) $pdo->query("SELECT COUNT(*) FROM media_items WHERE user_id=$uid")->fetchColumn() === $before, 'no new library row');
+$u2 = SocialMediaUpload::handle($uid, ['tmp_name' => $tmp . '/logo.png', 'error' => UPLOAD_ERR_OK, 'name' => 'new.png', 'type' => 'image/png'], $tmp);
+check($u2['ok'] && empty($u2['duplicate']), 'a different photo uploads normally');
+check(PrivateMedia::socialFile('/uploads/social/5/a.jpg') === null && PrivateMedia::socialFile('/uploads/social/../x.jpg') === null, 'social paths validated');
 
 $pdo->exec("DELETE FROM media_items WHERE user_id=$uid");
 $pdo->exec("DELETE FROM brand_profiles WHERE user_id=$uid");

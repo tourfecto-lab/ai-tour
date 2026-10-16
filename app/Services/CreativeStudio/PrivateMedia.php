@@ -42,11 +42,17 @@ class PrivateMedia
         if($m[1]===''){$length=min($size,(int)$m[2]);if($length<1)throw new InvalidArgumentException('Invalid range');return [$size-$length,$size-1,206];}
         $start=(int)$m[1];$end=$m[2]===''?$size-1:min($size-1,(int)$m[2]);if($start>=$size||$end<$start)throw new InvalidArgumentException('Invalid range');return [$start,$end,206];
     }
+    /** صور العميل اللي اترفعت أو اتسحبت من موقعه (/uploads/social/{user}/...) */
+    public static function socialFile(string $path): ?string
+    {
+        if(!preg_match('#^/uploads/social/[1-9][0-9]*/[a-zA-Z0-9_.-]+\.(jpg|jpeg|png|webp|mp4|mov)$#D',$path))return null;
+        $full=ROOT_PATH.'/public_html'.$path;return is_file($full)&&!is_link($full)?$full:null;
+    }
     public static function stream(string $path,int $id,bool $download=false): void
     {
-        $full=self::resolve($path);$size=filesize($full);if($size===false)throw new RuntimeException('Asset unavailable');
+        $full=self::socialFile($path)??self::resolve($path);$size=filesize($full);if($size===false)throw new RuntimeException('Asset unavailable');
         try{[$start,$end,$status]=self::byteRange($_SERVER['HTTP_RANGE']??null,$size);}catch(InvalidArgumentException $e){http_response_code(416);header('Content-Range: bytes */'.$size);return;}
-        $mime=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','mp4'=>'video/mp4'][pathinfo($full,PATHINFO_EXTENSION)];
+        $mime=['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','webp'=>'image/webp','mp4'=>'video/mp4','mov'=>'video/quicktime'][strtolower(pathinfo($full,PATHINFO_EXTENSION))];
         header('Content-Type: '.$mime);header('X-Content-Type-Options: nosniff');header('Cache-Control: private, no-store');header('Referrer-Policy: no-referrer');header('Accept-Ranges: bytes');http_response_code($status);
         if($status===206)header('Content-Range: bytes '.$start.'-'.$end.'/'.$size);header('Content-Length: '.($end-$start+1));if($download)header('Content-Disposition: attachment; filename="tourfecto-'.$id.'.'.pathinfo($full,PATHINFO_EXTENSION).'"');
         if(($_SERVER['REQUEST_METHOD']??'GET')==='HEAD')return;

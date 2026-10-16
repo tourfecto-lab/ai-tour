@@ -46,7 +46,7 @@ class GenerationOptions
         $meta=json_decode((string)($row['generation_meta']??'{}'),true);$out['settings']=is_array($meta)?array_intersect_key($meta,array_flip(['style','platform','options','output'])):[];
         $billing=is_array($meta)?($meta['billing']??null):null;
         $out['usage']=is_array($billing)?array_intersect_key($billing,array_flip(['source','amount','currency','key','settled'])):null;
-        foreach(['file_path','thumbnail_path'] as $key){$p=$out[$key]??null;$out[$key]=is_string($p)&&PrivateMedia::valid($p)?PrivateMedia::preview($out['id'],$key==='thumbnail_path'):null;}
+        foreach(['file_path','thumbnail_path'] as $key){$p=$out[$key]??null;$out[$key]=is_string($p)&&(PrivateMedia::valid($p)||PrivateMedia::socialFile($p))?PrivateMedia::preview($out['id'],$key==='thumbnail_path'):null;}
         if(($out['status']??'')!=='completed'||!empty($out['deleted_at'])){$out['file_path']=null;$out['thumbnail_path']=null;}
         $out['is_favorite']=(bool)($out['is_favorite']??false);
         $out['error_message']=($out['status']??'')==='failed'?'لم يكتمل التوليد. جرّب وصفًا أوضح أو تواصل مع الدعم برقم الطلب.':null;

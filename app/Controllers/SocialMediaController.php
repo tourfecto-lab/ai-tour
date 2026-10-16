@@ -557,7 +557,7 @@ JS;
         if (!$r['ok']) {
             return $this->error($r['error'], 422);
         }
-        return $this->success(['item' => $r['item']], 'اترفع', 201);
+        return $this->success(['item' => $r['item'], 'duplicate' => !empty($r['duplicate'])], !empty($r['duplicate']) ? 'الصورة دي موجودة في مكتبتك بالفعل' : 'اترفع', 201);
     }
 
     /** POST /api/social/brand-kit - لوجو وألوان الشركة اللي بتتحط على التصميمات */
@@ -592,8 +592,28 @@ JS;
         require_once __DIR__ . '/../Services/SocialMedia/SiteImageImporter.php';
         @set_time_limit(90);
         try {
-            $r = (new SiteImageImporter())->import((int) $this->user['id'], (int) $this->get('website_id', 0), 20);
-            return $this->success($r, $r['message']);
+            $uid = (int) $this->user['id'];
+            $wid = (int) $this->get('website_id', 0);
+            $importer = new SiteImageImporter();
+            if ($wid > 0) {
+                $r = $importer->import($uid, $wid, 20);
+                return $this->success($r, $r['message']);
+            }
+            // من غير موقع محدد (مكتبة الاستوديو): كل مواقع العميل المربوطة
+            $sites = $this->db->query('SELECT id FROM websites WHERE user_id = ? ORDER BY id DESC LIMIT 3', [$uid]) ?: [];
+            if (!$sites) {
+                return $this->error('اربط موقعك الأول من "مواقعي" عشان نسحب صوره', 422);
+            }
+            $importer->budgetSeconds = (int) floor(38 / count($sites));
+            $added = [];
+            $found = 0;
+            foreach ($sites as $site) {
+                $r = $importer->import($uid, (int) $site['id'], max(5, (int) floor(20 / count($sites))));
+                $added = array_merge($added, $r['added']);
+                $found += $r['found'];
+            }
+            $msg = $added ? 'سحبنا ' . count($added) . ' صورة من موقعك.' : ($found ? 'كل صور موقعك المناسبة موجودة في مكتبتك بالفعل.' : 'مالقيناش صور كبيرة كفاية على موقعك. ارفع صورك من جهازك.');
+            return $this->success(['added' => $added, 'found' => $found, 'message' => $msg], $msg);
         } catch (InvalidArgumentException $e) {
             return $this->error('اختار الموقع', 422);
         } catch (Throwable $e) {

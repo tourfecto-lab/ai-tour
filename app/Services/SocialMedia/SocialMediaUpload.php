@@ -63,13 +63,31 @@ class SocialMediaUpload
         $img = self::fit($img);
         $name = $base . '.jpg';
         $ok = imagejpeg($img, $dir . '/' . $name, 88);
+        // الصورة دي موجودة في المكتبة قبل كده؟ نرجّع القديمة بدل ما تتكرر
+        $phash = null;
+        if ($ok && class_exists('Database')) {
+            require_once __DIR__ . '/SiteImageImporter.php';
+            try {
+                $phash = SiteImageImporter::phash((string) file_get_contents($dir . '/' . $name));
+                $dup = $phash ? SiteImageImporter::duplicateOf(Database::getInstance()->getConnection(), $userId, $phash) : null;
+                if ($dup) {
+                    imagedestroy($img);
+                    @unlink($dir . '/' . $name);
+                    $r = Database::getInstance()->getConnection()->prepare('SELECT file_path FROM media_items WHERE id=?');
+                    $r->execute([$dup]);
+                    return ['ok' => true, 'duplicate' => true, 'item' => ['id' => $dup, 'type' => 'social_image', 'file_path' => (string) $r->fetchColumn(), 'is_video' => false]];
+                }
+            } catch (Throwable $e) {
+                $phash = null;
+            }
+        }
         $w = imagesx($img);
         $h = imagesy($img);
         imagedestroy($img);
         if (!$ok) {
             return ['ok' => false, 'error' => 'تعذر حفظ الصورة'];
         }
-        return self::saveItem($userId, 'social_image', '/uploads/social/' . $userId . '/' . $name, $w, $h, (string) ($file['name'] ?? ''));
+        return self::saveItem($userId, 'social_image', '/uploads/social/' . $userId . '/' . $name, $w, $h, (string) ($file['name'] ?? ''), $phash);
     }
 
     private static function moveFile(string $tmp, string $dest): bool
@@ -130,7 +148,7 @@ class SocialMediaUpload
         return $out;
     }
 
-    private static function saveItem(int $userId, string $type, string $path, ?int $w, ?int $h, string $origName): array
+    private static function saveItem(int $userId, string $type, string $path, ?int $w, ?int $h, string $origName, ?string $phash = null): array
     {
         $label = 'رفع من الجهاز' . ($origName !== '' ? ': ' . mb_substr(preg_replace('/[^\p{L}\p{N}._ -]+/u', '', $origName), 0, 120) : '');
         $item = new MediaItem([
@@ -142,6 +160,7 @@ class SocialMediaUpload
             'width' => $w,
             'height' => $h,
             'status' => 'completed',
+            'generation_meta' => json_encode(['source' => 'upload'] + ($phash ? ['phash' => $phash] : [])),
         ]);
         $item->save();
         return ['ok' => true, 'item' => [

@@ -97,10 +97,15 @@ class SiteImageImporter
             if ($jpeg === null) {
                 continue;
             }
+            // نفس الصورة بمقاس أو رابط تاني = مكررة
+            $phash = self::phash($jpeg[0]);
+            if ($phash !== null && self::duplicateOf($this->pdo, $uid, $phash) !== null) {
+                continue;
+            }
             $path = '/uploads/social/' . $uid . '/site_' . date('Ymd') . '_' . bin2hex(random_bytes(6)) . '.jpg';
             file_put_contents($this->publicRoot . $path, $jpeg[0]);
             $label = $c['alt'] !== '' ? $c['alt'] : urldecode(pathinfo((string) parse_url($url, PHP_URL_PATH), PATHINFO_FILENAME));
-            $meta = ['source' => 'site_import', 'src' => $url, 'page' => $c['page']];
+            $meta = ['source' => 'site_import', 'src' => $url, 'page' => $c['page'], 'phash' => $phash];
             $this->pdo->prepare("INSERT INTO media_items(user_id,type,prompt,file_path,thumbnail_path,width,height,status,generation_meta) VALUES(?,'social_image',?,?,?,?,?,'completed',?)")
                 ->execute([$uid, mb_substr('من موقعك: ' . $label, 0, 250), $path, $path, $jpeg[1], $jpeg[2], json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
             $added[] = (int) $this->pdo->lastInsertId();
@@ -109,6 +114,50 @@ class SiteImageImporter
             ? 'سحبنا ' . count($added) . ' صورة من موقعك.'
             : ($candidates ? 'كل صور موقعك المناسبة موجودة في مكتبتك بالفعل، أو صغيرة أوي للنشر.' : 'مالقيناش صور كبيرة كفاية على موقعك. ارفع صورك من جهازك.');
         return ['added' => $added, 'found' => count($candidates), 'message' => $msg];
+    }
+
+    /** بصمة الصورة (8x8): بتفضل زي ما هي لو الصورة اتصغرت أو اتضغطت */
+    public static function phash(string $binary): ?string
+    {
+        $im = @imagecreatefromstring($binary);
+        if (!$im) {
+            return null;
+        }
+        $s = imagecreatetruecolor(8, 8);
+        imagecopyresampled($s, $im, 0, 0, 0, 0, 8, 8, imagesx($im), imagesy($im));
+        imagedestroy($im);
+        $g = [];
+        for ($y = 0; $y < 8; $y++) {
+            for ($x = 0; $x < 8; $x++) {
+                $c = imagecolorat($s, $x, $y);
+                $g[] = (($c >> 16) & 255) * 0.299 + (($c >> 8) & 255) * 0.587 + ($c & 255) * 0.114;
+            }
+        }
+        imagedestroy($s);
+        $avg = array_sum($g) / 64;
+        $bits = '';
+        foreach ($g as $v) {
+            $bits .= $v >= $avg ? '1' : '0';
+        }
+        return str_pad(base_convert(substr($bits, 0, 32), 2, 16), 8, '0', STR_PAD_LEFT) . str_pad(base_convert(substr($bits, 32), 2, 16), 8, '0', STR_PAD_LEFT);
+    }
+
+    /** رقم صورة موجودة في مكتبة العميل شبه الصورة دي، أو null */
+    public static function duplicateOf(PDO $pdo, int $uid, string $phash): ?int
+    {
+        $s = $pdo->prepare("SELECT id,generation_meta FROM media_items WHERE user_id=? AND deleted_at IS NULL AND generation_meta LIKE '%\"phash\"%' ORDER BY id DESC LIMIT 3000");
+        $s->execute([$uid]);
+        foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $h = json_decode((string) $r['generation_meta'], true)['phash'] ?? null;
+            if (is_string($h) && strlen($h) === 16) {
+                $d = substr_count(str_pad(decbin(hexdec(substr($h, 0, 8)) ^ hexdec(substr($phash, 0, 8))), 32, '0', STR_PAD_LEFT), '1')
+                    + substr_count(str_pad(decbin(hexdec(substr($h, 8)) ^ hexdec(substr($phash, 8))), 32, '0', STR_PAD_LEFT), '1');
+                if ($d <= 4) {
+                    return (int) $r['id'];
+                }
+            }
+        }
+        return null;
     }
 
     private function alreadyImported(int $uid, string $url): bool
