@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/../../cron/bootstrap.php';
 require_once ROOT_PATH . '/app/Services/SocialMedia/SocialMonthlyPlanService.php';
+require_once ROOT_PATH . '/app/Services/SocialMedia/SiteImageImporter.php';
 $fails = 0; $n = 0;
 function check($c, $m) { global $fails, $n; $n++; echo ($c ? '  ok  ' : '  FAIL ') . $m . "\n"; if (!$c) $fails++; }
 
@@ -92,6 +93,31 @@ $d1 = json_decode($pdo->query('SELECT generation_meta FROM media_items WHERE id=
 check(($d1['source'] ?? '') === 'brand_design' && $d1['base_media_id'] === $mid, 'design post built on a photo (video pick replaced)');
 $d2 = json_decode($pdo->query('SELECT generation_meta FROM media_items WHERE id=' . (int) $posts[2]['media_id'])->fetchColumn(), true);
 check(($d2['format'] ?? '') === 'card', 'card post rendered');
+
+echo "import from website\n";
+$jpg = function (int $w, int $h, bool $plain = false) { $i = imagecreatetruecolor($w, $h); imagefill($i, 0, 0, imagecolorallocate($i, 30, 90, 160)); if (!$plain) { imagefilledellipse($i, (int) ($w / 2), (int) ($h / 2), (int) ($w / 2), (int) ($h / 2), imagecolorallocate($i, 250, 200, 60)); } ob_start(); imagejpeg($i); return ob_get_clean(); };
+$files = [
+    'https://luxor-test.com/' => '<html><head><meta property="og:image" content="/img/hero.jpg"></head><body><img src="/img/logo.png" alt="logo"><img src="/img/flag.jpg"><a href="/tours/nile-cruise">Nile cruise</a><a href="https://other.com/tours">x</a><a href="/contact">Contact</a><img src="data:image/gif;base64,R0" data-src="/img/lazy.jpg" alt="Hot air balloon"></body></html>',
+    'https://luxor-test.com/tours/nile-cruise' => '<img srcset="/img/cruise-400.jpg 400w, /img/cruise-1200.jpg 1200w" alt="Nile cruise deck"><img src="/img/thumb.jpg" width="80"><div style="background-image:url(\'/img/bg.jpg\')"></div><img src="/img/small.jpg">',
+    'https://luxor-test.com/img/hero.jpg' => $jpg(1600, 900),
+    'https://luxor-test.com/img/lazy.jpg' => $jpg(1000, 1000),
+    'https://luxor-test.com/img/cruise-1200.jpg' => $jpg(1200, 800),
+    'https://luxor-test.com/img/bg.jpg' => $jpg(1400, 700, true),
+    'https://luxor-test.com/img/small.jpg' => $jpg(300, 200),
+];
+$fetched = [];
+$fake = function ($url, $max) use ($files, &$fetched) { $fetched[] = $url; return isset($files[$url]) ? ['body' => $files[$url], 'url' => $url] : null; };
+$imp = new SiteImageImporter($pdo, $tmp, $fake);
+$r = $imp->import($uid, $wid);
+check(count($r['added']) === 3, 'imported 3 good photos (' . count($r['added']) . ')');
+check(!in_array('https://luxor-test.com/img/logo.png', $fetched, true) && !in_array('https://luxor-test.com/img/flag.jpg', $fetched, true), 'logo and flag skipped');
+check(!in_array('https://luxor-test.com/img/cruise-400.jpg', $fetched, true) && !in_array('https://luxor-test.com/contact', $fetched, true) && !in_array('https://other.com/tours', $fetched, true), 'largest srcset, only tour pages on same site');
+$labels = $pdo->query("SELECT prompt FROM media_items WHERE user_id=$uid AND generation_meta LIKE '%site_import%'")->fetchAll(PDO::FETCH_COLUMN);
+check(in_array('من موقعك: Nile cruise deck', $labels, true), 'alt text kept as label');
+$first = $pdo->query('SELECT file_path,width,height FROM media_items WHERE id=' . $r['added'][0])->fetch(PDO::FETCH_ASSOC);
+check(is_file($tmp . $first['file_path']) && $first['width'] / $first['height'] <= 1.91 && $first['width'] / $first['height'] >= 0.8, 'saved in Instagram ratio');
+$r2 = $imp->import($uid, $wid);
+check($r2['added'] === [] && strpos($r2['message'], 'موجودة') !== false, 'second import adds no duplicates');
 
 $pdo->exec("DELETE FROM media_items WHERE user_id=$uid");
 $pdo->exec("DELETE FROM brand_profiles WHERE user_id=$uid");

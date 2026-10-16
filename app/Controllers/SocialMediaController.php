@@ -580,6 +580,28 @@ JS;
         }
     }
 
+    /** POST /api/social/media/import-site - سحب صور الرحلات والفنادق من موقع العميل لمكتبته */
+    public function importSiteImages(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if (($error = $this->verifyCsrf()) || ($error = $this->rateLimitGuard('user', 'social_site_import', 4, 300))) {
+            return $error;
+        }
+        require_once __DIR__ . '/../Services/SocialMedia/SiteImageImporter.php';
+        @set_time_limit(90);
+        try {
+            $r = (new SiteImageImporter())->import((int) $this->user['id'], (int) $this->get('website_id', 0), 20);
+            return $this->success($r, $r['message']);
+        } catch (InvalidArgumentException $e) {
+            return $this->error('اختار الموقع', 422);
+        } catch (Throwable $e) {
+            Logger::error('Site image import failed', ['error' => $e->getMessage()]);
+            return $this->error('مقدرناش نسحب الصور من موقعك دلوقتي، جرّب تاني أو ارفع صورك من جهازك', 500);
+        }
+    }
+
     /** POST /api/social/media/{id}/learn - الذكاء الصناعي يشوف الصورة ويفهمها */
     public function learnMedia(array $params = []): array
     {
