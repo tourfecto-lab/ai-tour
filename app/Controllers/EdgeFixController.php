@@ -252,7 +252,7 @@ class EdgeFixController extends Controller
             return $this->error('اكتب اسم المستخدم وكلمة السر بتوع الـ FTP', 422);
         }
         if (!PhpConnectorInstaller::publicHost($host)) {
-            return $this->error('عنوان الـ FTP مش صحيح. هتلاقيه في لوحة الاستضافة في صفحة FTP مكتوب "FTP address" - مثال: ftp://92.113.26.170', 422);
+            return $this->error('عنوان الـ FTP مش صحيح. هتلاقيه في لوحة الاستضافة في صفحة FTP مكتوب "FTP address" - مثال: ftp://123.45.67.89', 422);
         }
         $key = 'edge_ftp_install:' . $this->uid();
         $cache = new Cache();
