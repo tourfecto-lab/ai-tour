@@ -51,6 +51,7 @@ class XPayGateway
             'api_base' => self::cleanBase((string) ($raw['api_base'] ?? '')),
             'last_test' => $raw['last_test'] ?? null,
             'last_error' => $raw['last_error'] ?? null,
+            'account_currency' => $raw['account_currency'] ?? null,
             'last_webhook' => $raw['last_webhook'] ?? null,
             'has_webhook_secret' => $this->settings && $this->settings->get(self::WEBHOOK_SECRET, '') !== '',
         ];
@@ -143,6 +144,18 @@ class XPayGateway
         $this->settings->set(self::CONFIG_KEY, json_encode($raw));
     }
 
+    /** XPay قال إن حسابك بعملة معيّنة: نظبط الإعداد عليها عشان الأدمن يشوفها صح */
+    private function learnAccountCurrency(string $cur): void
+    {
+        if (!$this->settings) {
+            return;
+        }
+        $raw = json_decode($this->settings->get(self::CONFIG_KEY, ''), true) ?: [];
+        $raw['charge_currency'] = $cur;
+        $raw['account_currency'] = $cur;
+        $this->settings->set(self::CONFIG_KEY, json_encode($raw));
+    }
+
     /** رسالة الخطأ اللي XPay رجّعها (من غير أي مفاتيح) */
     private static function errorText(?array $b): string
     {
@@ -194,9 +207,9 @@ class XPayGateway
     // ------------------------------------------------------------------ الدفع
 
     /** المبلغ اللي هيتخصم من العميل بأصغر وحدة (قروش / سنت) */
-    public function chargeFor(float $usd): array
+    public function chargeFor(float $usd, ?string $cur = null): array
     {
-        $cur = $this->config()['charge_currency'];
+        $cur = in_array($cur, ['EGP', 'USD'], true) ? $cur : $this->config()['charge_currency'];
         $minor = $cur === 'USD' ? (int) round($usd * 100) : (int) round($usd * CurrencyService::rate('EGP') * 100);
         return ['currency' => $cur, 'minor' => $minor, 'label' => $cur === 'USD' ? '$' . number_format($usd, 2) : number_format($minor / 100, 2) . ' EGP'];
     }
@@ -227,8 +240,8 @@ class XPayGateway
         $txId = (int) ($db->query('SELECT id FROM payment_transactions WHERE internal_transaction_id = ? LIMIT 1', [$internal])[0]['id'] ?? 0);
 
         $sep = str_contains($returnUrl, '?') ? '&' : '?';
-        $line = [[
-            'priceData' => ['unitAmount' => $charge['minor'], 'currency' => $charge['currency'], 'productData' => ['name' => 'Tourfecto wallet top-up ($' . number_format($usd, 2) . ')']],
+        $lineFor = fn (array $ch) => [[
+            'priceData' => ['unitAmount' => $ch['minor'], 'currency' => $ch['currency'], 'productData' => ['name' => 'Tourfecto wallet top-up ($' . number_format($usd, 2) . ')']],
             'quantity' => 1,
         ]];
         $after = ['type' => 'redirect', 'redirect' => ['url' => $returnUrl . $sep . 'session_id={CHECKOUT_SESSION_ID}']];
@@ -237,25 +250,47 @@ class XPayGateway
         $tries = [];
         $s = [];
         $sid = '';
-        foreach (['embedded', 'hosted'] as $mode) {
-            $r = $this->call('POST', '/checkout/sessions', ['uiMode' => $mode, 'lineItems' => $line, 'afterCompletion' => $after], 'xpay-' . $reference . '-' . $mode);
+        $modes = ['embedded', 'hosted'];
+        $mi = 0;
+        $switched = false;
+        for ($attempt = 0; $attempt < 4 && $mi < count($modes); $attempt++) {
+            $mode = $modes[$mi];
+            $r = $this->call('POST', '/checkout/sessions', ['uiMode' => $mode, 'lineItems' => $lineFor($charge), 'afterCompletion' => $after], 'xpay-' . $reference . '-' . $mode . '-' . $charge['currency']);
             $s = $r['body'] ?? [];
             $sid = (string) ($s['id'] ?? '');
             if ($r['code'] < 300 && $sid !== '') {
                 break;
             }
-            $tries[] = $mode . ' → ' . $r['code'] . ($r['body'] ? ' (' . self::errorText($r['body']) . ')' : '');
+            $err = self::errorText($r['body']);
+            $tries[] = $mode . ' → ' . $r['code'] . ($err !== '' ? ' (' . $err . ')' : '');
             $sid = '';
+            // حساب XPay بعملة تانية (مثلًا الجنيه بس): نحوّل المبلغ لعملة الحساب ونجرب تاني بنفس الطريقة
+            if (!$switched && preg_match('/session currency \(([A-Z]{3})\)/i', $err, $m) && in_array(strtoupper($m[1]), ['EGP', 'USD'], true) && strtoupper($m[1]) !== $charge['currency']) {
+                $switched = true;
+                $charge = $this->chargeFor($usd, strtoupper($m[1]));
+                $meta['charge_currency'] = $charge['currency'];
+                $meta['charge_minor'] = $charge['minor'];
+                $meta['rate'] = $charge['currency'] === 'EGP' ? CurrencyService::rate('EGP') : 1;
+                $this->learnAccountCurrency($charge['currency']);
+                continue;
+            }
             // مفتاح مرفوض أو مسار غلط: مفيش داعي نجرب تاني
             if (in_array($r['code'], [0, 401, 403, 404], true)) {
                 break;
             }
+            $mi++;
         }
         if ($sid === '') {
             $db->query('UPDATE payment_transactions SET status = ? WHERE id = ?', ['failed', $txId]);
             $this->remember('last_error', ['stage' => 'إنشاء الدفع', 'detail' => implode(' | ', $tries)]);
             if (class_exists('Logger')) Logger::error('XPay session failed', ['tries' => $tries]);
             throw new RuntimeException('XPay رفض إنشاء الدفع');
+        }
+        if ($tries && $this->settings) {
+            // اشتغل بعد تعديل تلقائي: نشيل رسالة الخطأ القديمة
+            $raw = json_decode($this->settings->get(self::CONFIG_KEY, ''), true) ?: [];
+            unset($raw['last_error']);
+            $this->settings->set(self::CONFIG_KEY, json_encode($raw));
         }
         $url = (string) ($s['url'] ?? $s['hostedUrl'] ?? $s['checkoutUrl'] ?? '');
         $meta += ['checkout_url' => $url, 'livemode' => !empty($s['livemode'])];

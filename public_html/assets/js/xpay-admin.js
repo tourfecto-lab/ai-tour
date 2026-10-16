@@ -18,7 +18,7 @@
 <div class="xp-grid">
   <label>المفتاح العام (Publishable key)<input id="xpPk" class="p-select" dir="ltr" placeholder="pk_test_..." value="${esc(c.public_key)}" autocomplete="off"></label>
   <label>المفتاح السري (Secret key)<input id="xpSk" class="p-select" dir="ltr" type="password" placeholder="${c.has_secret ? 'محفوظ: ' + esc(c.secret_hint) + ' - اكتب جديد لو عايز تغيّره' : 'sk_test_...'}" autocomplete="new-password"></label>
-  <label>العميل يدفع بـ<select id="xpCur" class="p-select"><option value="EGP" ${c.charge_currency === 'EGP' ? 'selected' : ''}>الجنيه المصري</option><option value="USD" ${c.charge_currency === 'USD' ? 'selected' : ''}>الدولار (لو XPay فاتحه لك)</option></select></label>
+  <label>العميل يدفع بـ<select id="xpCur" class="p-select"><option value="EGP" ${c.charge_currency === 'EGP' ? 'selected' : ''}>الجنيه المصري</option><option value="USD" ${c.charge_currency === 'USD' ? 'selected' : ''} ${c.account_currency === 'EGP' ? 'disabled' : ''}>الدولار${c.account_currency === 'EGP' ? ' (حسابك في XPay بالجنيه بس)' : ' (لو XPay فاتحه لك)'}</option></select></label>
   <label>أقل مبلغ شحن $<input id="xpMin" class="p-select" type="number" min="1" value="${c.min_usd}"></label>
   <label>أكبر مبلغ شحن $<input id="xpMax" class="p-select" type="number" min="10" max="10000" value="${c.max_usd}"></label>
   <label>مفتاح الـ Webhook (Signing secret)<input id="xpWh" class="p-select" dir="ltr" type="password" placeholder="${c.has_webhook_secret ? 'محفوظ ✓ - اكتب جديد لو اتغيّر' : 'whsec_... (اللي XPay بيطلعه بعد ما تضيف الـ Webhook)'}" autocomplete="new-password"></label>

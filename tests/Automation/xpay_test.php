@@ -20,6 +20,8 @@ $fake = function (string $m, string $url, ?array $body, string $key) use (&$call
     global $rejectEmbedded;
     if ($key !== 'sk_test_good123') return ['code' => 401, 'body' => ['error' => ['type' => 'authentication_error', 'message' => 'Invalid API key']]];
     if ($m === 'GET' && str_contains($url, 'cs_test_tourfecto_probe')) return ['code' => 404, 'body' => ['error' => ['type' => 'invalid_request_error', 'code' => 'resource_missing']]];
+    global $egpOnly;
+    if ($m === 'POST' && !empty($egpOnly) && $body['lineItems'][0]['priceData']['currency'] !== 'EGP') return ['code' => 400, 'body' => ['error' => ['type' => 'invalid_request_error', 'code' => 'invalid_request', 'message' => 'Price price_74hLoiVxzKTEijwydG6qTk currency (USD) does not match the session currency (EGP).', 'param' => 'lineItems[0][price]']]];
     if ($m === 'POST' && !empty($rejectEmbedded) && $body['uiMode'] === 'embedded') return ['code' => 400, 'body' => ['error' => ['type' => 'invalid_request_error', 'message' => 'uiMode embedded not enabled', 'param' => 'uiMode']]];
     if ($m === 'POST') { $id = 'cs_test_' . count($calls); $remote[$id] = ['id' => $id, 'status' => ['type' => 'open'], 'currency' => $body['lineItems'][0]['priceData']['currency'], 'amountSubtotal' => $body['lineItems'][0]['priceData']['unitAmount'], 'amountTotal' => $body['lineItems'][0]['priceData']['unitAmount'] + 1750, 'url' => 'https://checkout.xpay.app/pay/' . $id]; return ['code' => 200, 'body' => $remote[$id] + ['clientSecret' => $id . '_secret_x']]; }
     if ($m === 'GET') { $id = basename(parse_url($url, PHP_URL_PATH)); return isset($remote[$id]) ? ['code' => 200, 'body' => $remote[$id]] : ['code' => 404, 'body' => null]; }
@@ -101,6 +103,18 @@ check($g->signatureState($pl, ['XPay-Signature' => 't=' . $ts . ',v1=' . hash_hm
 check($g->signatureState($pl, ['Webhook-Id' => 'msg_1', 'Webhook-Timestamp' => $ts, 'Webhook-Signature' => 'v1,AAAA']) === 'mismatch', 'wrong signature detected');
 $g->handleWebhook($pl, ['Webhook-Signature' => 'v1,AAAA']);
 check(($g->config()['last_webhook']['type'] ?? '') === 'checkout.session.completed', 'last webhook shown to the admin');
+
+echo "account in EGP only\n";
+$egpOnly = true;
+$g->saveConfig(['charge_currency' => 'USD']);
+$s4 = $g->createWalletTopUp($uid, 10, 'https://t.test/r', 'https://t.test/c');
+$sent = end($calls)[2]['lineItems'][0]['priceData'];
+check($s4['session_id'] !== '' && $sent['currency'] === 'EGP' && $sent['unitAmount'] === 50000 && end($calls)[2]['uiMode'] === 'embedded', 'XPay says the account is EGP: $10 resent as 500.00 EGP automatically');
+check($g->config()['charge_currency'] === 'EGP' && $g->config()['account_currency'] === 'EGP' && empty($g->config()['last_error']), 'setting switched to EGP and the old error cleared');
+$remote[$s4['session_id']]['status'] = ['type' => 'complete', 'paymentStatus' => 'paid']; $remote[$s4['session_id']]['paymentStatus'] = 'paid';
+$before = $ws->getBalance($uid);
+check($g->confirm($s4['session_id'])['status'] === 'paid' && abs($ws->getBalance($uid) - $before - 10) < 0.01, 'paid in EGP: wallet +$10');
+$egpOnly = false;
 
 try { $g->saveConfig(['api_base' => 'https://evil.example.com']); $ok = false; } catch (InvalidArgumentException $e) { $ok = true; }
 check($ok, 'API address outside xpay.app refused (secret key never sent elsewhere)');
