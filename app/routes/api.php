@@ -226,6 +226,7 @@ $router->get('/api/edge/rules', 'EdgeFixController', 'rules');
 $router->get('/api/website-optimizer/edge/status', 'EdgeFixController', 'status', ['AuthMiddleware']);
 $router->get('/api/website-optimizer/edge/plugin', 'EdgeFixController', 'plugin', ['AuthMiddleware']);
 $router->get('/api/website-optimizer/edge/php-connector', 'EdgeFixController', 'phpConnector', ['AuthMiddleware']);
+$router->post('/api/website-optimizer/edge/php-auto-install', 'EdgeFixController', 'phpAutoInstall', ['AuthMiddleware']);
 $router->post('/api/website-optimizer/fixes/{id}/edge-preview', 'EdgeFixController', 'preview', ['AuthMiddleware']);
 $router->post('/api/website-optimizer/fixes/{id}/edge-apply', 'EdgeFixController', 'apply', ['AuthMiddleware']);
 $router->post('/api/website-optimizer/fixes/{id}/edge-rollback', 'EdgeFixController', 'rollback', ['AuthMiddleware']);

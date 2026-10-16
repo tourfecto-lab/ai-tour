@@ -209,6 +209,49 @@ class EdgeFixController extends Controller
         exit;
     }
 
+    /**
+     * POST /api/website-optimizer/edge/php-auto-install - المنصة تركّب ملف الربط بنفسها
+     * ببيانات FTP (بتتستخدم مرة واحدة ومش بتتحفظ ولا بتتسجل).
+     */
+    public function phpAutoInstall(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if ($csrf = $this->verifyCsrf()) {
+            return $csrf;
+        }
+        $websiteId = (int) $this->get('website_id', 0);
+        $site = $this->db->query('SELECT id, main_url FROM websites WHERE id = ? AND user_id = ? LIMIT 1', [$websiteId, $this->uid()]);
+        if (empty($site)) {
+            return $this->error('Not found', 404);
+        }
+        $host = strtolower(trim(preg_replace('#^(s?ftp://)#i', '', (string) $this->get('host', '')), " /"));
+        $user = trim((string) $this->get('username', ''));
+        $pass = (string) $this->get('password', '');
+        if ($host === '' || $user === '' || $pass === '') {
+            return $this->error('اكتب عنوان الـ FTP واسم المستخدم وكلمة السر', 422);
+        }
+        if (!PhpConnectorInstaller::publicHost($host)) {
+            return $this->error('عنوان الـ FTP مش صحيح', 422);
+        }
+        $key = 'edge_ftp_install:' . $this->uid();
+        $cache = new Cache();
+        $tries = (int) $cache->get($key, 0);
+        if ($tries >= 6) {
+            return $this->error('حاولت كذا مرة - استنى 10 دقايق وجرّب تاني', 429);
+        }
+        $cache->set($key, $tries + 1, 600);
+        @set_time_limit(120);
+        $result = (new PhpConnectorInstaller())->install(
+            ['host' => $host, 'port' => (int) $this->get('port', 21), 'username' => $user, 'password' => $pass, 'path' => (string) $this->get('path', '')],
+            WordPressConnector::normalizeSiteUrl((string) $site[0]['main_url']),
+            EdgeRules::phpConnector($websiteId, $this->appUrl())
+        );
+        Logger::info('PHP connector auto-install', ['website_id' => $websiteId, 'ok' => $result['ok'], 'root' => $result['root'] ?? null]);
+        return $result['ok'] ? $this->success(['root' => $result['root'] ?? ''], $result['message']) : $this->error($result['message'], 422);
+    }
+
     // ------------------------------------------------------------------ معاينة
 
     public function preview(array $params = []): array

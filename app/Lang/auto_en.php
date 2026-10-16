@@ -6804,4 +6804,10 @@ return [
     'المزامنة مع Google بتتجهز من فريق المنصة. مش محتاج تعمل حاجة - أول ما تجهز التقييمات والمؤشرات هتظهر هنا لوحدها.' => 'Google sync is being prepared by our team. Nothing is needed from you - your reviews and indicators will appear here automatically once ready.',
     'مربوط - المزامنة بتتجهز من فريقنا' => 'Connected - sync is being prepared by our team',
     'رقم واتساب شركتك: الشات بوت يرد على العملاء، وتأكيدات وتذكيرات الحجز' => 'Your company WhatsApp number: the chatbot answers customers, plus booking confirmations and reminders',
+    'الربط اتركّب واشتغل. موقعك شغال عادي.' => 'Installed and working. Your site is running normally.',
+    'اسم المستخدم أو كلمة السر بتاعة FTP غلط.' => 'The FTP username or password is wrong.',
+    'اكتب عنوان الـ FTP واسم المستخدم وكلمة السر' => 'Enter the FTP host, username and password',
+    'عنوان الـ FTP مش صحيح' => 'The FTP host is not valid',
+    'حاولت كذا مرة - استنى 10 دقايق وجرّب تاني' => 'Too many attempts - wait 10 minutes and try again',
+    'الموقع ماردّش صح بعد التعديل، فرجّعنا index.php زي ما كان فورًا. موقعك شغال عادي.' => 'The site did not respond correctly after the change, so we restored index.php immediately. Your site is running normally.',
 ];
