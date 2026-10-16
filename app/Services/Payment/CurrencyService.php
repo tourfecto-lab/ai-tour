@@ -108,24 +108,35 @@ class CurrencyService
     }
 
     /** عملة الزائر: اختياره (كوكي/حسابه) ← بلده ← دولار */
+    /**
+     * عملة العرض: المنصة موجّهة للأجانب، فالدولار هو الأساس للكل.
+     * العملة بتتغير بس لو الزائر اختارها بنفسه (الكوكي)، أو لو الأدمن فعّل
+     * "العملة المحلية تلقائي حسب البلد".
+     * (عملة حساب العميل في الإعدادات دي عملة حجوزاته هو، مش عملة اشتراكه في المنصة)
+     */
     public static function forViewer(?array $user = null): string
     {
         $c = strtoupper((string) ($_COOKIE[self::COOKIE] ?? ''));
         if (self::valid($c) && self::rates()[$c]['enabled']) {
             return $c;
         }
-        foreach (['currency', 'preferred_currency'] as $k) {
-            $u = strtoupper((string) ($user[$k] ?? ''));
-            if (self::valid($u) && self::rates()[$u]['enabled']) {
-                return $u;
+        $s = self::settings();
+        if ($s && $s->get('fx_auto_local', '0') === '1') {
+            $country = strtoupper((string) ($user['country_code'] ?? $_SERVER['HTTP_CF_IPCOUNTRY'] ?? ''));
+            if (isset(self::COUNTRY[$country]) && self::rates()[self::COUNTRY[$country]]['enabled']) {
+                return self::COUNTRY[$country];
             }
         }
-        $country = strtoupper((string) ($user['country_code'] ?? $_SERVER['HTTP_CF_IPCOUNTRY'] ?? ''));
-        if (isset(self::COUNTRY[$country]) && self::rates()[self::COUNTRY[$country]]['enabled']) {
-            return self::COUNTRY[$country];
+        return 'USD';
+    }
+
+    /** السعر بالجنيه المصري جنب الدولار (شرط بنك الدفع المحلي) - فاضي لو الجنيه مقفول */
+    public static function egpHint(float $usd, bool $arabic = true): string
+    {
+        if (!self::rates()['EGP']['enabled'] || $usd <= 0) {
+            return '';
         }
-        $lang = strtolower(substr((string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? ''), 0, 5));
-        return str_contains($lang, 'eg') ? 'EGP' : 'USD';
+        return self::format($usd, 'EGP', $arabic);
     }
 
     /** للواجهة: العملات المتاحة وأسعارها */

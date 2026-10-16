@@ -28,7 +28,11 @@ check($u === ['SAR'] && abs(CurrencyService::rate('EGP') - 51) < 0.0001, 'market
 $_COOKIE[CurrencyService::COOKIE] = 'EGP';
 check(CurrencyService::forViewer() === 'EGP', 'viewer currency from cookie');
 unset($_COOKIE[CurrencyService::COOKIE]);
-check(CurrencyService::forViewer(['country_code' => 'SA']) === 'SAR', 'viewer currency from country');
+check(CurrencyService::forViewer(['country_code' => 'EG', 'currency' => 'EGP']) === 'USD', 'default is USD for everyone (foreign customers)');
+$set->set('fx_auto_local', '1'); CurrencyService::resetCache();
+check(CurrencyService::forViewer(['country_code' => 'SA']) === 'SAR', 'country currency only when the admin enables it');
+$set->set('fx_auto_local', '0');
+check(CurrencyService::egpHint(39) === '1,990 ج.م', 'EGP shown next to USD for the payment bank');
 
 echo "plans\n";
 $x = new PlanExtras();

@@ -339,10 +339,14 @@ class MarketingController extends Controller
                 $actions .= '<a href="https://wa.me/' . $this->e($wa) . '?text=' . rawurlencode($msgM) . '" target="_blank" rel="noopener" class="cta-ghost">' . $this->te(['اشترك عبر واتساب', 'Subscribe via WhatsApp']) . '</a>';
             }
             $feat = $key === $featuredKey;
-            $cards .= '<div class="plan' . ($feat ? ' featured' : '') . '" data-m="' . $this->e(number_format($m, 0)) . '" data-y="' . $this->e(number_format($y, 0)) . '" data-ym="' . $this->e(number_format($y / 12, 0)) . '" data-save="' . $save . '">'
+            // السعر بالجنيه جنب الدولار (شرط بنك الدفع)
+            $egM = $viewCur === 'USD' ? CurrencyService::egpHint((float) $p['price_monthly'], $isAr) : '';
+            $egY = $viewCur === 'USD' ? CurrencyService::egpHint((float) $p['price_yearly'], $isAr) : '';
+            $cards .= '<div class="plan' . ($feat ? ' featured' : '') . '" data-em="' . $this->e($egM) . '" data-ey="' . $this->e($egY) . '" data-m="' . $this->e(number_format($m, 0)) . '" data-y="' . $this->e(number_format($y, 0)) . '" data-ym="' . $this->e(number_format($y / 12, 0)) . '" data-save="' . $save . '">'
                 . ($feat ? '<span class="badge">' . $this->te(['الأكثر اختيارًا', 'Most popular']) . '</span>' : '')
                 . '<h3>' . $this->e($name) . '</h3><p class="blurb">' . $this->e(MarketingContent::planBlurb($key)) . '</p>'
                 . '<div class="price"><b><span class="cur">' . $sym . '</span><span class="amt">' . $this->e(number_format($m, 0)) . '</span></b><small class="unit">' . $this->te(['/ شهر', '/ month']) . '</small></div>'
+                . ($egM !== '' ? '<div class="egp" style="font-size:12.5px;opacity:.7;margin-top:2px">≈ <bdi>' . $this->e($egM) . '</bdi></div>' : '')
                 . '<div class="per">&nbsp;</div><ul>' . $li . '</ul><div class="actions">' . $actions . '</div></div>';
         }
         if ($cards === '') {
@@ -415,7 +419,7 @@ class MarketingController extends Controller
             . '<script>(function(){var T=' . $i18n . ';function f(s){var a=[].slice.call(arguments,1),i=0;return s.replace(/%[sd]%?/g,function(m){var v=a[i++];return m.length>2?v+"%":v;});}'
             . 'var bs=document.querySelectorAll(".cycle button");function set(c){bs.forEach(function(b){b.setAttribute("aria-pressed",b.dataset.cycle===c?"true":"false");});'
             . 'document.querySelectorAll(".plan[data-m]").forEach(function(p){var y=c==="y";p.querySelector(".amt").textContent=y?p.dataset.y:p.dataset.m;p.querySelector(".unit").textContent=y?T.year:T.month;'
-            . 'var cur=p.querySelector(".cur").textContent,s=+p.dataset.save;p.querySelector(".per").textContent=y?(s>0?f(T.eq,cur+p.dataset.ym,s):f(T.eq0,cur+p.dataset.ym)):" ";});}'
+            . 'var eg=p.querySelector(".egp bdi");if(eg)eg.textContent=y?p.dataset.ey:p.dataset.em;var cur=p.querySelector(".cur").textContent,s=+p.dataset.save;p.querySelector(".per").textContent=y?(s>0?f(T.eq,cur+p.dataset.ym,s):f(T.eq0,cur+p.dataset.ym)):" ";});}'
             . 'bs.forEach(function(b){b.addEventListener("click",function(){set(b.dataset.cycle);});});})();</script>';
 
         $this->out(PublicLayout::render([

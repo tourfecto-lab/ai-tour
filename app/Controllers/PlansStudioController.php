@@ -31,7 +31,7 @@ class PlansStudioController extends Controller
 
     private function money(float $usd, string $cur): array
     {
-        return ['usd' => round($usd, 2), 'local' => CurrencyService::fromUsd($usd, $cur), 'label' => CurrencyService::format($usd, $cur, $this->ar()), 'usd_label' => CurrencyService::format($usd, 'USD')];
+        return ['usd' => round($usd, 2), 'local' => CurrencyService::fromUsd($usd, $cur), 'label' => CurrencyService::format($usd, $cur, $this->ar()), 'usd_label' => CurrencyService::format($usd, 'USD'), 'egp' => $cur === 'USD' ? CurrencyService::egpHint($usd, $this->ar()) : ''];
     }
 
     private function fail(Throwable $e): array
@@ -229,7 +229,7 @@ class PlansStudioController extends Controller
         }
         header('Cache-Control: private, no-store');
         $x = new PlanExtras();
-        return $this->success(['config' => $x->config(), 'preset' => PlanExtras::PRESET, 'plans' => BillingPlanCatalog::read(), 'rates' => CurrencyService::rates(), 'currencies' => CurrencyService::CURRENCIES, 'csrf_token' => Csrf::token()]);
+        return $this->success(['config' => $x->config(), 'preset' => PlanExtras::PRESET, 'plans' => BillingPlanCatalog::read(), 'rates' => CurrencyService::rates(), 'currencies' => CurrencyService::CURRENCIES, 'auto_local' => (new SystemSettingsService())->get('fx_auto_local', '0') === '1', 'csrf_token' => Csrf::token()]);
     }
 
     private function adminGuard(): ?array
@@ -274,6 +274,9 @@ class PlansStudioController extends Controller
         }
         try {
             $in = $this->get('rates', []);
+            if ($this->get('auto_local') !== null) {
+                (new SystemSettingsService())->set('fx_auto_local', $this->get('auto_local') ? '1' : '0');
+            }
             return $this->success(['rates' => CurrencyService::saveRates(is_array($in) ? $in : [])], 'اتحفظت أسعار الصرف');
         } catch (InvalidArgumentException $e) {
             return $this->error($e->getMessage(), 422);

@@ -23,7 +23,8 @@
 <section class="ps-box ps-adm"><h3>4) ابني باقتك - سعر الوحدة شهريًا</h3><label><input type="checkbox" id="paBuilder" ${c.builder_enabled ? 'checked' : ''}> مفعّل</label><table><thead><tr><th>الخدمة</th><th>سعر الوحدة $</th><th>مثال</th><th>متاحة</th></tr></thead><tbody>${Object.entries(c.services).map(([k, s]) => `<tr><td>${esc(s.ar)}</td><td><input class="p-select" type="number" min="0" step="0.001" data-su="${k}" value="${s.unit}"></td><td class="p-cell-muted">+${s.step} = $${(s.step * s.unit).toFixed(2)}/شهر</td><td><input type="checkbox" data-se="${k}" ${s.enabled ? 'checked' : ''}></td></tr>`).join('')}</tbody></table>
 <button class="p-btn" data-save-config>حفظ (التجربة + الإضافات + ابني باقتك)</button></section>
 
-<section class="ps-box ps-adm"><h3>5) العملات وأسعار الصرف</h3><p class="p-cell-muted">كل الأسعار متسجلة بالدولار؛ العميل بيشوفها بعملته = السعر بالدولار × سعر الصرف (+ الهامش). لو البنك (XPay) محدد سعر، اكتبه واقفله عشان التحديث التلقائي مايغيّروش.</p>
+<section class="ps-box ps-adm"><h3>5) العملات وأسعار الصرف</h3><p class="p-cell-muted">المنصة بالدولار للكل (العملاء أجانب). الجنيه بيظهر صغير جنب السعر (شرط البنك)، وأي عميل يقدر يختار عملته بنفسه = السعر بالدولار × سعر الصرف (+ الهامش). لو البنك (XPay) محدد سعر، اكتبه واقفله.</p>
+<label style="display:block;margin:8px 0"><input type="checkbox" id="paAutoLocal" ${D.auto_local ? 'checked' : ''}> اعرض للزائر عملة بلده تلقائي (مقفولة = الدولار للكل)</label>
 <table><thead><tr><th>العملة</th><th>سعر 1$</th><th>هامش %</th><th>السعر النهائي</th><th>مقفول (يدوي)</th><th>تظهر للعملاء</th><th>آخر تحديث</th></tr></thead><tbody>${Object.entries(R).filter(([k]) => k !== 'USD').map(([k, r]) => `<tr><td><b>${k}</b> ${esc(D.currencies[k].ar)}</td><td><input class="p-select" type="number" step="0.0001" min="0" data-rb="${k}" value="${r.base}"></td><td><input class="p-select" type="number" step="0.1" min="0" max="20" data-rm="${k}" value="${r.margin}" style="max-width:70px"></td><td>${r.rate}</td><td><input type="checkbox" data-rl="${k}" ${r.locked ? 'checked' : ''}></td><td><input type="checkbox" data-re="${k}" ${r.enabled ? 'checked' : ''}></td><td class="p-cell-muted">${esc(r.updated_at || (r.source === 'default' ? 'افتراضي - حدّثه' : ''))}</td></tr>`).join('')}</tbody></table>
 <button class="p-btn" data-save-rates>حفظ أسعار الصرف</button> <button class="p-btn outline" data-refresh>حدّث من السوق (غير المقفولة)</button></section>`;
     };
@@ -39,7 +40,7 @@
         });
         if (b.dataset.saveRates !== undefined) return run(b, async () => {
             const rates = {}; root.querySelectorAll('[data-rb]').forEach(i => { const k = i.dataset.rb; rates[k] = { base: +i.value, margin: +root.querySelector(`[data-rm="${k}"]`).value, locked: root.querySelector(`[data-rl="${k}"]`).checked, enabled: root.querySelector(`[data-re="${k}"]`).checked }; });
-            const r = await api('/api/admin/currency/rates', { rates }); D.rates = r.data.rates; render(); msg('✅ اتحفظت أسعار الصرف');
+            const r = await api('/api/admin/currency/rates', { rates, auto_local: v('paAutoLocal').checked });D.auto_local = v('paAutoLocal').checked; D.rates = r.data.rates; render(); msg('✅ اتحفظت أسعار الصرف');
         });
         if (b.dataset.refresh !== undefined) return run(b, async () => { const r = await api('/api/admin/currency/refresh', {}); D.rates = r.data.rates; render(); msg('✅ ' + (r.message || 'اتحدّثت')); });
     });

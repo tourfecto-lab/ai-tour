@@ -26,7 +26,7 @@
         const n = v.toLocaleString('en-US', { maximumFractionDigits: v >= 100 ? 0 : 2 });
         return D.currency === 'USD' ? '$' + n : (ar ? n + ' ' + c.symbol : c.symbol + ' ' + n);
     };
-    const money = m => `<b>${esc(m.label)}</b>${D.currency !== 'USD' ? `<small>${esc(m.usd_label)}</small>` : ''}`;
+    const money = m => `<b>${esc(m.label)}</b>${D.currency !== 'USD' ? `<small>${esc(m.usd_label)}</small>` : (m.egp ? `<small>≈ ${esc(m.egp)}</small>` : '')}`;
     const PLAN_NOTE = { starter: t('لشركة بتبدأ أونلاين', 'For companies getting started'), professional: t('للشركات اللي بتكبر', 'For growing companies'), enterprise: t('للشركات الكبيرة والوكالات', 'For larger companies & agencies') };
 
     const render = () => {

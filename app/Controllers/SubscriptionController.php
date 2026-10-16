@@ -994,15 +994,16 @@ JS;
         return '<link rel="stylesheet" href="' . $css . '"><section id="plansStudio" class="ps" aria-live="polite"></section><script defer src="' . $js . '"></script>';
     }
 
-    /** السعر بعملة العميل تحت السعر بالدولار */
+    /** تحت السعر بالدولار: بعملة العميل لو اختار عملة، وإلا بالجنيه (شرط بنك الدفع) */
     private function localPrice(float $usd): string
     {
         require_once __DIR__ . '/../Services/Payment/CurrencyService.php';
         $cur = CurrencyService::forViewer($this->user ?? null);
-        if ($cur === 'USD') {
+        $label = $cur === 'USD' ? CurrencyService::egpHint($usd) : CurrencyService::format($usd, $cur);
+        if ($label === '') {
             return '';
         }
-        return '<div class="p-cell-muted" style="margin:-6px 0 10px;font-size:13px">≈ ' . htmlspecialchars(CurrencyService::format($usd, $cur), ENT_QUOTES, 'UTF-8') . ' بسعر النهارده</div>';
+        return '<div class="p-cell-muted" style="margin:-6px 0 10px;font-size:13px">≈ ' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</div>';
     }
 
     /** GET /plans (عام - بدون تسجيل دخول) */
