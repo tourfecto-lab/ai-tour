@@ -36,6 +36,7 @@ class WebsiteBuilderService
     /** الحالة الحالية للمعالج - السؤال الجاي أو لو خلصنا كل الأسئلة */
     public function getCurrentState(): array
     {
+        $this->prefillFromProfile();
         $answers = $_SESSION['website_builder_answers'] ?? [];
         $items = $answers['items'] ?? [];
         $itemsDone = !empty($answers['items_done']);
@@ -59,9 +60,12 @@ class WebsiteBuilderService
         $industryMeta = self::INDUSTRIES[$answers['industry']] ?? self::INDUSTRIES['tours'];
         if (!$itemsDone) {
             $itemLabel = $industryMeta['item_singular'];
+            $known = !empty($_SESSION['website_builder_prefilled']) && count($items) === 0
+                ? 'أخدنا اسم شركتك ونشاطك وبيانات التواصل من ملف شركتك ✅ '
+                : '';
             $countMsg = count($items) > 0 ? ' (عندك دلوقتي ' . count($items) . ' ' . $industryMeta['item_plural'] . ' مسجّلة)' : '';
             $question = count($items) === 0
-                ? "حلو! دلوقتي احكيلي عن الـ{$itemLabel} اللي بتقدّمها - واحدة في كل رسالة. لما تخلّص كل الـ{$industryMeta['item_plural']} اكتب \"خلصت\"."
+                ? $known . "دلوقتي احكيلي عن الـ{$itemLabel} اللي بتقدّمها - واحدة في كل رسالة. لما تخلّص كل الـ{$industryMeta['item_plural']} اكتب \"خلصت\"."
                 : "تمام، سجّلتها! في {$itemLabel} تانية؟{$countMsg} (اكتبها، أو دوس \"خلصت\" لو خلصت)";
             $options = count($items) > 0 ? ['خلصت'] : [];
             return ['done' => false, 'step' => 'items', 'question' => $question, 'items_count' => count($items), 'options' => $options];
@@ -71,6 +75,61 @@ class WebsiteBuilderService
         }
 
         return ['done' => true, 'answers' => $answers];
+    }
+
+    /**
+     * اسم الشركة ونوع النشاط ووصفه وبيانات التواصل موجودين أصلًا في ملف الشركة -
+     * كان المعالج بيسألهم تاني. بنملاهم مرة واحدة في أول المحادثة (والعميل يقدر
+     * يبدأ من جديد لو عايز يغيّرهم).
+     */
+    private function prefillFromProfile(): void
+    {
+        if (!empty($_SESSION['website_builder_prefill_done'])) {
+            return;
+        }
+        $_SESSION['website_builder_prefill_done'] = true;
+        $uid = (int) ($_SESSION['user_id'] ?? 0);
+        if ($uid <= 0 || !empty($_SESSION['website_builder_answers'])) {
+            return;
+        }
+        try {
+            $db = Database::getInstance();
+            $site = $db->query('SELECT id, company_name, industry FROM websites WHERE user_id = ? ORDER BY id DESC LIMIT 1', [$uid])[0] ?? null;
+            if (!$site) {
+                return;
+            }
+            $brief = [];
+            try {
+                $row = $db->query('SELECT brief_json FROM seo_expert_sites WHERE website_id = ? AND user_id = ? LIMIT 1', [(int) $site['id'], $uid])[0] ?? null;
+                $brief = $row ? (json_decode((string) $row['brief_json'], true) ?: []) : [];
+            } catch (Throwable $e) {
+            }
+            $a = [];
+            $name = trim((string) ($brief['business_name'] ?? '')) ?: trim((string) $site['company_name']);
+            if ($name !== '') {
+                $a['business_name'] = mb_substr($name, 0, 120);
+            }
+            if (in_array(strtolower((string) $site['industry']), ['tourism', 'tours', 'travel'], true) || $name !== '') {
+                $a['industry'] = stripos((string) ($brief['business_facts'] ?? ''), 'hotel') !== false && stripos((string) ($brief['business_facts'] ?? ''), 'tour') === false ? 'hotel' : 'tours';
+            }
+            $facts = trim((string) ($brief['business_facts'] ?? ''));
+            if ($facts !== '') {
+                $first = trim((string) preg_replace('/^[^:]{1,20}:\s*/u', '', strtok($facts, "\n")));
+                if (mb_strlen($first) >= 15) {
+                    $a['service_type'] = mb_substr($first, 0, 400);
+                }
+            }
+            $contact = array_filter([trim((string) ($brief['phone'] ?? '')), trim((string) ($brief['email'] ?? '')), trim((string) ($brief['cta'] ?? ''))]);
+            if ($contact) {
+                $a['contact_text'] = mb_substr(implode(' - ', $contact), 0, 400);
+            }
+            if (count($a) >= 2) {
+                $_SESSION['website_builder_answers'] = $a;
+                $_SESSION['website_builder_prefilled'] = true;
+            }
+        } catch (Throwable $e) {
+            // المعالج يكمل بالأسئلة العادية
+        }
     }
 
     /** تسجيل إجابة وإرجاع السؤال الجاي (أو إشارة إننا خلصنا) */
@@ -132,7 +191,7 @@ class WebsiteBuilderService
     /** إعادة تصفير المعالج (لو العميل عايز يبدأ موقع تاني من الصفر) */
     public function resetWizard(): void
     {
-        unset($_SESSION['website_builder_answers']);
+        unset($_SESSION['website_builder_answers'], $_SESSION['website_builder_prefill_done'], $_SESSION['website_builder_prefilled']);
     }
 
     /**
