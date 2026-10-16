@@ -13,7 +13,7 @@
 class TikTokAPI
 {
     public const API = 'https://open.tiktokapis.com';
-    public const SCOPES = 'user.info.basic,video.publish,video.upload';
+    public const SCOPES = 'user.info.basic,video.publish';
 
     private string $accessToken = '';
     private string $openId = '';
