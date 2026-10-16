@@ -135,7 +135,7 @@ class SubscriptionValidator
             // إضافات العميل (باكدجات + باقة مخصصة) فوق رصيد الباقة
             require_once __DIR__ . '/PlanExtras.php';
             foreach (['ai_credits' => 'ai_analysis', 'chat_credits' => 'chat', 'review_credits' => 'review', 'competitor_analysis_limit' => 'competitor'] as $col => $extraKey) {
-                $sub[$col] = (int) ($sub[$col] ?? 0) + PlanExtras::extra((int) ($sub['id'] ?? 0), $extraKey);
+                $sub[$col] = PlanExtras::capForTrial($sub, $extraKey, (int) ($sub[$col] ?? 0)) + PlanExtras::extra((int) ($sub['id'] ?? 0), $extraKey);
             }
             $this->subscription = $sub;
 

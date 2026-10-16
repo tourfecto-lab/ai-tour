@@ -14,7 +14,7 @@
 <div class="ps-preset">${Object.entries(D.preset).map(([k, p]) => `<div><b>${esc(p.name)}</b> — $${p.price_monthly}/شهر · $${p.price_yearly}/سنة<br>${p.multiple_websites} موقع · ${p.chat_credits.toLocaleString()} رد شات · ${p.review_credits} رد تقييم · ${p.ai_analysis} تحليل · ${p.extra.articles} مقال · ${p.extra.media_images} صورة · ${p.extra.media_videos} فيديو${p.auto_pilot ? ' · الطيار الآلي' : ''}${p.advanced_analytics ? ' · تحليلات متقدمة' : ''}</div>`).join('')}</div>
 <button class="p-btn" data-preset>طبّق الباقات المقترحة</button> <span class="p-cell-muted">المشتركين الحاليين بيكملوا بسعرهم لحد التجديد.</span></section>
 
-<section class="ps-box"><h3>2) التجربة المجانية</h3><div class="ps-cur-plan"><label><input type="checkbox" id="paTrial" ${c.trial_enabled ? 'checked' : ''}> مفعّلة للحسابات الجديدة</label>
+<section class="ps-box"><h3>2) التجربة المجانية</h3><p class="p-cell-muted">التجربة ليها حدود للخدمات الغالية (3 مقالات، 15 صورة، فيديو واحد، 300 رد شات، 10 أدوات تسويق...) عشان أقصى تكلفة للحساب الواحد تبقى حوالي $4.</p><div class="ps-cur-plan"><label><input type="checkbox" id="paTrial" ${c.trial_enabled ? 'checked' : ''}> مفعّلة للحسابات الجديدة</label>
 <label>المدة <input id="paTrialDays" type="number" class="p-select" min="1" max="60" value="${c.trial_days}" style="width:70px"> يوم</label>
 <label>على باقة <select id="paTrialPlan" class="p-select">${Object.entries(plans).map(([k, p]) => `<option value="${k}" ${k === c.trial_plan ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label></div></section>
 

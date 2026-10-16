@@ -58,7 +58,9 @@ class PlanUsage
             return $none;
         }
         $limit = self::limitFor($sub, self::FEATURES[$feature]);
-        // إضافات العميل (باكدجات + باقة مخصصة) فوق حصة الباقة
+        // التجربة المجانية ليها حد أقل للخدمات اللي بتكلّف، والإضافات فوق الحصة
+        require_once __DIR__ . '/PlanExtras.php';
+        $limit = PlanExtras::capForTrial($sub, $feature, $limit);
         if ($limit >= 0) {
             $limit += self::extraFor((int) $sub['id'], $feature);
         }
@@ -129,7 +131,9 @@ class PlanUsage
             return false;
         }
         $limit = self::limitFor($sub, self::FEATURES[$feature]);
-        // إضافات العميل (باكدجات + باقة مخصصة) فوق حصة الباقة
+        // التجربة المجانية ليها حد أقل للخدمات اللي بتكلّف، والإضافات فوق الحصة
+        require_once __DIR__ . '/PlanExtras.php';
+        $limit = PlanExtras::capForTrial($sub, $feature, $limit);
         if ($limit >= 0) {
             $limit += self::extraFor((int) $sub['id'], $feature);
         }

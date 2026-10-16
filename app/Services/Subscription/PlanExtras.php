@@ -42,18 +42,39 @@ class PlanExtras
         'assistant_2000' => ['service' => 'ai_assistant_message', 'qty' => 2000, 'price' => 15, 'icon' => '🤖'],
     ];
 
-    /** تشكيلة الباقات المقترحة (أسعار بالدولار - الأدمن يقدر يعدّلها بعد التطبيق) */
+    /**
+     * تشكيلة الباقات المقترحة (أسعار بالدولار - الأدمن يقدر يعدّلها بعد التطبيق).
+     * محسوبة بحيث تكسب حتى لو العميل استهلك الحصة كلها (أغلى حاجة: الفيديو ثم الصور):
+     * الانطلاقة أقصى تكلفة ~$13 | النمو ~$44 | الريادة ~$128 (شاملة رسوم الدفع والسيرفر)
+     */
     public const PRESET = [
-        'starter' => ['name' => 'الانطلاقة', 'price_monthly' => 39, 'price_yearly' => 390, 'ai_analysis' => 20, 'chat_credits' => 1500, 'review_credits' => 100, 'competitor_analysis' => 3, 'multiple_websites' => 1,
+        'starter' => ['name' => 'الانطلاقة', 'price_monthly' => 59, 'price_yearly' => 590, 'ai_analysis' => 10, 'chat_credits' => 1000, 'review_credits' => 80, 'competitor_analysis' => 2, 'multiple_websites' => 1,
             'whatsapp_bot' => 1, 'auto_pilot' => 0, 'advanced_analytics' => 0,
-            'extra' => ['ai_assistant_messages' => 300, 'website_generations' => 3, 'website_items' => 30, 'articles' => 8, 'media_images' => 60, 'media_videos' => 2, 'marketing_tools' => 60]],
-        'professional' => ['name' => 'النمو', 'price_monthly' => 89, 'price_yearly' => 890, 'ai_analysis' => 60, 'chat_credits' => 5000, 'review_credits' => 400, 'competitor_analysis' => 10, 'multiple_websites' => 3,
+            'extra' => ['ai_assistant_messages' => 200, 'website_generations' => 2, 'website_items' => 30, 'articles' => 6, 'media_images' => 30, 'media_videos' => 1, 'marketing_tools' => 40]],
+        'professional' => ['name' => 'النمو', 'price_monthly' => 149, 'price_yearly' => 1490, 'ai_analysis' => 40, 'chat_credits' => 3500, 'review_credits' => 300, 'competitor_analysis' => 8, 'multiple_websites' => 3,
             'whatsapp_bot' => 1, 'auto_pilot' => 1, 'advanced_analytics' => 0,
-            'extra' => ['ai_assistant_messages' => 1500, 'website_generations' => 10, 'website_items' => 150, 'articles' => 25, 'media_images' => 250, 'media_videos' => 10, 'marketing_tools' => 250]],
-        'enterprise' => ['name' => 'الريادة', 'price_monthly' => 199, 'price_yearly' => 1990, 'ai_analysis' => 200, 'chat_credits' => 15000, 'review_credits' => 1500, 'competitor_analysis' => 30, 'multiple_websites' => 10,
+            'extra' => ['ai_assistant_messages' => 1000, 'website_generations' => 6, 'website_items' => 100, 'articles' => 20, 'media_images' => 120, 'media_videos' => 4, 'marketing_tools' => 150]],
+        'enterprise' => ['name' => 'الريادة', 'price_monthly' => 349, 'price_yearly' => 3490, 'ai_analysis' => 120, 'chat_credits' => 10000, 'review_credits' => 1000, 'competitor_analysis' => 25, 'multiple_websites' => 8,
             'whatsapp_bot' => 1, 'auto_pilot' => 1, 'advanced_analytics' => 1,
-            'extra' => ['ai_assistant_messages' => 5000, 'website_generations' => 30, 'website_items' => 1000, 'articles' => 80, 'media_images' => 800, 'media_videos' => 40, 'marketing_tools' => 1000]],
+            'extra' => ['ai_assistant_messages' => 3000, 'website_generations' => 20, 'website_items' => 600, 'articles' => 60, 'media_images' => 350, 'media_videos' => 12, 'marketing_tools' => 600]],
     ];
+
+    /** أقصى استخدام في التجربة المجانية للخدمات اللي بتكلّف (أقصى تكلفة للتجربة ~$4) */
+    public const TRIAL_CAPS = [
+        'article_generation' => 3, 'media_image' => 15, 'media_video' => 1, 'marketing_tool' => 10, 'ai_assistant_message' => 100,
+        'website_generation' => 1, 'website_item' => 20, 'chat' => 300, 'review' => 30, 'ai_analysis' => 3, 'competitor' => 1,
+    ];
+
+    /** حد التجربة: الأقل بين حصة الباقة وحد التجربة */
+    public static function capForTrial(array $sub, string $feature, int $limit): int
+    {
+        $status = (string) ($sub['lifecycle_status'] ?? $sub['status'] ?? '');
+        if ($status !== 'trialing' || !isset(self::TRIAL_CAPS[$feature])) {
+            return $limit;
+        }
+        $cap = self::TRIAL_CAPS[$feature];
+        return $limit < 0 ? $cap : min($limit, $cap);
+    }
 
     private Database $db;
     private PDO $pdo;
