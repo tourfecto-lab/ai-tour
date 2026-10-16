@@ -705,6 +705,7 @@ $router->post('/api/social/monthly-plans/{id}/pause', 'SocialMediaController', '
 $router->post('/api/social/monthly-plans/{id}/resume', 'SocialMediaController', 'monthlyResume', ['AuthMiddleware']);
 $router->post('/api/social/monthly-plans/{id}/cancel', 'SocialMediaController', 'monthlyCancel', ['AuthMiddleware']);
 $router->get('/api/social/connections', 'SocialMediaController', 'listConnections', ['AuthMiddleware']);
+$router->get('/api/social/tiktok/creator-info', 'SocialMediaController', 'tikTokCreatorInfo', ['AuthMiddleware']);
 $router->get('/api/social/posts', 'SocialMediaController', 'listPosts', ['AuthMiddleware']);
 $router->post('/api/social/posts', 'SocialMediaController', 'createPost', ['AuthMiddleware']);
 $router->post('/api/social/generate-caption', 'SocialMediaController', 'generateCaption', ['AuthMiddleware']);

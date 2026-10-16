@@ -85,4 +85,38 @@ class TikTokAPITest extends TestCase
         $this->assertFalse($bad['success']);
         $this->assertSame('Refresh token is invalid', $bad['error']);
     }
+
+    public function testUserChoicesAreSentAsIs(): void
+    {
+        $calls = [];
+        $api = $this->api([
+            'creator_info/query' => $this->ok(['privacy_level_options' => ['PUBLIC_TO_EVERYONE', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'], 'duet_disabled' => true]),
+            'video/init' => $this->ok(['publish_id' => 'p3']),
+        ], $calls);
+        $r = $api->publishVideo('https://tourfecto.pro/v.mp4', 't', 'auto', ['privacy_level' => 'FOLLOWER_OF_CREATOR', 'allow_comment' => true, 'allow_duet' => true, 'allow_stitch' => false, 'brand_organic' => true]);
+        $this->assertTrue($r['success']);
+        $info = json_decode($calls[1]['body'], true)['post_info'];
+        $this->assertSame('FOLLOWER_OF_CREATOR', $info['privacy_level']);
+        $this->assertFalse($info['disable_comment']);
+        $this->assertTrue($info['disable_duet']);   // مقفولة من إعدادات الحساب
+        $this->assertTrue($info['disable_stitch']); // العميل ماسمحش
+        $this->assertTrue($info['brand_organic_toggle']);
+    }
+
+    public function testChosenPrivacyNoLongerAllowedFails(): void
+    {
+        $r = $this->api(['creator_info/query' => $this->ok(['privacy_level_options' => ['SELF_ONLY']])])
+            ->publishVideo('https://x/v.mp4', 't', 'auto', ['privacy_level' => 'PUBLIC_TO_EVERYONE']);
+        $this->assertFalse($r['success']);
+    }
+
+    public function testCleanOptionsRules(): void
+    {
+        $this->assertSame('اختار مين يقدر يشوف الفيديو على تيك توك', TikTokAPI::cleanOptions(['privacy_level' => ''])['error']);
+        $this->assertTrue(isset(TikTokAPI::cleanOptions(['privacy_level' => 'PUBLIC_TO_EVERYONE', 'commercial' => true])['error']));
+        $this->assertTrue(isset(TikTokAPI::cleanOptions(['privacy_level' => 'SELF_ONLY', 'commercial' => true, 'brand_content' => true])['error']));
+        $ok = TikTokAPI::cleanOptions(['privacy_level' => 'PUBLIC_TO_EVERYONE', 'allow_comment' => 1]);
+        $this->assertTrue($ok['allow_comment']);
+        $this->assertFalse($ok['allow_duet']);
+    }
 }

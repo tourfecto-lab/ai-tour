@@ -42,25 +42,40 @@ class TikTokAPI
      * @param string $privacyLevel 'auto' = عام لو مسموح، غير كده أول خيار متاح
      * @return array ['success'=>bool, 'publish_id'=>?string, 'privacy'=>?string, 'error'=>?string]
      */
-    public function publishVideo(string $videoUrl, string $title, string $privacyLevel = 'auto'): array
+    public function publishVideo(string $videoUrl, string $title, string $privacyLevel = 'auto', array $opts = []): array
     {
         $info = $this->creatorInfo();
         if (!$info['success']) {
             return $info;
         }
         $options = (array) ($info['data']['privacy_level_options'] ?? []);
-        $privacy = strtoupper($privacyLevel);
-        if ($privacyLevel === 'auto' || $privacyLevel === 'public' || !in_array($privacy, $options, true)) {
-            $privacy = in_array('PUBLIC_TO_EVERYONE', $options, true) ? 'PUBLIC_TO_EVERYONE' : (string) ($options[0] ?? 'SELF_ONLY');
+        if (!empty($opts['privacy_level'])) {
+            // العميل اختار بنفسه من شاشة النشر: لازم يكون لسه مسموح للحساب
+            $privacy = (string) $opts['privacy_level'];
+            if (!in_array($privacy, $options, true)) {
+                return ['success' => false, 'error' => 'إعداد الخصوصية اللي اخترته مبقاش متاح للحساب ده على تيك توك. عدّل المنشور واختار تاني.', 'outcome_state' => 'failed'];
+            }
+        } else {
+            $privacy = strtoupper($privacyLevel);
+            if ($privacyLevel === 'auto' || $privacyLevel === 'public' || !in_array($privacy, $options, true)) {
+                $privacy = in_array('PUBLIC_TO_EVERYONE', $options, true) ? 'PUBLIC_TO_EVERYONE' : (string) ($options[0] ?? 'SELF_ONLY');
+            }
+        }
+        $postInfo = [
+            'title' => mb_substr($title, 0, 2200),
+            'privacy_level' => $privacy,
+            'disable_duet' => !empty($info['data']['duet_disabled']) || (array_key_exists('allow_duet', $opts) && !$opts['allow_duet']),
+            'disable_comment' => !empty($info['data']['comment_disabled']) || (array_key_exists('allow_comment', $opts) && !$opts['allow_comment']),
+            'disable_stitch' => !empty($info['data']['stitch_disabled']) || (array_key_exists('allow_stitch', $opts) && !$opts['allow_stitch']),
+        ];
+        if (!empty($opts['brand_organic'])) {
+            $postInfo['brand_organic_toggle'] = true;
+        }
+        if (!empty($opts['brand_content'])) {
+            $postInfo['brand_content_toggle'] = true;
         }
         $result = $this->request('POST', self::API . '/v2/post/publish/video/init/', [
-            'post_info' => [
-                'title' => mb_substr($title, 0, 2200),
-                'privacy_level' => $privacy,
-                'disable_duet' => !empty($info['data']['duet_disabled']),
-                'disable_comment' => !empty($info['data']['comment_disabled']),
-                'disable_stitch' => !empty($info['data']['stitch_disabled']),
-            ],
+            'post_info' => $postInfo,
             'source_info' => ['source' => 'PULL_FROM_URL', 'video_url' => $videoUrl],
         ]);
         if ($result['success']) {
@@ -93,6 +108,88 @@ class TikTokAPI
             $r['user'] = $r['data']['user'] ?? [];
         }
         return $r;
+    }
+
+    /**
+     * API لحساب متربط (PlatformConnection) - بيجدد التوكن لو قرّب يخلص ويحفظه
+     * @param object $connection فيه getAttribute/setAttribute/save
+     */
+    public static function fromConnection(object $connection, ?Encryption $enc = null): self
+    {
+        $enc ??= new Encryption();
+        $token = $enc->decrypt((string) $connection->getAttribute('access_token'));
+        $expires = strtotime((string) $connection->getAttribute('token_expires_at') . ' UTC') ?: 0;
+        $refreshEnc = (string) $connection->getAttribute('refresh_token');
+        if ($refreshEnc !== '' && $expires < time() + 600) {
+            $fresh = self::refresh((string) env('TIKTOK_CLIENT_KEY'), (string) env('TIKTOK_CLIENT_SECRET'), $enc->decrypt($refreshEnc));
+            if (!empty($fresh['success'])) {
+                $token = (string) $fresh['access_token'];
+                $connection->setAttribute('access_token', $enc->encrypt($token));
+                if (!empty($fresh['refresh_token'])) {
+                    $connection->setAttribute('refresh_token', $enc->encrypt((string) $fresh['refresh_token']));
+                }
+                $connection->setAttribute('token_expires_at', gmdate('Y-m-d H:i:s', time() + (int) ($fresh['expires_in'] ?? 86400)));
+                $connection->save();
+            }
+        }
+        return new self($token, (string) $connection->getAttribute('external_location_id'));
+    }
+
+    // ------------------------------------------------------------ اختيارات العميل لكل منشور
+
+    private static function optionsTable(PDO $pdo): void
+    {
+        static $done = false;
+        if (!$done) {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS tiktok_post_options (target_id INT PRIMARY KEY, options TEXT NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP) DEFAULT CHARSET=utf8mb4');
+            $done = true;
+        }
+    }
+
+    /** يتأكد من اختيارات شاشة النشر ويرجّعها نضيفة، أو رسالة الخطأ */
+    public static function cleanOptions($in): array
+    {
+        if (!is_array($in)) {
+            return ['error' => 'اختار إعدادات النشر على تيك توك'];
+        }
+        $privacy = (string) ($in['privacy_level'] ?? '');
+        if (!in_array($privacy, ['PUBLIC_TO_EVERYONE', 'MUTUAL_FOLLOW_FRIENDS', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'], true)) {
+            return ['error' => 'اختار مين يقدر يشوف الفيديو على تيك توك'];
+        }
+        $out = [
+            'privacy_level' => $privacy,
+            'allow_comment' => !empty($in['allow_comment']),
+            'allow_duet' => !empty($in['allow_duet']),
+            'allow_stitch' => !empty($in['allow_stitch']),
+            'brand_organic' => !empty($in['brand_organic']),
+            'brand_content' => !empty($in['brand_content']),
+        ];
+        if (!empty($in['commercial']) && !$out['brand_organic'] && !$out['brand_content']) {
+            return ['error' => 'حدد نوع المحتوى التجاري: "علامتك التجارية" أو "محتوى مدفوع لبراند تاني"'];
+        }
+        if ($out['brand_content'] && $privacy === 'SELF_ONLY') {
+            return ['error' => 'المحتوى المدفوع (Branded content) مينفعش يبقى "أنا بس"'];
+        }
+        return $out;
+    }
+
+    public static function saveOptions(PDO $pdo, int $targetId, array $opts): void
+    {
+        self::optionsTable($pdo);
+        $pdo->prepare('REPLACE INTO tiktok_post_options(target_id,options) VALUES(?,?)')->execute([$targetId, json_encode($opts)]);
+    }
+
+    public static function optionsFor(PDO $pdo, int $targetId): array
+    {
+        try {
+            self::optionsTable($pdo);
+            $s = $pdo->prepare('SELECT options FROM tiktok_post_options WHERE target_id=?');
+            $s->execute([$targetId]);
+            $o = json_decode((string) $s->fetchColumn(), true);
+            return is_array($o) ? $o : [];
+        } catch (Throwable $e) {
+            return [];
+        }
     }
 
     // ------------------------------------------------------------ OAuth

@@ -57,6 +57,10 @@ class SocialMediaController extends Controller
             .sp-cal .e.failed{background:rgba(239,68,68,.22)}
             .sp-cal .e.scheduled,.sp-cal .e.pending{background:rgba(99,102,241,.25)}
             @media (max-width:700px){.sp-cal .d{min-height:54px}.sp-cal .e{font-size:0;padding:3px}}
+            .tt-panel{border:1px solid var(--panel-border);border-radius:12px;padding:14px;margin-top:12px}
+            .tt-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}.tt-head img{width:40px;height:40px;border-radius:50%;object-fit:cover}
+            .tt-row{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}.tt-row label{display:flex;gap:6px;align-items:center;font-size:13px}
+            .tt-row label.off{opacity:.45}.tt-note{font-size:12px;line-height:1.7;margin-top:8px}.tt-sub{margin:6px 0 0 22px}
         </style>
         <div class="p-toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -86,7 +90,7 @@ class SocialMediaController extends Controller
             <div class="p-card"><div class="p-card-head"><h3>⏰ أفضل أوقات النشر</h3><span class="p-card-sub" id="spBestSub"></span></div><div id="spBest" class="p-cell-muted">Loading...</div></div>
             <div class="p-card"><div class="p-card-head"><h3>🏆 أفضل المنشورات تفاعلًا</h3></div><div id="spTop" class="p-cell-muted">Loading...</div></div>
         </div>
-        <div class="p-card" style="margin:14px 0 18px"><div class="p-card-head"><h3>🔗 الحسابات المربوطة</h3><a class="p-btn outline sm" href="/ads/connect/meta?for=social">+ Connect account</a></div><div id="spAccounts" class="p-cell-muted">Loading...</div></div>
+        <div class="p-card" style="margin:14px 0 18px"><div class="p-card-head"><h3>🔗 الحسابات المربوطة</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><a class="p-btn outline sm" href="/ads/connect/meta?for=social">+ Facebook / Instagram</a><a class="p-btn outline sm" href="/social/connect/tiktok">🎵 + TikTok</a></div></div><div id="spAccounts" class="p-cell-muted">Loading...</div></div>
         <div class="p-card no-pad">
             <div class="p-toolbar" style="padding:14px 16px 0;gap:8px;flex-wrap:wrap">
                 <input type="search" id="spQ" class="p-select" style="max-width:240px" placeholder="🔎 ابحث في النصوص...">
@@ -132,6 +136,7 @@ class SocialMediaController extends Controller
                     <label style="margin-top:14px;display:block;">Publish on</label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0"><button type="button" class="p-btn outline sm" onclick="refreshSocialTargets()">↻ تحديث الحسابات والصفحات</button><a class="p-btn outline sm" href="/ads/connect/meta?for=social">+ ربط صفحات Meta</a></div>
                     <div id="targetsList" class="p-cell-muted">Loading connected pages...</div>
+                    <div id="ttPanel" class="tt-panel" hidden></div>
                     <label style="margin-top:14px;display:block;">When?</label>
                     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
                         <label style="display:flex;gap:6px;align-items:center"><input type="radio" name="spWhen" value="now" checked> Now</label>
@@ -457,6 +462,56 @@ HTML;
         else P.toast(res.error || 'Generation failed', 'error');
     };
 
+    // ---- شاشة النشر على تيك توك (شروط TikTok Content Posting API)
+    let tt = null; // بيانات الحساب من تيك توك
+    const TT_PRIV = { PUBLIC_TO_EVERYONE: 'الكل (Public)', MUTUAL_FOLLOW_FRIENDS: 'الأصدقاء', FOLLOWER_OF_CREATOR: 'المتابعين', SELF_ONLY: 'أنا بس (Private)' };
+    async function renderTikTok() {
+        const panel = document.getElementById('ttPanel');
+        const cb = document.querySelector('.targetCheckbox[data-platform="tiktok"]:checked');
+        if (!cb) { panel.hidden = true; tt = null; return; }
+        panel.hidden = false;
+        if (tt && tt.cid === cb.value) return;
+        panel.innerHTML = '<span class="p-cell-muted">بنجيب بيانات حساب تيك توك...</span>';
+        const res = await fetchJSON('/api/social/tiktok/creator-info?connection_id=' + encodeURIComponent(cb.value));
+        if (!res.success) { panel.innerHTML = '<div class="alert alert-danger">' + esc(res.error || 'تعذر الوصول لتيك توك') + ' <a href="/social/connect/tiktok">اربط تيك توك تاني</a></div>'; tt = null; return; }
+        tt = Object.assign({ cid: cb.value }, res.data);
+        const opt = (k, label, disabled) => '<label class="' + (disabled ? 'off' : '') + '"><input type="checkbox" id="tt_' + k + '"' + (disabled ? ' disabled' : '') + '> ' + label + (disabled ? ' <span class="p-cell-muted">(مقفولة من إعدادات حسابك)</span>' : '') + '</label>';
+        panel.innerHTML = '<div class="tt-head">' + (tt.avatar ? '<img src="' + esc(tt.avatar) + '" alt="" referrerpolicy="no-referrer">' : '🎵') + '<div><b>هيتنشر على تيك توك: ' + esc(tt.nickname) + '</b>' + (tt.username ? '<div class="p-cell-muted" dir="ltr">@' + esc(tt.username) + '</div>' : '') + '</div></div>'
+            + '<label style="display:block;font-size:13px">مين يقدر يشوف الفيديو؟ <select id="tt_privacy" class="p-select" style="max-width:260px;margin-top:4px;display:block"><option value="">اختار...</option>' + tt.privacy_level_options.map(o => '<option value="' + esc(o) + '">' + esc(TT_PRIV[o] || o) + '</option>').join('') + '</select></label>'
+            + '<div class="tt-row">' + opt('comment', 'السماح بالتعليقات', tt.comment_disabled) + opt('duet', 'السماح بالـ Duet', tt.duet_disabled) + opt('stitch', 'السماح بالـ Stitch', tt.stitch_disabled) + '</div>'
+            + '<label style="display:flex;gap:6px;align-items:center;font-size:13px;margin-top:6px"><input type="checkbox" id="tt_commercial"> الفيديو ده بيروّج لبراند أو منتج أو خدمة (Disclose commercial content)</label>'
+            + '<div id="tt_comm_box" class="tt-sub" hidden><label style="display:flex;gap:6px;font-size:13px"><input type="checkbox" id="tt_brand_organic"> علامتك التجارية (Your brand) — هيظهر عليه "Promotional content"</label><label style="display:flex;gap:6px;font-size:13px;margin-top:4px"><input type="checkbox" id="tt_brand_content"> محتوى مدفوع لبراند تاني (Branded content) — هيظهر عليه "Paid partnership"</label></div>'
+            + '<div class="tt-note p-cell-muted" id="tt_consent"></div>'
+            + (tt.max_video_post_duration_sec ? '<div class="tt-note p-cell-muted">أقصى مدة للفيديو على حسابك: ' + Math.floor(tt.max_video_post_duration_sec / 60) + ' دقيقة. تيك توك بيقبل فيديو بس، وممكن ياخد كام دقيقة لحد ما يظهر على البروفايل.</div>' : '');
+        ttConsent();
+    }
+    function ttConsent() {
+        const box = document.getElementById('tt_consent'); if (!box) return;
+        const bc = document.getElementById('tt_brand_content')?.checked;
+        box.innerHTML = 'بالنشر انت موافق على ' + (bc ? '<a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener">Branded Content Policy</a> و' : '') + '<a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener">Music Usage Confirmation</a> الخاصة بتيك توك.'
+            + '<br><span dir="ltr">By posting, you agree to TikTok\'s ' + (bc ? 'Branded Content Policy and ' : '') + 'Music Usage Confirmation.</span>';
+        const priv = document.getElementById('tt_privacy');
+        if (priv) { const self = [...priv.options].find(o => o.value === 'SELF_ONLY'); if (self) { self.disabled = !!bc; self.textContent = TT_PRIV.SELF_ONLY + (bc ? ' — مش متاح مع المحتوى المدفوع' : ''); if (bc && priv.value === 'SELF_ONLY') priv.value = ''; } }
+    }
+    document.addEventListener('change', e => {
+        if (!e.target) return;
+        if (e.target.classList.contains('targetCheckbox')) renderTikTok();
+        if (e.target.id === 'tt_commercial') { document.getElementById('tt_comm_box').hidden = !e.target.checked; if (!e.target.checked) { document.getElementById('tt_brand_organic').checked = false; document.getElementById('tt_brand_content').checked = false; } ttConsent(); }
+        if (e.target.id === 'tt_brand_content' || e.target.id === 'tt_brand_organic') ttConsent();
+    });
+    function tikTokOptions() {
+        if (!document.querySelector('.targetCheckbox[data-platform="tiktok"]:checked')) return { ok: true, value: null };
+        if (!tt) return { ok: false, error: 'استنى لحد ما بيانات حساب تيك توك تظهر' };
+        if (!media || !media.is_video) return { ok: false, error: 'تيك توك بيقبل فيديو بس - اختار فيديو' };
+        const v = id => document.getElementById(id);
+        if (!v('tt_privacy').value) return { ok: false, error: 'اختار مين يقدر يشوف الفيديو على تيك توك' };
+        const commercial = v('tt_commercial').checked;
+        if (commercial && !v('tt_brand_organic').checked && !v('tt_brand_content').checked) return { ok: false, error: 'حدد نوع المحتوى التجاري، أو شيل علامة "بيروّج لبراند"' };
+        const prev = document.querySelector('#spPrev video');
+        if (prev && tt.max_video_post_duration_sec && prev.duration && prev.duration > tt.max_video_post_duration_sec) return { ok: false, error: 'الفيديو أطول من المسموح على حسابك في تيك توك' };
+        return { ok: true, value: { privacy_level: v('tt_privacy').value, allow_comment: !!v('tt_comment')?.checked, allow_duet: !!v('tt_duet')?.checked, allow_stitch: !!v('tt_stitch')?.checked, commercial, brand_organic: v('tt_brand_organic').checked, brand_content: v('tt_brand_content').checked } };
+    }
+
     window.createPost = async function () {
         const content = document.getElementById('contentInput').value.trim();
         if (!content) { P.toast('Write Post text', 'error'); return; }
@@ -465,15 +520,17 @@ HTML;
         if (later && !atVal) { P.toast('Pick a publish time', 'error'); return; }
         const checked = Array.from(document.querySelectorAll('.targetCheckbox:checked'));
         if (!media && checked.some(cb => cb.dataset.platform === 'instagram')) { P.toast('إنستجرام محتاج صورة أو فيديو - ارفع صورة الأول', 'error'); return; }
+        const ttOpts = tikTokOptions();
+        if (!ttOpts.ok) { P.toast(ttOpts.error, 'error'); return; }
         const scheduledAt = later ? atVal : null; // UTC
         const targets = checked.map(cb => ({ platform_connection_id: parseInt(cb.value, 10), scheduled_at: scheduledAt }));
         const btn = document.getElementById('spSubmit'); btn.disabled = true; const lbl = btn.textContent; btn.textContent = targets.length && !later ? 'Publishing...' : 'Saving...';
-        const res = await fetchJSON('/api/social/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, targets, media_item_id: media ? media.id : null }) });
+        const res = await fetchJSON('/api/social/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content, targets, media_item_id: media ? media.id : null, tiktok: ttOpts.value }) });
         btn.disabled = false; btn.textContent = lbl;
         if (res.success) {
             document.getElementById('newPostModal').classList.remove('open');
             const st = res.data.post && res.data.post.status;
-            P.toast(!targets.length ? 'Saved as draft' : (later ? 'Scheduled ✔' : st === 'published' ? 'Published ✔' : st === 'failed' ? 'النشر فشل - شوف السبب في الجدول' : 'Publishing...'), st === 'failed' ? 'error' : 'success');
+            P.toast(!targets.length ? 'Saved as draft' : (later ? 'Scheduled ✔' : st === 'published' ? 'Published ✔' : st === 'failed' ? 'النشر فشل - شوف السبب في الجدول' : (ttOpts.value ? 'اتبعت لتيك توك ✔ الفيديو ممكن ياخد كام دقيقة لحد ما يظهر على البروفايل' : 'Publishing...')), st === 'failed' ? 'error' : 'success');
             document.getElementById('contentInput').value = ''; document.getElementById('topicInput').value = ''; clearMedia();
             load(); loadCalendar(); loadStats();
         } else {
@@ -1243,6 +1300,15 @@ JS;
             }
             $targets[] = ['platform_connection_id' => $cid, 'scheduled_at' => $at];
         }
+        // تيك توك: العميل لازم يختار الخصوصية والإعدادات بنفسه من شاشة النشر (شرط من تيك توك)
+        $tiktokIds = $targets ? array_column($this->db->query("SELECT id FROM platform_connections WHERE platform = 'tiktok' AND id IN (" . implode(',', array_map('intval', array_column($targets, 'platform_connection_id'))) . ")") ?: [], 'id') : [];
+        $tiktokOpts = null;
+        if ($tiktokIds) {
+            $tiktokOpts = TikTokAPI::cleanOptions($this->get('tiktok'));
+            if (isset($tiktokOpts['error'])) {
+                return $this->error($tiktokOpts['error'], 422);
+            }
+        }
         $rawMediaId = $this->get('media_item_id', 0);
         if ($rawMediaId !== null && (!is_scalar($rawMediaId) || !preg_match('/^[0-9]+$/', (string)$rawMediaId))) {
             return $this->error('Image/video isn\'t ready or doesn\'t exist', 422);
@@ -1259,6 +1325,12 @@ JS;
                 ['content' => $this->get('content'), 'website_id' => $this->get('website_id'), 'media_item_id' => $mediaId ?: null],
                 $targets
             );
+            if ($tiktokOpts) {
+                $pdo = $this->db->getConnection();
+                foreach ($this->db->query('SELECT id FROM social_post_targets WHERE social_post_id = ? AND platform_connection_id IN (' . implode(',', array_map('intval', $tiktokIds)) . ')', [(int) $post->getAttribute('id')]) ?: [] as $row) {
+                    TikTokAPI::saveOptions($pdo, (int) $row['id'], $tiktokOpts);
+                }
+            }
             // النشر الفوري بيتنفذ في نفس الطلب (مش مستني الكرون)
             SocialPostService::runNow($this->service->immediateJobIds);
             $postId = (int) $post->getAttribute('id');
@@ -1328,6 +1400,45 @@ JS;
         }
 
         return $this->success($result);
+    }
+
+    /** GET /api/social/tiktok/creator-info?connection_id= - بيانات شاشة النشر (اسم الحساب والخصوصيات المسموحة) */
+    public function tikTokCreatorInfo(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if ($rateError = $this->rateLimitGuard('user', 'tiktok_creator_info', 30, 60)) {
+            return $rateError;
+        }
+        $uid = (int) $this->user['id'];
+        $cid = (int) $this->get('connection_id', 0);
+        $own = $this->db->query("SELECT id FROM platform_connections WHERE id = ? AND platform = 'tiktok' AND status = 'connected' AND (user_id = ? OR website_id IN (SELECT id FROM websites WHERE user_id = ?)) LIMIT 1", [$cid, $uid, $uid]);
+        $conn = $own ? (new PlatformConnection())->where(['id' => $cid], [], 1) : [];
+        if (!$conn) {
+            return $this->error('حساب تيك توك ده مش متربط', 404);
+        }
+        try {
+            $api = TikTokAPI::fromConnection($conn[0]);
+            $info = $api->creatorInfo();
+            if (empty($info['success'])) {
+                return $this->error((string) ($info['error'] ?? 'تيك توك مارد'), 502);
+            }
+            $d = $info['data'];
+            return $this->success([
+                'nickname' => (string) ($d['creator_nickname'] ?? $d['creator_username'] ?? $conn[0]->getAttribute('external_location_name')),
+                'username' => (string) ($d['creator_username'] ?? ''),
+                'avatar' => (string) ($d['creator_avatar_url'] ?? ''),
+                'privacy_level_options' => array_values((array) ($d['privacy_level_options'] ?? [])),
+                'comment_disabled' => !empty($d['comment_disabled']),
+                'duet_disabled' => !empty($d['duet_disabled']),
+                'stitch_disabled' => !empty($d['stitch_disabled']),
+                'max_video_post_duration_sec' => (int) ($d['max_video_post_duration_sec'] ?? 0),
+            ]);
+        } catch (Throwable $e) {
+            Logger::error('TikTok creator info failed', ['error' => $e->getMessage()]);
+            return $this->error('مقدرناش نوصل لتيك توك دلوقتي، جرّب تاني', 502);
+        }
     }
 
     /** GET /social/connect/tiktok */
