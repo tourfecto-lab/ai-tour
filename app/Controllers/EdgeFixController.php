@@ -268,6 +268,13 @@ class EdgeFixController extends Controller
             EdgeRules::phpConnector($websiteId, $this->appUrl())
         );
         Logger::info('PHP connector auto-install', ['website_id' => $websiteId, 'ok' => $result['ok'], 'root' => $result['root'] ?? null]);
+        if ($result['ok'] && class_exists('SeoExpertService')) {
+            try {
+                (new SeoExpertService($this->db))->retryAfterConnector($this->uid(), $websiteId);
+            } catch (Throwable $e) {
+                // التعديلات هتتعاد مع أول "اختبار الربط" أو الدورة الجاية
+            }
+        }
         return $result['ok'] ? $this->success(['root' => $result['root'] ?? ''], $result['message']) : $this->error($result['message'], 422);
     }
 

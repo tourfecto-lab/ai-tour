@@ -45,7 +45,23 @@ class SeoExpertService
         $site=$this->site($uid,$wid);try{$ctx=(new SeoExpertPageContext())->fresh($site['main_url']);}catch(Throwable $e){$ctx=['ok'=>false,'error'=>'inspection_unavailable'];}$metrics=$this->metrics($uid,$wid,$site);
         $publishing=['state'=>'not_connected'];$r=$this->connection($uid,$wid,'wordpress');
         if($r){try{$credentials=(new Encryption())->decrypt($r['access_token']);[$name,$password]=array_pad(explode(':',$credentials,2),2,'');if(!WordPressConnector::hostsEqual((string)parse_url($site['main_url'],PHP_URL_HOST),(string)parse_url($r['external_location_id'],PHP_URL_HOST)))throw new RuntimeException('target_mismatch');$res=$this->publisher()->testConnection($r['external_location_id'],$name,$password);$publishing=['state'=>!empty($res['success'])?'authenticated':'unavailable','note'=>'Authentication is verified; actual publication permissions are checked by WordPress when publishing.'];}catch(Throwable $e){$publishing=['state'=>'unavailable'];}}
-        return ['connector'=>['state'=>!empty($ctx['ok'])&&($ctx['connector_version']??'')==='4'?'publicly_observed':(empty($ctx['ok'])||!empty($ctx['coming_soon'])?'page_unavailable':'not_observed'),'checked_at'=>gmdate('c')],'metrics'=>$metrics,'publishing'=>$publishing];
+        $observed=!empty($ctx['ok'])&&($ctx['connector_version']??'')==='4';
+        $retried=$observed?$this->retryAfterConnector($uid,$wid):0;
+        return ['connector'=>['state'=>$observed?'publicly_observed':(empty($ctx['ok'])||!empty($ctx['coming_soon'])?'page_unavailable':'not_observed'),'checked_at'=>gmdate('c'),'retried'=>$retried],'metrics'=>$metrics,'publishing'=>$publishing];
+    }
+    /**
+     * تعديلات العنوان/الوصف اللي العميل وافق عليها ووقفت لأن ملف الربط ماكانش شغال:
+     * أول ما الربط يشتغل بنعيد تنفيذها لوحدها (كانت بتفضل واقفة لحد الدورة الجاية).
+     * @return int عدد التعديلات اللي اتعاد تشغيلها
+     */
+    public function retryAfterConnector(int $uid,int $wid): int{
+        try{
+            $rows=$this->q("SELECT t.id,t.run_id FROM seo_expert_tasks t JOIN seo_expert_runs r ON r.id=t.run_id WHERE t.website_id=? AND t.user_id=? AND t.kind='metadata' AND t.status='needs_client' AND t.evidence_json LIKE '%server-side connector%' AND r.approved_at IS NOT NULL",[$wid,$uid])->fetchAll(PDO::FETCH_ASSOC);
+            if(!$rows)return 0;
+            $runs=[];foreach($rows as $row){$this->q("UPDATE seo_expert_tasks SET status='approved',updated_at=UTC_TIMESTAMP() WHERE id=? AND status='needs_client'",[(int)$row['id']]);$runs[(int)$row['run_id']]=true;}
+            foreach(array_keys($runs) as $runId){$this->q("UPDATE seo_expert_runs SET status='executing',version=version+1,updated_at=UTC_TIMESTAMP() WHERE id=? AND status NOT IN ('executing')",[$runId]);$this->queueWork($runId,'apply');}
+            return count($rows);
+        }catch(Throwable $e){Logger::warning('SEO connector retry skipped',['website_id'=>$wid,'error'=>$e->getMessage()]);return 0;}
     }
     public function importBrief(int $uid,int $wid,string $language): array{
         $site=$this->site($uid,$wid);$ar=$language==='ar';$reader=$this->reader??new SeoExpertPageContext();$home=$reader->fresh($site['main_url']);

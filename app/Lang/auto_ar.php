@@ -237,4 +237,5 @@ return [
     'Add a link or choose a file' => 'حط رابط أو اختار ملف',
     'Pick at least one item' => 'اختار عنصر واحد على الأقل',
     'Knowledge extraction provider is unavailable.' => 'خدمة الاستخراج مش متاحة دلوقتي. جرّب كمان شوية.',
+    'Install or update the Tourfecto server-side connector, clear the public page cache, and recheck.' => 'التعديل ده جاهز ومستني الربط مع موقعك. من الإعدادات اضغط "ركّب الربط تلقائيًا" - وأول ما الربط يشتغل التعديل هيتنفذ لوحده.',
 ];
