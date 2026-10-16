@@ -92,7 +92,7 @@ class PublishScheduledArticleJob implements QueueJobInterface
 
                 $result = $existingPostId
                     ? $publisher->updatePost($siteUrl, $username, $appPassword, (int) $existingPostId, $title, $html, $excerpt, $featuredMedia)
-                    : $publisher->createPost($siteUrl, $username, $appPassword, $title, $html, $excerpt, $publishStatus, $featuredMedia);
+                    : $publisher->createPost($siteUrl, $username, $appPassword, $title, $html, $excerpt, $publishStatus, $featuredMedia, (string) $article->getAttribute('slug') ?: null);
 
                 $newPostId = $result['success'] ? ($result['post_id'] ?? $existingPostId) : null;
             } else {

@@ -72,7 +72,7 @@ class SeoAbTestService
     public function pickVariant(int $websiteId, string $targetField, string $pageUrl, ?string $userAgent = null): ?array
     {
         $tests = $this->db->query(
-            "SELECT id, target_path FROM seo_ab_tests
+            "SELECT id, target_path, started_at, created_at FROM seo_ab_tests
               WHERE website_id = ? AND target_field = ? AND status = 'running'
               ORDER BY id DESC LIMIT 1",
             [$websiteId, $targetField]
@@ -95,9 +95,13 @@ class SeoAbTestService
             return null;
         }
 
-        // توزيع حتمي على مستوى الصفحة (ثابت للروبت الواحد)
+        // تجربة عنوان على صفحة واحدة: كل نسخة بتاخد أسبوع كامل بالتبادل (A ثم B ثم A...)
+        // عشان جوجل يلحق يعرض كل عنوان ونقارن نسبة النقر (CTR) من Search Console أسبوع بأسبوع.
+        // (التوزيع القديم حسب رابط الصفحة كان بيدّي نفس النسخة دايمًا فالتجربة ماكانتش بتقارن حاجة)
         $totalWeight = array_sum(array_column($variants, 'traffic_weight'));
-        $bucket = crc32($pageUrl) % max(1, $totalWeight);
+        $start = strtotime((string) ($test['started_at'] ?: $test['created_at'])) ?: time();
+        $week = intdiv(max(0, time() - $start), 7 * 86400);
+        $bucket = (int) (($week % count($variants)) * max(1, $totalWeight) / count($variants));
         $acc = 0;
         $chosen = $variants[0];
         foreach ($variants as $v) {

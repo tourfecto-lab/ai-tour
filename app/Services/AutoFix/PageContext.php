@@ -71,6 +71,7 @@ class PageContext
             $prop = strtolower($m->getAttribute('property'));
             $content = $this->clean($m->getAttribute('content'));
             if ($name === 'tourfecto-connector') { $out['connector_version']=$content; }
+            if ($name === 'tourfecto-connector-features') { $out['connector_features']=$content; }
             if ($name === 'description') {
                 $out['description'] = $content;
             } elseif ($name === 'viewport') {
@@ -96,6 +97,8 @@ class PageContext
         $out['twitter']=[];foreach($doc->getElementsByTagName('meta') as $m){$name=$m->getAttribute('name');if(strpos($name,'twitter:')===0)$out['twitter'][$name]=$m->getAttribute('content');}
 
 
+        // روابط "رحلات ممكن تعجبك" اللي ملف الربط حطها (للتأكد إنها ظهرت فعلًا)
+        $out['tf_related']=[];foreach($xp->query('//*[@data-tf-related]//a[@href]') as $a){$out['tf_related'][]=$this->absolute($out['final_url'],$a->getAttribute('href'));}
         // روابط داخلية بعناوين (للـ llms.txt)
         $host = strtolower((string) parse_url($out['final_url'], PHP_URL_HOST));
         $links = [];
@@ -341,7 +344,7 @@ class PageContext
     }
     public static function benefit(string $field): string
     {
-        return match($field){'title'=>'Helps visitors and search engines identify the page.','description'=>'Provides a useful summary that search engines may show in results.','canonical'=>'Identifies the preferred page URL.','robots'=>'Controls page indexing instructions.','viewport'=>'Supports correct layout on mobile devices.','lang'=>'Identifies the page language for accessibility and search.','og'=>'Controls the preview when the page is shared.','jsonld'=>'Describes the business using structured data.','hsts'=>'Requests HTTPS-only access for the configured duration.','llms_txt'=>'Provides a readable site summary; discovery or ranking benefits are not guaranteed.',default=>'Requires a separate implementation and verification method.'};
+        return match($field){'title'=>'Helps visitors and search engines identify the page.','description'=>'Provides a useful summary that search engines may show in results.','canonical'=>'Identifies the preferred page URL.','robots'=>'Controls page indexing instructions.','viewport'=>'Supports correct layout on mobile devices.','lang'=>'Identifies the page language for accessibility and search.','og'=>'Controls the preview when the page is shared.','jsonld'=>'Describes the business using structured data.','hsts'=>'Requests HTTPS-only access for the configured duration.','llms_txt'=>'Provides a readable site summary; discovery or ranking benefits are not guaranteed.','related_links'=>'Links related trips together so visitors and Google find more of your pages.',default=>'Requires a separate implementation and verification method.'};
     }
     private static function normalizeValue(string $s): string
     {return trim(preg_replace('/\s+/u',' ',html_entity_decode($s,ENT_QUOTES|ENT_HTML5,'UTF-8')));}
@@ -362,6 +365,9 @@ class PageContext
             $same=$matches===1;
         }elseif($field==='og'){
             $wanted=json_decode($expected,true);$actual=array_merge($ctx['og']??[],$ctx['twitter']??[]);$out['observed']=$actual;$same=is_array($wanted)&&count($wanted)>0;foreach($wanted??[] as $k=>$v)if(($actual[$k]??null)!==$v)$same=false;
+        }elseif($field==='related_links'){
+            $want=array_column(json_decode($expected,true)?:[],'url');$found=$ctx['tf_related']??[];$out['observed']=$found;
+            $same=$want!==[]&&!array_diff($want,$found);
         }elseif($field==='hsts'){$out['observed']=$ctx['hsts']??'';$same=$out['observed']===$expected;
         }elseif($field==='llms_txt'){$out['observed']=$ctx['llms_body']??null;$same=is_string($out['observed']) && self::normalizeValue($out['observed'])===self::normalizeValue($expected);
         }else{

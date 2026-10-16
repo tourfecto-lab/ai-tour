@@ -60,10 +60,11 @@ class SeoContentAutomationHandler implements AutomationHandler
             }
         }
 
-        $res = (new SeoContentService($db))->indexItem($itemId);
-        if (empty($res['success']) && !$published) {
-            return ['success' => false, 'error' => $res['error'] ?? 'تعذر الفهرسة'];
+        // الفهرسة بس للمقال اللي اتنشر فعلًا على رابط حقيقي
+        if (!$published) {
+            return ['success' => true, 'published' => false, 'indexed' => false, 'note' => $note ?? 'المقال جاهز في صفحة المقالات؛ انشره على موقعك عشان يتبعت للفهرسة.'];
         }
-        return ['success' => true, 'published' => $published, 'note' => $note];
+        $res = (new SeoContentService($db))->indexItem($itemId);
+        return ['success' => true, 'published' => true, 'indexed' => !empty($res['success']), 'note' => $note];
     }
 }

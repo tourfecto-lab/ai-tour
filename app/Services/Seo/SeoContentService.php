@@ -286,13 +286,23 @@ class SeoContentService
             return ['success' => false, 'error' => 'الموقع مش مفعّل ليه IndexNow (ولّد مفتاح الأول)'];
         }
 
-        $slug = (string) ($item['slug'] ?? '');
         $host = parse_url($mainUrl, PHP_URL_HOST);
         if (!$host) {
             return ['success' => false, 'error' => 'main_url غير صالح'];
         }
 
-        $url = rtrim($mainUrl, '/') . '/blog/' . $slug;
+        // الرابط الحقيقي اللي المقال اتنشر عليه بس (كان بيبعت /blog/slug لجوجل حتى لو الصفحة مش موجودة)
+        $url = '';
+        if (!empty($item['article_id'])) {
+            $a = $this->db->query('SELECT published_url, status FROM ai_articles WHERE id = ? LIMIT 1', [(int) $item['article_id']]);
+            $pub = (string) ($a[0]['published_url'] ?? '');
+            if (($a[0]['status'] ?? '') === 'published' && preg_match('#^https?://#i', $pub)) {
+                $url = $pub;
+            }
+        }
+        if ($url === '' || strtolower((string) parse_url($url, PHP_URL_HOST)) !== strtolower((string) $host)) {
+            return ['success' => false, 'error' => 'المقال لسه ماتنشرش على موقعك، فمش هنبلّغ محركات البحث برابط مش موجود. انشره الأول (اربط WordPress) وبعدين يتبعت للفهرسة.'];
+        }
         $service = new IndexNowService();
         $result = $service->submitUrls($host, $indexNowKey, [$url]);
 

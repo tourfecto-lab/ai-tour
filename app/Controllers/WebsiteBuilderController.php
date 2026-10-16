@@ -858,7 +858,7 @@ JS;
      * (meta_description/canonical/open_graph) على أي موقع تاني - دلوقتي
      * مواقع الـWebsite Builder نفسها ماعادتش ناقصاها.
      */
-    private function siteHeadHtml(string $title, string $themeKey = 'gold', ?string $description = null, ?string $canonicalUrl = null, ?string $ogImage = null): string
+    private function siteHeadHtml(string $title, string $themeKey = 'gold', ?string $description = null, ?string $canonicalUrl = null, ?string $ogImage = null, string $jsonLd = ''): string
     {
         $theme = self::THEMES[$themeKey] ?? self::THEMES['gold'];
         $accent = $theme['accent'];
@@ -880,6 +880,7 @@ JS;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{$title}</title>{$metaDescription}{$canonicalTag}{$ogTags}
+    {$jsonLd}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
@@ -1149,7 +1150,8 @@ HTML;
             $themeKey,
             $seoDescription !== '' ? $seoDescription : ($c['about_text'] ?? null),
             $canonicalUrl !== '' ? $canonicalUrl : null,
-            $ogImage !== '' ? $ogImage : null
+            $ogImage !== '' ? $ogImage : null,
+            $this->siteSchemaTag('home', $c, $canonicalUrl, $websiteId)
         );
 
         $reviewsHtml = $websiteId > 0 ? $this->siteReviewsSectionHtml($websiteId, $slug) : '';
@@ -1275,7 +1277,8 @@ HTML;
             $themeKey,
             $seoDescription !== '' ? $seoDescription : ($c['about_text'] ?? null),
             $canonicalUrl !== '' ? $canonicalUrl : null,
-            $ogImage !== '' ? $ogImage : null
+            $ogImage !== '' ? $ogImage : null,
+            $this->siteSchemaTag('home', $c, $canonicalUrl, $websiteId)
         );
 
         $reviewsHtml = $websiteId > 0 ? $this->siteReviewsSectionHtml($websiteId, $slug) : '';
@@ -1357,6 +1360,75 @@ HTML;
     }
 
     /** GET /sites/{slug}/tours/{tourSlug} - صفحة تفصيل رحلة واحدة */
+    /** JSON-LD لصفحات منشئ المنصة (من بيانات الموقع والتقييمات المعتمدة الحقيقية) */
+    private function siteSchemaTag(string $kind, array $c, string $siteUrl, int $websiteId, ?array $tour = null): string
+    {
+        if ($siteUrl === '') {
+            return '';
+        }
+        try {
+            require_once __DIR__ . '/../Services/SeoExpert/SeoSchemaBuilder.php';
+            $ratings = [];
+            if ($websiteId > 0) {
+                foreach ((new WebsiteReview())->approvedFor($websiteId, $kind === 'tour' ? (string) ($tour['slug'] ?? '') : null) as $r) {
+                    $ratings[] = (int) $r->getAttribute('rating');
+                }
+            }
+            $graph = $kind === 'tour' && $tour ? SeoSchemaBuilder::forBuilderTour($tour, $c, $siteUrl, $ratings) : SeoSchemaBuilder::forBuilderHome($c, $siteUrl, $ratings);
+            return SeoSchemaBuilder::scriptTag($graph);
+        } catch (Throwable $e) {
+            return '';
+        }
+    }
+
+    /** GET /sites/{slug}/sitemap.xml (وعلى الدومين المخصص /sitemap.xml) */
+    public function siteSitemap(array $params = []): array
+    {
+        $slug = (string) ($params['slug'] ?? '');
+        $website = $this->findViewableWebsite($slug);
+        if (!$website) {
+            header('HTTP/1.1 404 Not Found');
+            exit;
+        }
+        $base = $this->publicSiteUrl($slug, $website);
+        $c = $website->getContent();
+        $lastmod = substr((string) ($website->getAttribute('updated_at') ?: date('Y-m-d')), 0, 10);
+        $urls = [$base . '/'];
+        foreach (($c['tours'] ?? []) as $t) {
+            if (!empty($t['slug'])) {
+                $urls[] = $base . '/tours/' . rawurlencode((string) $t['slug']);
+            }
+        }
+        foreach (($c['rooms'] ?? []) as $t) {
+            if (!empty($t['slug'])) {
+                $urls[] = $base . '/rooms/' . rawurlencode((string) $t['slug']);
+            }
+        }
+        header('Content-Type: application/xml; charset=utf-8');
+        echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+        foreach (array_unique($urls) as $u) {
+            echo '<url><loc>' . htmlspecialchars($u, ENT_XML1, 'UTF-8') . '</loc><lastmod>' . htmlspecialchars($lastmod, ENT_XML1) . '</lastmod></url>';
+        }
+        echo '</urlset>';
+        exit;
+    }
+
+    /** GET /sites/{slug}/robots.txt (على الدومين المخصص /robots.txt) - بيدل جوجل على الـ sitemap */
+    public function siteRobots(array $params = []): array
+    {
+        $slug = (string) ($params['slug'] ?? '');
+        $website = $this->findViewableWebsite($slug);
+        header('Content-Type: text/plain; charset=utf-8');
+        if (!$website) {
+            echo "User-agent: *\nDisallow:\n";
+            exit;
+        }
+        $base = $this->publicSiteUrl($slug, $website);
+        $prefix = rtrim((string) parse_url($base, PHP_URL_PATH), '/');
+        echo "User-agent: *\nAllow: /\nDisallow: " . $prefix . "/booking/\n\nSitemap: " . $base . "/sitemap.xml\n";
+        exit;
+    }
+
     public function showTourDetail(array $params = []): array
     {
         $slug = (string) ($params['slug'] ?? '');
@@ -1429,7 +1501,11 @@ HTML;
         $price = $esc($tour['price'] ?? '');
         $groupSize = $esc($tour['group_size'] ?? '');
         $design = $this->siteDesignAttrs($website);
-        $head = $this->siteHeadHtml("{$tourName} | {$businessName}", $design['theme']);
+        // SEO صفحة الرحلة: وصف + رابط أساسي + صورة المشاركة + Schema الرحلة (TouristTrip)
+        $siteBase = $this->publicSiteUrl($slug, $website);
+        $tourDescMeta = trim((string) ($tour['short_description'] ?? '')) !== '' ? mb_substr(trim((string) $tour['short_description']), 0, 300) : null;
+        $tourImage = !empty($tour['image_url']) && preg_match('#^https?://#', (string) $tour['image_url']) ? (string) $tour['image_url'] : null;
+        $head = $this->siteHeadHtml("{$tourName} | {$businessName}", $design['theme'], $tourDescMeta, $siteBase . '/tours/' . rawurlencode($tourSlug), $tourImage, $this->siteSchemaTag('tour', $c, $siteBase, (int) $website->getAttribute('id'), $tour));
         $reviewsHtml = $this->siteReviewsSectionHtml((int) $website->getAttribute('id'), $slug, $tourSlug);
         $heroImageHtml = !empty($tour['image_url'])
             ? '<div class="ws-tour-hero-img" style="background-image:url(\'' . $esc($tour['image_url']) . '\');"></div>'

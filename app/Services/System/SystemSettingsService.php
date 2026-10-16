@@ -23,6 +23,8 @@ class SystemSettingsService
         'serp_language_code' => ['category'=>'seo','label'=>'SERP Language Code','is_secret'=>false,'constant'=>''],
         'serp_device' => ['category'=>'seo','label'=>'SERP Device (desktop/mobile)','is_secret'=>false,'constant'=>''],
 
+        'pagespeed_api_key' => ['category' => 'seo', 'label' => 'Google PageSpeed Insights API Key (اختياري - سرعة المواقع الحقيقية)', 'is_secret' => true, 'constant' => 'PAGESPEED_API_KEY'],
+
         'gemini_api_key' => ['category' => 'ai', 'label' => 'Gemini API Key', 'is_secret' => true, 'constant' => 'GEMINI_API_KEY'],
 
         'google_client_id' => ['category' => 'google', 'label' => 'Google Client ID', 'is_secret' => false, 'constant' => 'GOOGLE_CLIENT_ID'],

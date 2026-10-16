@@ -13,7 +13,7 @@
  */
 class EdgeRules
 {
-    private const FIELDS = ['title', 'description', 'canonical', 'robots', 'viewport', 'lang', 'og', 'jsonld', 'hsts', 'llms_txt'];
+    private const FIELDS = ['title', 'description', 'canonical', 'robots', 'viewport', 'lang', 'og', 'jsonld', 'hsts', 'llms_txt', 'related_links'];
 
     // ------------------------------------------------------------------ التوكن
 
@@ -93,11 +93,31 @@ class EdgeRules
                 return count($out) >= 2 ? $out : null;
             case 'jsonld':
                 $j = json_decode($raw, true);
-                if (!is_array($j) || stripos((string) ($j['@context'] ?? ''), 'schema.org') === false
-                    || !in_array($j['@type'] ?? '', ['Organization', 'LocalBusiness', 'TravelAgency', 'WebSite', 'Person'], true)) {
+                // نوع واحد (Organization...) أو @graph فيه Schema السياحة (TouristTrip / Breadcrumb / Offer ...)
+                if (!is_array($j) || strlen($raw) > 20000 || stripos((string) ($j['@context'] ?? ''), 'schema.org') === false) {
+                    return null;
+                }
+                require_once dirname(__DIR__) . '/SeoExpert/SeoSchemaBuilder.php';
+                if (!SeoSchemaBuilder::typesAllowed($j)) {
                     return null;
                 }
                 return json_encode($j, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            case 'related_links':
+                // روابط داخلية لصفحات من نفس الموقع (لحد 4) - نص وروابط بس
+                $j = json_decode($raw, true);
+                if (!is_array($j) || !array_is_list($j) || count($j) < 1 || count($j) > 4) {
+                    return null;
+                }
+                $out = [];
+                foreach ($j as $l) {
+                    $u = is_array($l) ? (string) ($l['url'] ?? '') : '';
+                    $t = is_array($l) ? self::line((string) ($l['title'] ?? '')) : '';
+                    if ($t === '' || mb_strlen($t) > 90 || !preg_match('#^https?://[^\s<>"\']+$#i', $u) || strtolower((string) parse_url($u, PHP_URL_HOST)) !== strtolower($siteHost)) {
+                        return null;
+                    }
+                    $out[] = ['url' => $u, 'title' => $t];
+                }
+                return json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             case 'llms_txt':
                 return (strlen($raw) >= 20 && strlen($raw) <= 20000 && strpos($raw, '<') === false) ? $raw : null;
         }
@@ -138,8 +158,11 @@ class EdgeRules
         if($exists){
             $pageRows=$db->query("SELECT page_path,field_name,expected_value FROM seo_expert_tasks WHERE website_id=? AND kind='metadata' AND is_active=1 AND status IN ('active','verified','needs_client') ORDER BY id",[$websiteId]);
             $pageRules=[];
-            foreach($pageRows as $r){$path=(string)$r['page_path'];$field=(string)$r['field_name'];if(!in_array($field,['title','description','canonical','viewport','lang','jsonld'],true)||!str_starts_with($path,'/')||str_contains($path,'?')||str_contains($path,chr(92))||preg_match('/[\x00-\x20]/',$path))continue;$clean=self::sanitize($field,(string)$r['expected_value'],$siteHost);if($clean!==null)$pageRules[$path][$field]=$clean;}
+            foreach($pageRows as $r){$path=(string)$r['page_path'];$field=(string)$r['field_name'];if(!in_array($field,['title','description','canonical','viewport','lang','jsonld','related_links'],true)||!str_starts_with($path,'/')||str_contains($path,'?')||str_contains($path,chr(92))||preg_match('/[\x00-\x20]/',$path))continue;$clean=self::sanitize($field,(string)$r['expected_value'],$siteHost);if($clean!==null)$pageRules[$path][$field]=$field==='related_links'?json_decode($clean,true):$clean;}
             if($pageRules)$rules['page_rules']=$pageRules;
+            // وصف تلقائي للصور اللي من غير alt (من اسم الصورة أو عنوان الصفحة) - للمواقع اللي مفعّلة خدمة SEO
+            $sx=$db->query("SELECT policy_json FROM seo_expert_sites WHERE website_id=? AND status IN ('active','draft') LIMIT 1",[$websiteId]);
+            if($sx){$pol=json_decode((string)$sx[0]['policy_json'],true)?:[];if(($pol['auto_alt']??true)!==false)$rules['auto_alt']=1;}
             // مقالات معتمدة بتتنشر من خلال ملف الربط في مواقع PHP (/guides/{slug}) - نص بس
             $articles=[];
             foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified') AND (published_url LIKE '%/guides/%' OR published_url LIKE '%tf_article=%') ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
@@ -159,6 +182,76 @@ class EdgeRules
         return $rules;
     }
 
+    /** دوال الجسم المشتركة (WordPress + PHP): وصف الصور + بلوك الروابط الداخلية */
+    public static function bodyHelpers(): string
+    {
+        return <<<'PHPH'
+if ( ! function_exists( 'tf_edge_alt_from' ) ) {
+function tf_edge_alt_from( $src, $fallback ) {
+    $name = strtolower( (string) pathinfo( (string) parse_url( (string) $src, PHP_URL_PATH ), PATHINFO_FILENAME ) );
+    $name = preg_replace( '/-?\d{2,4}x\d{2,4}$|-scaled$|-e\d{10,}$/', '', $name );
+    $words = trim( preg_replace( '/[^a-z\x{0600}-\x{06FF}]+/u', ' ', str_replace( array( '-', '_', '+' ), ' ', urldecode( $name ) ) ) );
+    $generic = preg_match( '/^(img|image|dsc|dscn|pxl|photo|pic|screenshot|whatsapp|wa|unnamed|untitled|download|copy|banner|slide|bg|background|hero|placeholder|logo)(\s|$)/', $words ) || str_word_count( $words ) < 2;
+    $alt = $generic ? trim( (string) $fallback ) : ucfirst( $words );
+    return mb_substr( $alt, 0, 120 );
+}
+}
+if ( ! function_exists( 'tf_edge_fill_alt' ) ) {
+function tf_edge_fill_alt( $html, $fallback ) {
+    return preg_replace_callback( '/<img\b[^>]*>/i', function ( $m ) use ( $fallback ) {
+        $tag = $m[0];
+        if ( preg_match( '/\balt\s*=\s*(["\'])\s*\S[^"\']*\1/i', $tag ) ) { return $tag; }
+        if ( preg_match( '/\brole\s*=\s*(["\'])presentation\1|aria-hidden\s*=\s*(["\'])true\2/i', $tag ) ) { return $tag; }
+        $src = preg_match( '/\bsrc\s*=\s*(["\'])([^"\']+)\1/i', $tag, $s ) ? $s[2] : '';
+        $alt = tf_edge_alt_from( $src, $fallback );
+        if ( $alt === '' ) { return $tag; }
+        $tag = preg_replace( '/\salt\s*=\s*(["\'])\s*\1/i', '', $tag );
+        return preg_replace( '/^<img\b/i', '<img alt="' . htmlspecialchars( $alt, ENT_QUOTES, 'UTF-8' ) . '"', $tag );
+    }, (string) $html );
+}
+}
+if ( ! function_exists( 'tf_edge_related_html' ) ) {
+function tf_edge_related_html( $links ) {
+    $h = '';
+    foreach ( array_slice( (array) $links, 0, 4 ) as $l ) {
+        if ( ! is_array( $l ) || empty( $l['url'] ) || empty( $l['title'] ) ) { continue; }
+        $h .= '<li><a href="' . htmlspecialchars( (string) $l['url'], ENT_QUOTES, 'UTF-8' ) . '">' . htmlspecialchars( (string) $l['title'], ENT_QUOTES, 'UTF-8' ) . '</a></li>';
+    }
+    if ( $h === '' ) { return ''; }
+    $ar = isset( $GLOBALS['tf_edge_lang'] ) && strpos( (string) $GLOBALS['tf_edge_lang'], 'ar' ) === 0;
+    return '<nav class="tf-related" data-tf-related="1" style="margin:28px 0;padding:16px 18px;border:1px solid rgba(0,0,0,.1);border-radius:12px"><strong style="display:block;margin-bottom:8px">' . ( $ar ? 'رحلات ممكن تعجبك' : 'You may also like' ) . '</strong><ul style="margin:0;padding-inline-start:18px;line-height:1.9">' . $h . '</ul></nav>';
+}
+}
+
+PHPH;
+    }
+
+    /** WordPress: وصف الصور + روابط مشابهة في آخر محتوى الصفحة */
+    private static function wpBodyHooks(): string
+    {
+        return <<<'PHPH'
+
+add_filter( 'wp_get_attachment_image_attributes', function ( $attr, $attachment ) {
+    $r = tf_edge_rules();
+    if ( empty( $r['auto_alt'] ) || ( isset( $attr['alt'] ) && trim( (string) $attr['alt'] ) !== '' ) ) { return $attr; }
+    $alt = tf_edge_alt_from( isset( $attr['src'] ) ? $attr['src'] : '', get_the_title( $attachment ) ?: get_the_title() );
+    if ( $alt !== '' ) { $attr['alt'] = $alt; }
+    return $attr;
+}, 99, 2 );
+add_filter( 'the_content', function ( $content ) {
+    if ( is_admin() || ! is_singular() || ! in_the_loop() || ! is_main_query() ) { return $content; }
+    $r = tf_edge_rules();
+    if ( ! empty( $r['auto_alt'] ) ) { $content = tf_edge_fill_alt( $content, get_the_title() ); }
+    $page = tf_edge_page_rules();
+    if ( ! empty( $page['related_links'] ) && is_array( $page['related_links'] ) && strpos( $content, 'data-tf-related' ) === false ) {
+        $GLOBALS['tf_edge_lang'] = get_bloginfo( 'language' );
+        $content .= tf_edge_related_html( $page['related_links'] );
+    }
+    return $content;
+}, 99 );
+PHPH;
+    }
+
     public static function version(array $rules): string
     {
         return substr(md5(json_encode($rules, JSON_UNESCAPED_UNICODE)), 0, 12);
@@ -174,7 +267,7 @@ class EdgeRules
     {
         $token = self::token($websiteId);
         $endpoint = rtrim($endpoint, '/') . '/api/edge/rules';
-        return <<<PHP
+        return self::bodyHelpers() . <<<PHP
 /* Tourfecto Edge v4 - Page-scoped approved SEO updates. Data only; no remote code execution. */
 if ( defined( 'TF_EDGE_RUNTIME_V4' ) ) { return; }
 if ( function_exists( 'tf_edge_rules' ) ) { add_action( 'admin_notices', function () { if(current_user_can('manage_options'))echo '<div class="notice notice-warning"><p>Tourfecto: disable the old Tourfecto snippet before using connector v4.</p></div>'; } ); return; }
@@ -222,7 +315,7 @@ if ( ! function_exists( 'tf_edge_rules' ) ) {
         if ( tf_edge_is_home() ) { foreach (array('title','description','canonical','robots','viewport','lang','og','jsonld') as \$key) { if(isset(\$all[\$key]))\$page[\$key]=\$all[\$key]; } }
         \$path = tf_edge_current_path();
         if ( isset(\$all['page_rules'][\$path]) && is_array(\$all['page_rules'][\$path]) ) {
-            foreach(array('title','description','canonical','viewport','lang','jsonld') as \$key)if(isset(\$all['page_rules'][\$path][\$key]))\$page[\$key]=\$all['page_rules'][\$path][\$key];
+            foreach(array('title','description','canonical','viewport','lang','jsonld','related_links') as \$key)if(isset(\$all['page_rules'][\$path][\$key]))\$page[\$key]=\$all['page_rules'][\$path][\$key];
         }
         return \$page;
     }
@@ -301,7 +394,7 @@ function tf_edge_normalize_head( \$head, \$rules ) {
     return strtr( \$head, \$protected ) . \$extra;
 }
 }
-add_action( 'wp_head', function () { echo '<meta name="tourfecto-connector" content="4">'; }, -100000 );
+add_action( 'wp_head', function () { echo '<meta name="tourfecto-connector" content="4"><meta name="tourfecto-connector-features" content="body">'; }, -100000 );
 add_action( 'wp_head', function () {
     if ( tf_edge_has_page_rules() ) {
         \$rules = tf_edge_page_rules();
@@ -323,7 +416,8 @@ add_action( 'init', function () {
         exit;
     }
 } );
-PHP;
+PHP
+        . self::wpBodyHooks();
     }
 
     /**
@@ -438,7 +532,7 @@ function tf_edge_page_rules()
         }
     }
     if (isset($all['page_rules'][$path]) && is_array($all['page_rules'][$path])) {
-        foreach (['title', 'description', 'canonical', 'viewport', 'lang', 'jsonld'] as $k) {
+        foreach (['title', 'description', 'canonical', 'viewport', 'lang', 'jsonld', 'related_links'] as $k) {
             if (isset($all['page_rules'][$path][$k])) {
                 $page[$k] = $all['page_rules'][$path][$k];
             }
@@ -501,6 +595,8 @@ function tf_edge_apply_head($head, array $r)
     return strtr($head, $protected) . $extra;
 }
 
+TF_EDGE_BODY_HELPERS
+
 function tf_edge_buffer($html)
 {
     if (!is_string($html) || stripos($html, '<head') === false) {
@@ -538,9 +634,25 @@ function tf_edge_buffer($html)
             return $html;
         }
         $head = strtr(substr($masked, $open, $close - $open), $hidden);
-        $marker = "\n<meta name=\"tourfecto-connector\" content=\"4\">\n";
+        $marker = "\n<meta name=\"tourfecto-connector\" content=\"4\"><meta name=\"tourfecto-connector-features\" content=\"body\">\n";
         $newHead = $marker . ($r ? tf_edge_apply_head($head, $r) : $head);
-        return strtr(substr($masked, 0, $open), $hidden) . $newHead . strtr(substr($masked, $close), $hidden);
+        $rest = substr($masked, $close);
+        // الجسم: وصف الصور الناقص + روابط رحلات مشابهة (من غير لمس الـ scripts)
+        $all = tf_edge_rules();
+        if (!empty($all['auto_alt'])) {
+            $rest = tf_edge_fill_alt($rest, isset($r['title']) ? (string) $r['title'] : '');
+        }
+        if (!empty($r['related_links']) && is_array($r['related_links'])) {
+            $block = tf_edge_related_html($r['related_links']);
+            if (preg_match('#</main>#i', $rest)) {
+                $rest = preg_replace('#</main>#i', $block . '</main>', $rest, 1);
+            } elseif (preg_match('#<footer\b#i', $rest)) {
+                $rest = preg_replace('#<footer\b#i', $block . '<footer', $rest, 1);
+            } else {
+                $rest = preg_replace('#</body>#i', $block . '</body>', $rest, 1);
+            }
+        }
+        return strtr(substr($masked, 0, $open), $hidden) . $newHead . strtr($rest, $hidden);
     } catch (\Throwable $e) {
         return $html;
     }
@@ -675,7 +787,7 @@ if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)) {
     ob_start('tf_edge_buffer');
 }
 PHPCODE;
-        return strtr($code, ['__ENDPOINT__' => addslashes($endpoint), '__TOKEN__' => addslashes($token), '__SITE__' => (string) $websiteId]);
+        return strtr($code, ['__ENDPOINT__' => addslashes($endpoint), '__TOKEN__' => addslashes($token), '__SITE__' => (string) $websiteId, 'TF_EDGE_BODY_HELPERS' => self::bodyHelpers()]);
     }
 
     /**

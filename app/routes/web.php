@@ -172,6 +172,8 @@ $router->get('/automation', 'AutomationController', 'index', ['AuthMiddleware'])
 $router->get('/ai-assistant', 'AiAssistantController', 'index', ['AuthMiddleware']);
 $router->get('/website-builder', 'WebsiteBuilderController', 'index', ['AuthMiddleware']);
 $router->get('/dashboard/sites/{id}', 'SiteDashboardController', 'index', ['AuthMiddleware']);
+$router->get('/sites/{slug}/sitemap.xml', 'WebsiteBuilderController', 'siteSitemap');
+$router->get('/sites/{slug}/robots.txt', 'WebsiteBuilderController', 'siteRobots');
 $router->get('/sites/{slug}', 'WebsiteBuilderController', 'showPublicSite');
 $router->get('/sites/{slug}/tours/{tourSlug}', 'WebsiteBuilderController', 'showTourDetail');
 $router->get('/sites/{slug}/rooms/{roomSlug}', 'WebsiteBuilderController', 'showRoomDetail');

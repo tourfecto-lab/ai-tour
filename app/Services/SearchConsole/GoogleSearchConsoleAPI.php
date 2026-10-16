@@ -148,9 +148,60 @@ class GoogleSearchConsoleAPI
         return ['state'=>$row?'reported':'reported_empty','source'=>'google_search_console','timezone'=>'America/Los_Angeles','clicks'=>$clicks,'impressions'=>$impressions,'ctr'=>$impressions>0?$clicks/$impressions:null,'position'=>$impressions>0?(float)($row['position']??0):null,'note'=>'Exact URL report; provider limits/privacy can omit data.'];
     }
 
+    /**
+     * فحص فهرسة صفحة (URL Inspection API): هل جوجل فهرسها؟ ولو لأ ليه؟
+     * @return array{ok:bool, url:string, indexed?:bool, verdict?:string, coverage?:string, reason?:string, last_crawl?:?string, google_canonical?:?string, user_canonical?:?string, robots?:string, fetch?:string, error?:string}
+     */
+    public function inspectUrl(string $property, string $url): array
+    {
+        $r = $this->makeRequest('POST', 'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect', [], ['inspectionUrl' => $url, 'siteUrl' => $property]);
+        if (empty($r['success'])) {
+            return ['ok' => false, 'url' => $url, 'error' => (string) ($r['http_code'] ?? 'unavailable')];
+        }
+        $x = $r['data']['inspectionResult']['indexStatusResult'] ?? [];
+        $verdict = (string) ($x['verdict'] ?? '');
+        $coverage = (string) ($x['coverageState'] ?? '');
+        $robots = (string) ($x['robotsTxtState'] ?? '');
+        $indexing = (string) ($x['indexingState'] ?? '');
+        $fetch = (string) ($x['pageFetchState'] ?? '');
+        $gc = $x['googleCanonical'] ?? null;
+        $uc = $x['userCanonical'] ?? null;
+        $reason = '';
+        if ($robots === 'DISALLOWED') {
+            $reason = 'robots_blocked';
+        } elseif (in_array($indexing, ['BLOCKED_BY_META_TAG', 'BLOCKED_BY_HTTP_HEADER'], true)) {
+            $reason = 'noindex';
+        } elseif ($fetch !== '' && $fetch !== 'SUCCESSFUL') {
+            $reason = 'fetch_' . strtolower($fetch);
+        } elseif ($gc && $uc && rtrim((string) $gc, '/') !== rtrim((string) $uc, '/')) {
+            $reason = 'google_chose_other_canonical';
+        } elseif (stripos($coverage, 'Crawled') !== false && stripos($coverage, 'not indexed') !== false) {
+            $reason = 'crawled_not_indexed';
+        } elseif (stripos($coverage, 'Discovered') !== false) {
+            $reason = 'discovered_not_crawled';
+        } elseif (stripos($coverage, 'unknown') !== false) {
+            $reason = 'unknown_to_google';
+        }
+        return ['ok' => true, 'url' => $url, 'indexed' => $verdict === 'PASS', 'verdict' => $verdict, 'coverage' => $coverage, 'reason' => $reason, 'last_crawl' => $x['lastCrawlTime'] ?? null, 'google_canonical' => $gc, 'user_canonical' => $uc, 'robots' => $robots, 'fetch' => $fetch];
+    }
+
+    /** الـ sitemaps المتسجلة في Search Console للخاصية دي */
+    public function listSitemaps(string $property): array
+    {
+        $r = $this->makeRequest('GET', '/sites/' . rawurlencode($property) . '/sitemaps');
+        if (empty($r['success'])) {
+            return ['ok' => false, 'sitemaps' => []];
+        }
+        $out = [];
+        foreach ($r['data']['sitemap'] ?? [] as $sm) {
+            $out[] = ['path' => (string) ($sm['path'] ?? ''), 'errors' => (int) ($sm['errors'] ?? 0), 'warnings' => (int) ($sm['warnings'] ?? 0), 'last_downloaded' => $sm['lastDownloaded'] ?? null, 'pending' => !empty($sm['isPending'])];
+        }
+        return ['ok' => true, 'sitemaps' => $out];
+    }
+
     private function makeRequest(string $method, string $endpoint, array $query = [], array $data = []): array
     {
-        $url = self::BASE_URL . $endpoint;
+        $url = str_starts_with($endpoint, 'https://') ? $endpoint : self::BASE_URL . $endpoint;
 
         if (!empty($query)) {
             $url .= '?' . http_build_query($query);

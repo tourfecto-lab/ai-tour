@@ -51,7 +51,7 @@ class WordPressPublisher
      * @param string $status 'publish' (نشر مباشر) أو 'draft' (مسودة يراجعها العميل الأول)
      * @return array ['success'=>bool, 'post_id'=>?int, 'url'=>?string, 'error'=>?string]
      */
-    public function createPost(string $siteUrl, string $username, string $appPassword, string $title, string $htmlContent, string $excerpt = '', string $status = 'publish', ?int $featuredMedia = null): array
+    public function createPost(string $siteUrl, string $username, string $appPassword, string $title, string $htmlContent, string $excerpt = '', string $status = 'publish', ?int $featuredMedia = null, ?string $slug = null): array
     {
         $payload = [
             'title' => $title,
@@ -59,6 +59,10 @@ class WordPressPublisher
             'excerpt' => $excerpt,
             'status' => $status, // publish|draft
         ];
+        // رابط نظيف بالكلمة المفتاحية (بدل ما ووردبريس يعمله من العنوان الطويل)
+        if ($slug !== null && preg_match('/^[a-z0-9\x{0600}-\x{06FF}][a-z0-9\x{0600}-\x{06FF}-]{1,100}$/u', $slug)) {
+            $payload['slug'] = $slug;
+        }
         if ($featuredMedia !== null && $featuredMedia > 0) {
             $payload['featured_media'] = $featuredMedia;
         }
