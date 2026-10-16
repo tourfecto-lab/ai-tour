@@ -191,7 +191,26 @@ class ChatManager
             $rateLimitMax = defined('AI_CHAT_RATE_LIMIT_MAX') ? AI_CHAT_RATE_LIMIT_MAX : 20;
             $rateLimitWindow = defined('AI_CHAT_RATE_LIMIT_WINDOW_SECONDS') ? AI_CHAT_RATE_LIMIT_WINDOW_SECONDS : 60;
             $rateLimitOk = $this->rateLimiter->check('ai_chat_website_' . $websiteId, 'ai_chat_reply', $rateLimitMax, $rateLimitWindow);
-            if (!$rateLimitOk) {
+            // حصة الباقة: ردود الشات بوت بتتخصم من الباقة، وبعدها من المحفظة، ولو الاتنين خلصوا
+            // البوت بيسكت والمحادثة بتفضل للموظف (والعميل بيتنبّه مرة في اليوم)
+            $quotaOk = true;
+            if ($subscriptionCheck['valid']) {
+                $platform = (string) ($webhookData['platform'] ?? 'whatsapp');
+                if ($platform === 'whatsapp' && class_exists('PlanGateMiddleware') && !PlanGateMiddleware::hasFlag($userId, 'whatsapp_bot')) {
+                    $quotaOk = false;
+                    $this->notifyQuota($userId, 'whatsapp_bot', 'شات بوت واتساب مش ضمن باقتك', 'رسايل الواتساب بتوصلك في صندوق الرسائل، بس البوت مش بيرد عليها. رقّي باقتك عشان البوت يرد لوحده.');
+                } elseif ((int) ($subscriptionCheck['chat_credits_remaining'] ?? 0) <= 0) {
+                    if ((new WalletService())->canAffordUsage($userId, 'chat_message')['can_afford'] ?? false) {
+                        $viaWallet = true;
+                    } else {
+                        $quotaOk = false;
+                        $this->notifyQuota($userId, 'chat_quota', 'ردود الشات بوت في باقتك خلصت', 'البوت وقف يرد لحد ما تشحن المحفظة أو ترقّي باقتك - الرسايل الجديدة مستنياك في صندوق الرسائل.');
+                    }
+                }
+            }
+            if (!$quotaOk) {
+                $reply = null;
+            } elseif (!$rateLimitOk) {
                 Logger::warning('ChatManager: AI Chat rate limit exceeded, skipping AI reply', ['website_id' => $websiteId]);
                 $reply = null;
             } else {
@@ -209,6 +228,8 @@ class ChatManager
             // "حسب الطلب") - بعد نجاح توليد الرد فعليًا، مش قبله.
             if ($viaWallet && $reply) {
                 (new WalletService())->chargeForUsage($userId, 'chat_message', 'رد شات تلقائي');
+            } elseif ($reply) {
+                $this->subscription->consumeChatCredits($userId, 1);
             }
 
             // 8. حفظ الرد المُولَّد
@@ -710,6 +731,23 @@ class ChatManager
      * @param array $data
      * @return int|null
      */
+    /** تنبيه للعميل مرة في اليوم إن البوت وقف بسبب الباقة */
+    private function notifyQuota(int $userId, string $key, string $title, string $body): void
+    {
+        try {
+            $cache = new Cache();
+            $ck = 'chat_quota_note_' . $key . '_' . $userId . '_' . date('Ymd');
+            if ($cache->get($ck)) {
+                return;
+            }
+            $cache->set($ck, 1, 86400);
+            if (class_exists('Notification')) {
+                Notification::notify($userId, 'plan_limit', $title, $body, '/subscription');
+            }
+        } catch (Throwable $e) {
+        }
+    }
+
     private function resolveUserId(array $data): ?int
     {
         if (isset($data['user_id'])) {

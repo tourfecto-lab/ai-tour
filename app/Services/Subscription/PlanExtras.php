@@ -28,6 +28,7 @@ class PlanExtras
         'review' => ['kind' => 'credit', 'ar' => 'ردود على تقييمات جوجل', 'en' => 'Google review replies', 'unit' => 0.05, 'step' => 50, 'max' => 10000],
         'ai_analysis' => ['kind' => 'credit', 'ar' => 'تحليلات بالذكاء الصناعي', 'en' => 'AI analyses', 'unit' => 0.60, 'step' => 5, 'max' => 1000],
         'competitor' => ['kind' => 'credit', 'ar' => 'تحليلات منافسين', 'en' => 'Competitor analyses', 'unit' => 1.00, 'step' => 2, 'max' => 300],
+        'ai_tool' => ['kind' => 'usage', 'ar' => 'أدوات الذكاء الصناعي (كابشن، إعلانات، ردود مقترحة)', 'en' => 'AI tools (captions, ad copy, suggested replies)', 'unit' => 0.03, 'step' => 100, 'max' => 20000],
     ];
 
     /** إضافات جاهزة (مرة واحدة - صالحة 30 يوم) */
@@ -40,6 +41,7 @@ class PlanExtras
         'reviews_200' => ['service' => 'review', 'qty' => 200, 'price' => 8, 'icon' => '⭐'],
         'analysis_20' => ['service' => 'ai_analysis', 'qty' => 20, 'price' => 10, 'icon' => '📊'],
         'assistant_2000' => ['service' => 'ai_assistant_message', 'qty' => 2000, 'price' => 15, 'icon' => '🤖'],
+        'ai_tools_500' => ['service' => 'ai_tool', 'qty' => 500, 'price' => 12, 'icon' => '✨'],
     ];
 
     /**
@@ -50,19 +52,19 @@ class PlanExtras
     public const PRESET = [
         'starter' => ['name' => 'الانطلاقة', 'price_monthly' => 59, 'price_yearly' => 590, 'ai_analysis' => 10, 'chat_credits' => 1000, 'review_credits' => 80, 'competitor_analysis' => 2, 'multiple_websites' => 1,
             'whatsapp_bot' => 1, 'auto_pilot' => 0, 'advanced_analytics' => 0,
-            'extra' => ['ai_assistant_messages' => 200, 'website_generations' => 2, 'website_items' => 30, 'articles' => 6, 'media_images' => 30, 'media_videos' => 1, 'marketing_tools' => 40]],
+            'extra' => ['ai_assistant_messages' => 200, 'website_generations' => 2, 'website_items' => 30, 'articles' => 6, 'media_images' => 30, 'media_videos' => 1, 'marketing_tools' => 40, 'ai_tools' => 200], 'team' => 2],
         'professional' => ['name' => 'النمو', 'price_monthly' => 149, 'price_yearly' => 1490, 'ai_analysis' => 40, 'chat_credits' => 3500, 'review_credits' => 300, 'competitor_analysis' => 8, 'multiple_websites' => 3,
             'whatsapp_bot' => 1, 'auto_pilot' => 1, 'advanced_analytics' => 0,
-            'extra' => ['ai_assistant_messages' => 1000, 'website_generations' => 6, 'website_items' => 100, 'articles' => 20, 'media_images' => 120, 'media_videos' => 4, 'marketing_tools' => 150]],
+            'extra' => ['ai_assistant_messages' => 1000, 'website_generations' => 6, 'website_items' => 100, 'articles' => 20, 'media_images' => 120, 'media_videos' => 4, 'marketing_tools' => 150, 'ai_tools' => 800], 'team' => 5],
         'enterprise' => ['name' => 'الريادة', 'price_monthly' => 349, 'price_yearly' => 3490, 'ai_analysis' => 120, 'chat_credits' => 10000, 'review_credits' => 1000, 'competitor_analysis' => 25, 'multiple_websites' => 8,
             'whatsapp_bot' => 1, 'auto_pilot' => 1, 'advanced_analytics' => 1,
-            'extra' => ['ai_assistant_messages' => 3000, 'website_generations' => 20, 'website_items' => 600, 'articles' => 60, 'media_images' => 350, 'media_videos' => 12, 'marketing_tools' => 600]],
+            'extra' => ['ai_assistant_messages' => 3000, 'website_generations' => 20, 'website_items' => 600, 'articles' => 60, 'media_images' => 350, 'media_videos' => 12, 'marketing_tools' => 600, 'ai_tools' => 2500], 'team' => 15],
     ];
 
     /** أقصى استخدام في التجربة المجانية للخدمات اللي بتكلّف (أقصى تكلفة للتجربة ~$4) */
     public const TRIAL_CAPS = [
         'article_generation' => 3, 'media_image' => 15, 'media_video' => 1, 'marketing_tool' => 10, 'ai_assistant_message' => 100,
-        'website_generation' => 1, 'website_item' => 20, 'chat' => 300, 'review' => 30, 'ai_analysis' => 3, 'competitor' => 1,
+        'website_generation' => 1, 'website_item' => 20, 'ai_tool' => 40, 'chat' => 300, 'review' => 30, 'ai_analysis' => 3, 'competitor' => 1,
     ];
 
     /** حد التجربة: الأقل بين حصة الباقة وحد التجربة */
@@ -463,6 +465,7 @@ class PlanExtras
                     $f = json_decode((string) ($row['features_json'] ?: '{}'), true) ?: [];
                     $f['competitor_analysis'] = $p['competitor_analysis'];
                     $f['multiple_websites'] = $p['multiple_websites'];
+                    $f['team_members'] = $p['team'];
                     foreach (['whatsapp_bot', 'auto_pilot', 'advanced_analytics'] as $flag) {
                         $f[$flag] = (bool) $p[$flag];
                     }
@@ -472,6 +475,11 @@ class PlanExtras
                     $this->q('UPDATE subscription_plans SET name=?,price=?,ai_analysis_limit=?,ai_message_limit=?,review_auto_reply_limit=?,websites_limit=?,is_active=1,features_json=? WHERE id=?', [
                         $p['name'], $p['price_' . $cycle], $p['ai_analysis'], $p['chat_credits'], $p['review_credits'], $p['multiple_websites'], json_encode($f), $row['id'],
                     ]);
+                }
+                try {
+                    $this->q('UPDATE subscription_plans SET team_members_limit=? WHERE plan_code IN (?,?)', [$p['team'], $key . '_monthly', $key . '_yearly']);
+                } catch (Throwable $e) {
+                    // العمود مش موجود في قواعد قديمة
                 }
                 $this->q('UPDATE plan_pricing_display SET name=?,price_monthly=?,price_yearly=?,ai_analysis=?,competitor_analysis=?,chat_credits=?,review_credits=?,multiple_websites=?,whatsapp_bot=?,auto_pilot=?,advanced_analytics=?,is_active=1 WHERE plan_key=?', [
                     $p['name'], $p['price_monthly'], $p['price_yearly'], $p['ai_analysis'], $p['competitor_analysis'], $p['chat_credits'], $p['review_credits'], $p['multiple_websites'], $p['whatsapp_bot'], $p['auto_pilot'], $p['advanced_analytics'], $key,

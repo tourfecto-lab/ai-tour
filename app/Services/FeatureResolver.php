@@ -31,6 +31,7 @@ class FeatureResolver
             try {
                 $planDefaults = BillingPlanCatalog::features([
                     'features_json' => $subscription['plan_features_json'] ?? '{}',
+                    'plan_name' => $planName,
                     'ai_analysis_limit' => $subscription['ai_credits'] ?? 0,
                     'ai_message_limit' => $subscription['chat_credits'] ?? 0,
                     'review_auto_reply_limit' => $subscription['review_credits'] ?? 0,

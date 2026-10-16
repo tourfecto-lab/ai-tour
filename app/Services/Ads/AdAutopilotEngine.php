@@ -266,6 +266,10 @@ class AdAutopilotEngine
         }
 
         $mode = $this->automationAwareMode($userId, (string) $settings->getAttribute('optimization_mode'), (string) ($recommendation['action_type'] ?? ''));
+        // الطيار الآلي (تنفيذ من غير موافقة) ميزة في باقات معينة: غير كده التوصية بتستنى موافقة العميل
+        if ($mode !== 'manual' && $mode !== 'approval' && class_exists('PlanGateMiddleware') && !PlanGateMiddleware::hasFlag($userId, 'auto_pilot')) {
+            $mode = 'approval';
+        }
 
         if ($mode === 'manual') {
             $log = $this->writeLog($userId, $campaign, $recommendation, 'manual', false, null, null);

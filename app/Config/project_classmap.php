@@ -104,6 +104,7 @@ return [
     'AiResolutionRateController' => dirname(__DIR__,2).'/app/Controllers/AiResolutionRateController.php',
     'AiResolutionRateService' => dirname(__DIR__,2).'/app/Services/AI/AiResolutionRateService.php',
     'AiRoutingAdminController' => dirname(__DIR__,2).'/app/Controllers/AiRoutingAdminController.php',
+    'PlanGateMiddleware' => dirname(__DIR__,2).'/app/Middleware/PlanGateMiddleware.php',
     'PlansStudioController' => dirname(__DIR__,2).'/app/Controllers/PlansStudioController.php',
     'PlanExtras' => dirname(__DIR__,2).'/app/Services/Subscription/PlanExtras.php',
     'CurrencyService' => dirname(__DIR__,2).'/app/Services/Payment/CurrencyService.php',

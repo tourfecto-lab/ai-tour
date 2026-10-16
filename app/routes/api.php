@@ -198,7 +198,7 @@ $router->get('/api/revenue-intelligence/actions', 'RevenueIntelligenceController
 $router->post('/api/revenue-intelligence/actions/execute', 'RevenueIntelligenceController', 'apiActionsExecute', ['AuthMiddleware']);
 $router->get('/api/revenue-intelligence/actions/history', 'RevenueIntelligenceController', 'apiActionsHistory', ['AuthMiddleware']);
 $router->get('/api/revenue-intelligence/executive-summary', 'RevenueIntelligenceController', 'apiExecutiveSummary', ['AuthMiddleware']);
-$router->post('/api/revenue-intelligence/assistant/ask', 'RevenueIntelligenceController', 'apiAssistantAsk', ['AuthMiddleware']);
+$router->post('/api/revenue-intelligence/assistant/ask', 'RevenueIntelligenceController', 'apiAssistantAsk', ['AuthMiddleware', 'PlanGateMiddleware:flag_advanced_analytics', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/revenue-intelligence/retention', 'RevenueIntelligenceController', 'apiRetention', ['AuthMiddleware']);
 $router->get('/api/revenue-intelligence/subscriptions', 'RevenueIntelligenceController', 'apiSubscriptionMetrics', ['AuthMiddleware']);
 $router->get('/api/revenue-intelligence/forecast/deals', 'RevenueIntelligenceController', 'apiDealForecast', ['AuthMiddleware']);
@@ -264,7 +264,7 @@ $router->get('/api/competitor-intelligence/competitors/{id}/product-prices', 'Co
 $router->post('/api/competitor-intelligence/competitors/{id}/product-prices', 'CompetitorIntelligenceController', 'apiRecordProductPrice', ['AuthMiddleware']);
 $router->get('/api/competitor-intelligence/competitors/{id}/product-prices/history', 'CompetitorIntelligenceController', 'apiProductPriceHistory', ['AuthMiddleware']);
 $router->get('/api/competitor-intelligence/competitors/{id}/battlecard', 'CompetitorIntelligenceController', 'apiBattlecard', ['AuthMiddleware']);
-$router->post('/api/competitor-intelligence/competitors/{id}/battlecard/generate', 'CompetitorIntelligenceController', 'apiGenerateBattlecard', ['AuthMiddleware']);
+$router->post('/api/competitor-intelligence/competitors/{id}/battlecard/generate', 'CompetitorIntelligenceController', 'apiGenerateBattlecard', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 
 $router->post('/api/competitor-intelligence/discovery/suggest', 'CompetitorIntelligenceController', 'apiDiscoverySuggest', ['AuthMiddleware']);
 $router->post('/api/competitor-intelligence/discovery/run', 'CompetitorIntelligenceController', 'apiDiscoveryRun', ['AuthMiddleware']);
@@ -287,7 +287,7 @@ $router->get('/api/competitor-intelligence/alerts/unread-count', 'CompetitorInte
 
 $router->get('/api/competitor-intelligence/insights', 'CompetitorIntelligenceController', 'apiInsights', ['AuthMiddleware']);
 $router->post('/api/competitor-intelligence/insights/{id}/status', 'CompetitorIntelligenceController', 'apiInsightStatus', ['AuthMiddleware']);
-$router->post('/api/competitor-intelligence/ai/ask', 'CompetitorIntelligenceController', 'apiAiAsk', ['AuthMiddleware']);
+$router->post('/api/competitor-intelligence/ai/ask', 'CompetitorIntelligenceController', 'apiAiAsk', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/competitor-intelligence/ai/weekly-summary', 'CompetitorIntelligenceController', 'apiAiWeeklySummary', ['AuthMiddleware']);
 
 $router->get('/api/competitor-intelligence/reports', 'CompetitorIntelligenceController', 'apiListReports', ['AuthMiddleware']);
@@ -310,7 +310,7 @@ $router->post('/api/reputation/review/{id}/reply', 'ReputationController', 'send
 ]);
 $router->post('/api/reputation/review/{id}/generate-reply', 'ReputationController', 'generateReply', [
     'AuthMiddleware',
-    'SubscriptionMiddleware:require_ai_credits'
+    'PlanGateMiddleware:ai_tool'
 ]);
 $router->put('/api/reputation/review/{id}/reply', 'ReputationController', 'updateReply', ['AuthMiddleware']);
 $router->delete('/api/reputation/review/{id}', 'ReputationController', 'deleteReview', ['AuthMiddleware']);
@@ -355,7 +355,7 @@ $router->post('/api/chat/send', 'ChatController', 'sendMessage', [
 ]);
 $router->post('/api/chat/generate-reply', 'ChatController', 'generateReply', [
     'AuthMiddleware',
-    'SubscriptionMiddleware:require_ai_credits'
+    'PlanGateMiddleware:ai_tool'
 ]);
 // ملحوظة: /api/chat/stats كانت مسجّلة قبل كده لدالة getStats غير موجودة
 // أصلاً في ChatController ومفيش أي زرار بينده عليها - اتشالت عشان متسببش
@@ -708,7 +708,7 @@ $router->get('/api/social/connections', 'SocialMediaController', 'listConnection
 $router->get('/api/social/tiktok/creator-info', 'SocialMediaController', 'tikTokCreatorInfo', ['AuthMiddleware']);
 $router->get('/api/social/posts', 'SocialMediaController', 'listPosts', ['AuthMiddleware']);
 $router->post('/api/social/posts', 'SocialMediaController', 'createPost', ['AuthMiddleware']);
-$router->post('/api/social/generate-caption', 'SocialMediaController', 'generateCaption', ['AuthMiddleware']);
+$router->post('/api/social/generate-caption', 'SocialMediaController', 'generateCaption', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/social/calendar', 'SocialMediaController', 'getCalendar', ['AuthMiddleware']);
 $router->post('/api/social/media', 'SocialMediaController', 'uploadMedia', ['AuthMiddleware']);
 $router->post('/api/social/media/site-scan', 'SocialMediaController', 'scanSiteImages', ['AuthMiddleware']);
@@ -739,13 +739,13 @@ $router->get('/api/creative-studio/media', 'CreativeStudioController', 'listMedi
 $router->get('/api/creative-studio/media/{id}/download', 'CreativeStudioController', 'downloadMedia', ['AuthMiddleware']);
 $router->post('/api/creative-studio/media', 'CreativeStudioController', 'requestMedia', ['AuthMiddleware']);
 $router->get('/api/creative-studio/video-scripts', 'CreativeStudioController', 'listVideoScripts', ['AuthMiddleware']);
-$router->post('/api/creative-studio/video-scripts', 'CreativeStudioController', 'requestVideoScript', ['AuthMiddleware']);
+$router->post('/api/creative-studio/video-scripts', 'CreativeStudioController', 'requestVideoScript', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->post('/api/creative-studio/video', 'CreativeStudioController', 'requestVideo', ['AuthMiddleware']);
-$router->post('/api/creative-studio/enhance-prompt', 'CreativeStudioController', 'enhancePrompt', ['AuthMiddleware']);
+$router->post('/api/creative-studio/enhance-prompt', 'CreativeStudioController', 'enhancePrompt', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/creative-studio/brands', 'CreativeStudioController', 'listBrands', ['AuthMiddleware']);
-$router->post('/api/creative-studio/brand/analyze', 'CreativeStudioController', 'analyzeBrand', ['AuthMiddleware']);
+$router->post('/api/creative-studio/brand/analyze', 'CreativeStudioController', 'analyzeBrand', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->post('/api/creative-studio/brand/{id}/palette', 'CreativeStudioController', 'updateBrandPalette', ['AuthMiddleware']);
-$router->post('/api/creative-studio/plan', 'CreativeStudioController', 'createPlan', ['AuthMiddleware']);
+$router->post('/api/creative-studio/plan', 'CreativeStudioController', 'createPlan', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->post('/api/creative-studio/media/{id}/rate', 'CreativeStudioController', 'rateMedia', ['AuthMiddleware']);
 $router->get('/api/creative-studio/stats', 'CreativeStudioController', 'stats', ['AuthMiddleware']);
 $router->post('/api/creative-studio/stats/refresh', 'CreativeStudioController', 'refreshStats', ['AuthMiddleware']);
@@ -776,7 +776,7 @@ $router->get('/api/ads/campaigns/{id}', 'AdsController', 'getCampaign', ['AuthMi
 $router->post('/api/ads/campaigns', 'AdsController', 'create', ['AuthMiddleware']);
 $router->post('/api/ads/campaigns/ai-generate', 'AdsController', 'aiGenerateCampaign', ['AuthMiddleware']);
 $router->get('/api/ads/campaigns/{id}/copies', 'AdsController', 'listCopies', ['AuthMiddleware']);
-$router->post('/api/ads/campaigns/{id}/generate-copies', 'AdsController', 'generateCopies', ['AuthMiddleware']);
+$router->post('/api/ads/campaigns/{id}/generate-copies', 'AdsController', 'generateCopies', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->patch('/api/ads/copies/{id}/approve', 'AdsController', 'approveCopy', ['AuthMiddleware']);
 $router->patch('/api/ads/copies/{id}/reject', 'AdsController', 'rejectCopy', ['AuthMiddleware']);
 $router->get('/api/ads/meta/status', 'AdsController', 'getMetaConnectionStatus', ['AuthMiddleware']);
@@ -966,9 +966,9 @@ $router->get('/api/ads/recommendations/history', 'AdNextBestActionController', '
 $router->post('/api/ads/recommendations/{id}/applied', 'AdNextBestActionController', 'apply', ['AuthMiddleware']);
 $router->post('/api/ads/recommendations/{id}/dismiss', 'AdNextBestActionController', 'dismiss', ['AuthMiddleware']);
 
-$router->post('/api/ads/copilot/ask', 'AdsController', 'askCopilot', ['AuthMiddleware']);
+$router->post('/api/ads/copilot/ask', 'AdsController', 'askCopilot', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 
-$router->post('/api/ads/campaigns/{id}/keywords/generate', 'AdsController', 'generateKeywords', ['AuthMiddleware']);
+$router->post('/api/ads/campaigns/{id}/keywords/generate', 'AdsController', 'generateKeywords', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/ads/campaigns/{id}/keywords', 'AdsController', 'listKeywords', ['AuthMiddleware']);
 $router->post('/api/ads/keywords/{id}/assign-group', 'AdsController', 'assignKeywordToGroup', ['AuthMiddleware']);
 
@@ -977,7 +977,7 @@ $router->get('/api/ads/campaigns/{id}/ad-groups', 'AdsController', 'listAdGroups
 $router->post('/api/ads/ad-groups/{id}/status', 'AdsController', 'updateAdGroupStatus', ['AuthMiddleware']);
 $router->delete('/api/ads/ad-groups/{id}', 'AdsController', 'deleteAdGroup', ['AuthMiddleware']);
 
-$router->post('/api/ads/market-research', 'AdsController', 'marketResearch', ['AuthMiddleware']);
+$router->post('/api/ads/market-research', 'AdsController', 'marketResearch', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/ads/market-research/history', 'AdsController', 'marketResearchHistory', ['AuthMiddleware']);
 
 $router->post('/api/ads/campaigns/{id}/status', 'AdsController', 'updateCampaignStatus', ['AuthMiddleware']);
@@ -988,7 +988,7 @@ $router->post('/api/ads/campaigns/{id}/cancel', 'AdsController', 'cancelCampaign
 $router->post('/api/ads/campaigns/{id}/update-budget', 'AdsController', 'updateCampaignBudget', ['AuthMiddleware']);
 $router->delete('/api/ads/campaigns/{id}', 'AdsController', 'deleteCampaign', ['AuthMiddleware']);
 $router->post('/api/ads/campaigns/bulk-status', 'AdsController', 'bulkUpdateCampaignStatus', ['AuthMiddleware']);
-$router->post('/api/ads/campaigns/{id}/landing-page/analyze', 'AdsController', 'analyzeLandingPage', ['AuthMiddleware']);
+$router->post('/api/ads/campaigns/{id}/landing-page/analyze', 'AdsController', 'analyzeLandingPage', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 
 $router->post('/api/ads/campaigns/{id}/utm-links', 'AdsController', 'createUtmLink', ['AuthMiddleware']);
 $router->get('/api/ads/campaigns/{id}/utm-links', 'AdsController', 'listUtmLinks', ['AuthMiddleware']);
@@ -998,7 +998,7 @@ $router->get('/api/ads/reports', 'AdsController', 'getReport', ['AuthMiddleware'
 $router->get('/api/ads/reports/trend', 'AdsController', 'getReportTrend', ['AuthMiddleware']);
 $router->get('/api/ads/reports/comparison', 'AdsController', 'getCampaignComparison', ['AuthMiddleware']);
 
-$router->post('/api/ads/competitors/{id}/analyze', 'AdsController', 'analyzeAdsCompetitor', ['AuthMiddleware']);
+$router->post('/api/ads/competitors/{id}/analyze', 'AdsController', 'analyzeAdsCompetitor', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/ads/competitors/{id}/insights', 'AdsController', 'listAdsCompetitorInsights', ['AuthMiddleware']);
 $router->get('/api/ads/competitors', 'AdsController', 'listMyCompetitors', ['AuthMiddleware']);
 
@@ -1020,7 +1020,7 @@ $router->get('/api/crm/overview', 'CrmController', 'overview', ['AuthMiddleware'
 // مسارات مميزة هنا لتفادي أي تعارض معها.
 $router->get('/api/ai/competitors', 'AIController', 'listCompetitors', ['AuthMiddleware']);
 $router->post('/api/ai/competitors/add', 'AIController', 'createCompetitor', ['AuthMiddleware']);
-$router->post('/api/ai/competitors/{id}/analyze', 'AIController', 'analyzeCompetitor', ['AuthMiddleware']);
+$router->post('/api/ai/competitors/{id}/analyze', 'AIController', 'analyzeCompetitor', ['AuthMiddleware', 'PlanGateMiddleware:ai_tool']);
 $router->get('/api/ai/competitors/{id}/analysis', 'AIController', 'competitorAnalysisStatus', ['AuthMiddleware']);
 
 // الكلمات المفتاحية المتابَعة (يسدّ فجوة /ai/keywords القديمة الفاضية)
@@ -1040,7 +1040,7 @@ $router->post('/api/gbp/content', 'GoogleBusinessContentController', 'generate',
     'AuthMiddleware',
     // Round 7 (2026-08-14 - Production Finalization): كان بيستهلك AI
     // credits من غير فحص رصيد - نفس نمط باقي endpoints الـ AI في المشروع
-    'SubscriptionMiddleware:require_ai_credits'
+    'PlanGateMiddleware:ai_tool'
 ]);
 // GBP Module Upgrade (2026-08-11, Round 6): Posts Edit/Delete/Cancel
 $router->put('/api/gbp/content/{id}', 'GoogleBusinessContentController', 'updateContent', ['AuthMiddleware']);
@@ -1075,7 +1075,7 @@ $router->post('/api/gbp/photos/{id}/primary', 'GbpProfileController', 'setPrimar
 $router->get('/api/gbp/insights', 'GbpProfileController', 'insights', ['AuthMiddleware']);
 $router->get('/api/gbp/ai-insights', 'GbpProfileController', 'aiInsights', [
     'AuthMiddleware',
-    'SubscriptionMiddleware:require_ai_credits'
+    'PlanGateMiddleware:ai_tool'
 ]);
 $router->get('/api/gbp/recommendations', 'GbpProfileController', 'recommendations', ['AuthMiddleware']);
 // مركز الأتمتة
@@ -1247,11 +1247,11 @@ $router->get('/api/crm/forecast', 'CrmApiController', 'forecast', ['AuthMiddlewa
 // ميزات الذكاء الاصطناعي بالمشروع (راجع /api/ai/* أعلاه في نفس الملف).
 $router->post('/api/crm/assistant/ask', 'CrmApiController', 'assistantAsk', [
     'AuthMiddleware',
-    'SubscriptionMiddleware:require_ai_credits'
+    'PlanGateMiddleware:ai_tool'
 ]);
 $router->get('/api/crm/contacts/{id}/ai-summary', 'CrmApiController', 'contactAiSummary', [
     'AuthMiddleware',
-    'SubscriptionMiddleware:require_ai_credits'
+    'PlanGateMiddleware:ai_tool'
 ]);
 
 // ============================================================
@@ -1538,7 +1538,7 @@ $router->put('/api/onboarding/draft', 'OnboardingController', 'saveDraft', ['Aut
 $router->delete('/api/onboarding/draft', 'OnboardingController', 'clearDraft', ['AuthMiddleware']);
 $router->post('/api/onboarding/step', 'OnboardingController', 'recordStep', ['AuthMiddleware']);
 // Phase 11 (AI CEO Advisor)
-$router->post('/api/executive/ceo-advisor/ask', 'ExecutiveExtrasController', 'askCeoAdvisor', ['AuthMiddleware']);
+$router->post('/api/executive/ceo-advisor/ask', 'ExecutiveExtrasController', 'askCeoAdvisor', ['AuthMiddleware', 'PlanGateMiddleware:flag_advanced_analytics', 'PlanGateMiddleware:ai_tool']);
 // Phase 12 (Action Center)
 $router->get('/api/action-center', 'ActionCenterController', 'list', ['AuthMiddleware']);
 $router->get('/api/action-center/actions', 'ActionCenterController', 'actions', ['AuthMiddleware']);

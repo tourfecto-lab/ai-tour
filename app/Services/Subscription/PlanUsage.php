@@ -30,6 +30,8 @@ class PlanUsage
         'marketing_tool' => 'marketing_tools',
         'media_image' => 'media_images',
         'media_video' => 'media_videos',
+        // أدوات AI الصغيرة: كابشن، نسخ إعلانات، رد مقترح، مساعد الإعلانات، أسئلة المنافسين...
+        'ai_tool' => 'ai_tools',
     ];
 
     private const TIER_DEFAULTS = [
@@ -39,6 +41,7 @@ class PlanUsage
         'marketing_tools' => ['starter' => 100, 'professional' => 500, 'enterprise' => 2000],
         'media_images' => ['starter' => 20, 'professional' => 100, 'enterprise' => 400],
         'media_videos' => ['starter' => 0, 'professional' => 5, 'enterprise' => 20],
+        'ai_tools' => ['starter' => 150, 'professional' => 600, 'enterprise' => 2000],
     ];
 
     private static ?bool $tableReady = null;

@@ -261,6 +261,15 @@ class WorkspaceController extends Controller
             return $this->error('الشخص ده عضو في الفريق بالفعل', 409);
         }
 
+        // عدد أعضاء الفريق حسب الباقة (0 = الباقة مش محدد لها حد)
+        $teamLimit = class_exists('FeatureResolver') ? (int) (FeatureResolver::value((int) $owner->getAttribute('id'), 'team_members') ?? 0) : 0;
+        if ($teamLimit > 0) {
+            $members = count((new User())->where(['owner_user_id' => (int) $owner->getAttribute('id')], [], 0));
+            $pending = count((new WorkspaceInvite())->where(['owner_user_id' => (int) $owner->getAttribute('id'), 'status' => 'pending'], [], 0));
+            if ($members + $pending >= $teamLimit) {
+                return $this->error('باقتك بتسمح بـ ' . $teamLimit . ' أعضاء في الفريق. رقّي باقتك أو احذف دعوة قديمة عشان تضيف عضو جديد.', 403, ['upgrade_url' => '/subscription']);
+            }
+        }
         $result = WorkspaceInvite::createFor((int) $owner->getAttribute('id'), (int) $user->getAttribute('id'), $email, $role);
         $inviteUrl = rtrim((string) (getenv('APP_URL') ?: ''), '/') . '/workspace/accept-invite?token=' . $result['token'];
 

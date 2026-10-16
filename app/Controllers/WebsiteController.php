@@ -113,6 +113,10 @@ class WebsiteController extends Controller
                 $r = Database::getInstance()->query('SELECT features_json FROM subscription_plans WHERE id = ? LIMIT 1', [(int) $sub['plan_id']]);
                 $features = json_decode((string) ($r[0]['features_json'] ?? ''), true) ?: [];
             }
+            // عدد المواقع في الباقة (نفس الرقم اللي في صفحة الأسعار والأدمن)
+            if (isset($features['multiple_websites']) && (int) $features['multiple_websites'] !== 0) {
+                return (int) $features['multiple_websites'] < 0 ? -1 : (int) $features['multiple_websites'];
+            }
             if (array_key_exists('websites', $features)) {
                 return $features['websites'] === true ? -1 : max(1, (int) $features['websites']);
             }
