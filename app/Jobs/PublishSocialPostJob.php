@@ -129,6 +129,21 @@ class PublishSocialPostJob implements QueueJobInterface
             if ($platform === 'tiktok') {
                 $accessToken = $encryption->decrypt((string) $connection->getAttribute('access_token'));
                 $openId = (string) $connection->getAttribute('external_location_id');
+                // توكن تيك توك بيخلص كل 24 ساعة: نجدده قبل النشر بالـ refresh_token
+                $expires = strtotime((string) $connection->getAttribute('token_expires_at') . ' UTC') ?: 0;
+                $refreshEnc = (string) $connection->getAttribute('refresh_token');
+                if ($refreshEnc !== '' && $expires < time() + 600) {
+                    $fresh = TikTokAPI::refresh((string) env('TIKTOK_CLIENT_KEY'), (string) env('TIKTOK_CLIENT_SECRET'), $encryption->decrypt($refreshEnc));
+                    if (!empty($fresh['success'])) {
+                        $accessToken = (string) $fresh['access_token'];
+                        $connection->setAttribute('access_token', $encryption->encrypt($accessToken));
+                        if (!empty($fresh['refresh_token'])) {
+                            $connection->setAttribute('refresh_token', $encryption->encrypt((string) $fresh['refresh_token']));
+                        }
+                        $connection->setAttribute('token_expires_at', gmdate('Y-m-d H:i:s', time() + (int) ($fresh['expires_in'] ?? 86400)));
+                        $connection->save();
+                    }
+                }
                 $api = new TikTokAPI($accessToken, $openId);
 
                 if ($isVideo) {

@@ -1355,7 +1355,7 @@ JS;
             . http_build_query([
                 'client_key'    => $clientKey,
                 'response_type' => 'code',
-                'scope'         => 'video.upload',
+                'scope'         => TikTokAPI::SCOPES,
                 'redirect_uri'  => $redirectUri,
                 'state'         => $state,
             ]);
@@ -1396,33 +1396,25 @@ JS;
         $clientSecret = env('TIKTOK_CLIENT_SECRET');
         $redirectUri  = env('TIKTOK_OAUTH_REDIRECT_URI') ?: (rtrim(defined('APP_URL') ? APP_URL : '', '/') . '/social/connect/tiktok/callback');
 
-        $ch = curl_init('https://open-api.tiktok.com/oauth/access_token/');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query([
-                'client_key'    => $clientKey,
-                'client_secret' => $clientSecret,
-                'code'          => $code,
-                'grant_type'    => 'authorization_code',
-                'redirect_uri'  => $redirectUri,
-            ]),
-            CURLOPT_SSL_VERIFYPEER => true,
-        ]);
-        $resp = curl_exec($ch);
-        curl_close($ch);
-
-        $decoded = json_decode((string) $resp, true);
-        if (($decoded['error_code'] ?? 0) !== 0 || empty($decoded['data']['access_token'])) {
-            $this->renderOAuthError('Token exchange failed with TikTok: ' . htmlspecialchars($decoded['description'] ?? 'unknown error', ENT_QUOTES, 'UTF-8'));
+        $tok = TikTokAPI::exchangeCode((string) $clientKey, (string) $clientSecret, (string) $code, $redirectUri);
+        if (empty($tok['success'])) {
+            $this->renderOAuthError('Token exchange failed with TikTok: ' . htmlspecialchars((string) ($tok['error'] ?? 'unknown error'), ENT_QUOTES, 'UTF-8'));
+            exit;
+        }
+        if (strpos((string) ($tok['scope'] ?? TikTokAPI::SCOPES), 'video.publish') === false) {
+            $this->renderOAuthError('TikTok: وافق على صلاحية نشر الفيديوهات (video.publish) عشان المنصة تقدر تنشر بدالك. اربط تاني ووافق على كل الصلاحيات.');
             exit;
         }
 
-        $data = $decoded['data'];
-        $accessToken  = $data['access_token'];
-        $refreshToken = $data['refresh_token'] ?? '';
-        $openId       = $data['open_id'];
-        $expiresIn    = $data['expires_in'] ?? 86400;
+        $accessToken  = (string) $tok['access_token'];
+        $refreshToken = (string) ($tok['refresh_token'] ?? '');
+        $openId       = (string) ($tok['open_id'] ?? '');
+        $expiresIn    = (int) ($tok['expires_in'] ?? 86400);
+        $displayName  = 'TikTok Account';
+        $me = (new TikTokAPI($accessToken, $openId))->userInfo();
+        if (!empty($me['success']) && !empty($me['user']['display_name'])) {
+            $displayName = mb_substr((string) $me['user']['display_name'], 0, 120);
+        }
 
         $encryption = new Encryption();
 
@@ -1438,8 +1430,8 @@ JS;
             'access_token'          => $encryption->encrypt($accessToken),
             'refresh_token'         => $refreshToken ? $encryption->encrypt($refreshToken) : null,
             'external_location_id'  => $openId,
-            'external_location_name' => 'TikTok Account',
-            'token_expires_at'      => date('Y-m-d H:i:s', time() + (int) $expiresIn),
+            'external_location_name' => $displayName,
+            'token_expires_at'      => gmdate('Y-m-d H:i:s', time() + (int) $expiresIn),
             'last_error'            => null,
         ];
 
