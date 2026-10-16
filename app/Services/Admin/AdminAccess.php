@@ -322,6 +322,7 @@ class AdminAccess
 
         // ---- الباقات المرنة والعملات
         if ($rel === '/plans-studio' || strpos($rel, '/plans-studio/') === 0 || strpos($rel, '/currency/') === 0) return $write ? 'billing.settings' : 'billing.view';
+        if ($rel === '/xpay' || strpos($rel, '/xpay/') === 0) return 'billing.settings';
 
         // ---- تسويق المنصة بالإيميل
         if ($rel === '/growth' || strpos($rel, '/growth/') === 0) return 'settings.manage';

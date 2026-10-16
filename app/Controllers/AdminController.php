@@ -3633,7 +3633,7 @@ HTML;
                 'logs' => [$this->tr('admin.nav.logs'), 'file-text', '/admin/logs'],
                 'emails' => ['سجل البريد', 'mail', '/admin/emails'],
                 'platform-growth' => ['تسويق المنصة (إيميل)', 'send', '/admin/growth'],
-                'plans-studio' => ['الباقات والعملات', 'credit-card', '/admin/plans-studio'],
+                'plans-studio' => ['الباقات والعملات والدفع (XPay)', 'credit-card', '/admin/plans-studio'],
                 'status-page' => ['صفحة الحالة والتحديثات', 'globe', '/admin/status-page'],
                 'blog' => ['المدونة', 'edit', '/admin/blog'],
                 'jobs' => [$this->tr('admin.nav.jobs'), 'activity', '/admin/jobs'],

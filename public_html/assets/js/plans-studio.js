@@ -100,3 +100,66 @@ ${D.builder.enabled && services.length ? `<section class="ps-box"><h3>🧩 ${t('
 
     run(null, reload);
 })();
+
+/* الدفع بالكارت عن طريق XPay: جوه نافذة شحن المحفظة + رسالة بعد الرجوع من الدفع */
+(() => {
+    'use strict';
+    if (!window.fetch) return;
+    const ar = !(document.documentElement.lang || 'ar').toLowerCase().startsWith('en');
+    const t = (a, e) => ar ? a : e;
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const qs = new URLSearchParams(location.search), back = qs.get('topup');
+    if (back) {
+        const host = document.querySelector('#plansStudio') || document.querySelector('.panel-content, main');
+        if (host) {
+            const d = document.createElement('div');
+            d.className = 'xp-banner ' + (back === 'ok' ? 'ok' : 'wait');
+            d.textContent = back === 'ok' ? t('✅ الدفع نجح ورصيد محفظتك اتشحن.', '✅ Payment received - your wallet is topped up.')
+                : back === 'cancelled' ? t('عملية الدفع اتلغت أو انتهى وقتها. تقدر تحاول تاني.', 'The payment was cancelled or expired. You can try again.')
+                : t('⏳ بنأكد الدفع مع البنك... الرصيد هيتشحن أول ما يتأكد (عادةً دقيقة).', '⏳ Confirming your payment... your balance updates as soon as it clears.');
+            host.parentNode.insertBefore(d, host);
+        }
+        history.replaceState(null, '', location.pathname + location.hash);
+    }
+    const modal = document.querySelector('#depositModal .p-modal-body');
+    if (!modal) return;
+    fetch('/api/xpay/status', { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : null).then(j => {
+        const S = j && j.success && j.data;
+        if (!S || !S.enabled) return;
+        const box = document.createElement('div');
+        box.className = 'xp-pay';
+        box.innerHTML = `<b>⚡ ${t('ادفع بالكارت دلوقتي', 'Pay by card now')}</b><small>${t('فيزا، ماستركارد، ميزة ومحافظ الموبايل - الرصيد بيتشحن على طول من غير انتظار', 'Visa, Mastercard and wallets - your balance is added instantly')}${S.test_mode ? ' · <b style="display:inline;color:#b45309">' + t('وضع تجريبي', 'Test mode') + '</b>' : ''}</small>
+<div class="xp-row"><button type="button" class="p-btn primary" id="xpPayBtn">${t('ادفع بالكارت', 'Pay by card')}</button><span id="xpEq" class="p-cell-muted"></span></div><div id="xpErr" class="alert alert-danger" style="display:none;margin-top:8px"></div>
+<div class="p-cell-muted" style="margin-top:10px">${t('أو حوّل يدوي (البنك / PayPal) من تحت وابعت الإيصال:', 'Or pay manually (bank / PayPal) below and send the receipt:')}</div>`;
+        modal.insertBefore(box, modal.querySelector('#depositAmount')?.nextSibling || modal.firstChild);
+        const amt = document.getElementById('depositAmount'), eq = box.querySelector('#xpEq'), btn = box.querySelector('#xpPayBtn'), err = box.querySelector('#xpErr');
+        const upd = () => {
+            const v = +(amt?.value || 0);
+            btn.textContent = v > 0 ? t('ادفع $', 'Pay $') + v.toFixed(2) + t(' بالكارت', ' by card') : t('ادفع بالكارت', 'Pay by card');
+            eq.textContent = v > 0 && S.charge_currency === 'EGP' ? '≈ ' + (v * S.egp_rate).toLocaleString('en-US', { maximumFractionDigits: 2 }) + t(' جنيه', ' EGP') : '';
+        };
+        amt && amt.addEventListener('input', upd); upd();
+        const fail = m => { err.textContent = m; err.style.display = ''; btn.disabled = false; };
+        btn.addEventListener('click', async () => {
+            const v = +(amt?.value || 0);
+            err.style.display = 'none';
+            if (!(v >= S.min_usd && v <= S.max_usd)) return fail(t('اكتب مبلغ بين $', 'Enter an amount between $') + S.min_usd + t(' و $', ' and $') + S.max_usd);
+            btn.disabled = true;
+            try {
+                const r = await fetch('/api/xpay/topup', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': S.csrf_token }, body: JSON.stringify({ amount: v, csrf_token: S.csrf_token }) }).then(x => x.json());
+                if (!r.success) return fail(r.error || t('حصلت مشكلة', 'Something went wrong'));
+                const d = r.data;
+                if (d.checkout_url) { location.href = d.checkout_url; return; }
+                if (!d.client_secret || !d.public_key) return fail(t('XPay مرجعش رابط دفع. كلّم الدعم.', 'XPay returned no payment link.'));
+                const s = document.createElement('script'); s.src = 'https://checkout.xpay.app/v1/sdk.js';
+                s.onload = () => {
+                    try {
+                        window.XPay(d.public_key).checkout({ clientSecret: d.client_secret, mode: 'modal', onComplete: () => { location.href = '/wallet/xpay/return?session_id=' + encodeURIComponent(d.session_id); }, onClose: () => { btn.disabled = false; } }).open();
+                    } catch (e) { fail(e.message); }
+                };
+                s.onerror = () => fail(t('مقدرناش نفتح صفحة الدفع، جرّب تاني.', 'Could not open the payment page.'));
+                document.head.appendChild(s);
+            } catch (e) { fail(e.message); }
+        });
+    }).catch(() => {});
+})();

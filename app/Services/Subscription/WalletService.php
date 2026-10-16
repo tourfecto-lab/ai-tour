@@ -106,8 +106,9 @@ class WalletService
      * @param string $gatewayReference رقم العملية عند البوابة (رقم Session ID)
      * @return array ['success'=>bool, 'balance'=>float, 'transaction_id'=>int, 'error'=>?string]
      */
-    public function applyCardTopUp(int $userId, float $amount, string $currency, string $gatewayReference, ?int $paymentTransactionId = null): array
+    public function applyCardTopUp(int $userId, float $amount, string $currency, string $gatewayReference, ?int $paymentTransactionId = null, string $gateway = 'stripe'): array
     {
+        $gateway = in_array($gateway, ['stripe', 'xpay'], true) ? $gateway : 'stripe';
         if ($amount <= 0) {
             return ['success' => false, 'error' => 'المبلغ لازم يكون أكبر من صفر'];
         }
@@ -121,7 +122,7 @@ class WalletService
                 "SELECT id FROM wallet_transactions
                  WHERE user_id = ? AND type = 'deposit' AND payment_method = 'card'
                    AND reference_note = ? LIMIT 1",
-                [$userId, 'stripe:' . $gatewayReference]
+                [$userId, $gateway . ':' . $gatewayReference]
             );
             if (!empty($existing)) {
                 $this->db->commit();
@@ -141,8 +142,8 @@ class WalletService
                 'currency' => strtoupper($currency),
                 'status' => 'completed',
                 'payment_method' => 'card',
-                'reference_note' => 'stripe:' . $gatewayReference,
-                'admin_note' => 'دفع إلكتروني فوري عبر Stripe',
+                'reference_note' => $gateway . ':' . $gatewayReference,
+                'admin_note' => 'دفع إلكتروني فوري عبر ' . ($gateway === 'xpay' ? 'XPay' : 'Stripe'),
             ]);
             if ($tx->save() === false) {
                 throw new Exception('تعذر تسجيل الإيداع');

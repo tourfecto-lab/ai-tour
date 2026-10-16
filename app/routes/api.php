@@ -1672,6 +1672,13 @@ $router->post('/api/admin/plans-studio/config', 'PlansStudioController', 'adminS
 $router->post('/api/admin/plans-studio/preset', 'PlansStudioController', 'adminPreset', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/currency/rates', 'PlansStudioController', 'adminSaveRates', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/currency/refresh', 'PlansStudioController', 'adminRefreshRates', ['AuthMiddleware','AdminMiddleware']);
+// XPay (الدفع بالكارت لشحن المحفظة)
+$router->get('/api/admin/xpay', 'XPayController', 'adminData', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/xpay/save', 'XPayController', 'adminSave', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/xpay/test', 'XPayController', 'adminTest', ['AuthMiddleware','AdminMiddleware']);
+$router->get('/api/xpay/status', 'XPayController', 'status', ['AuthMiddleware']);
+$router->post('/api/xpay/topup', 'XPayController', 'topup', ['AuthMiddleware']);
+$router->post('/api/webhooks/xpay', 'XPayController', 'webhook', []);
 // الباقات المرنة والعملات (العميل)
 $router->post('/api/currency', 'PlansStudioController', 'setCurrency', []);
 $router->get('/api/currency', 'PlansStudioController', 'currencies', []);

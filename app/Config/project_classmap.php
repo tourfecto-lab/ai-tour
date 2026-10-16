@@ -106,6 +106,8 @@ return [
     'AiRoutingAdminController' => dirname(__DIR__,2).'/app/Controllers/AiRoutingAdminController.php',
     'PlanGateMiddleware' => dirname(__DIR__,2).'/app/Middleware/PlanGateMiddleware.php',
     'PlansStudioController' => dirname(__DIR__,2).'/app/Controllers/PlansStudioController.php',
+    'XPayController' => dirname(__DIR__,2).'/app/Controllers/XPayController.php',
+    'XPayGateway' => dirname(__DIR__,2).'/app/Services/Payment/XPayGateway.php',
     'PlanExtras' => dirname(__DIR__,2).'/app/Services/Subscription/PlanExtras.php',
     'CurrencyService' => dirname(__DIR__,2).'/app/Services/Payment/CurrencyService.php',
     'PlatformOutreachController' => dirname(__DIR__,2).'/app/Controllers/PlatformOutreachController.php',

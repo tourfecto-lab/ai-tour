@@ -224,8 +224,9 @@ class PlansStudioController extends Controller
         }
         $css = htmlspecialchars(asset_v('/assets/css/plans-studio.css'), ENT_QUOTES, 'UTF-8');
         $js = htmlspecialchars(asset_v('/assets/js/plans-studio-admin.js'), ENT_QUOTES, 'UTF-8');
-        $body = '<link rel="stylesheet" href="' . $css . '"><section id="plansAdmin" class="ps" dir="rtl"><p>جاري التحميل…</p></section><script src="' . $js . '"></script>';
-        echo $this->renderPanelPage('plans-studio', 'الباقات والعملات', 'باقات جاهزة، إضافات حسب الطلب، ابني باقتك، وأسعار الصرف', $body, 'window.PlansAdmin&&window.PlansAdmin.init(window.Panel);');
+        $xjs = htmlspecialchars(asset_v('/assets/js/xpay-admin.js'), ENT_QUOTES, 'UTF-8');
+        $body = '<link rel="stylesheet" href="' . $css . '"><section id="xpayAdmin" class="ps ps-box ps-adm" dir="rtl"><p>جاري التحميل…</p></section><section id="plansAdmin" class="ps" dir="rtl"><p>جاري التحميل…</p></section><script src="' . $js . '"></script><script src="' . $xjs . '"></script>';
+        echo $this->renderPanelPage('plans-studio', 'الباقات والعملات والدفع', 'ربط XPay، باقات جاهزة، إضافات حسب الطلب، ابني باقتك، وأسعار الصرف', $body, 'window.XPayAdmin&&window.XPayAdmin.init(window.Panel);window.PlansAdmin&&window.PlansAdmin.init(window.Panel);');
         exit;
     }
 
