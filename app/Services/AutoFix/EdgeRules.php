@@ -646,6 +646,17 @@ function tf_edge_articles_route()
         . tf_edge_article_html((string) ($a['body'] ?? '')) . '</article><p><a href="/guides">&larr; All guides</a></p>', (string) $jsonld, $image);
 }
 
+// فحص سريع لصاحب الموقع: https://your-site.com/?tf_check=1
+if (($_GET['tf_check'] ?? '') === '1') {
+    $body = tf_edge_fetch(TF_EDGE_ENDPOINT . '?token=' . rawurlencode(TF_EDGE_TOKEN) . '&cv=4&site=' . rawurlencode(tf_edge_site()));
+    $ok = $body !== null && is_array(json_decode($body, true));
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo "Tourfecto Connect v4: the file is installed and running (website #__SITE__).\n";
+    echo $ok ? "Connection to Tourfecto: OK\n" : "Connection to Tourfecto: FAILED - your server cannot reach tourfecto.pro (check outgoing connections / firewall).\n";
+    exit;
+}
+
 if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)) {
     tf_edge_articles_route();
     if (tf_edge_path() === '/llms.txt') {
@@ -664,7 +675,7 @@ if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)) {
     ob_start('tf_edge_buffer');
 }
 PHPCODE;
-        return strtr($code, ['__ENDPOINT__' => addslashes($endpoint), '__TOKEN__' => addslashes($token)]);
+        return strtr($code, ['__ENDPOINT__' => addslashes($endpoint), '__TOKEN__' => addslashes($token), '__SITE__' => (string) $websiteId]);
     }
 
     /**
