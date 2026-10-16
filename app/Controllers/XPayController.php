@@ -59,7 +59,8 @@ class XPayController extends Controller
             return $this->error($e->getMessage(), 422);
         } catch (Throwable $e) {
             Logger::error('XPay topup failed', ['error' => $e->getMessage()]);
-            return $this->error('مقدرناش نبدأ الدفع دلوقتي، جرّب تاني بعد شوية أو استخدم التحويل البنكي.', 502);
+            $admin = in_array($this->user['role'] ?? '', ['admin', 'super_admin'], true);
+            return $this->error('الدفع بالكارت مش شغال دلوقتي، جرّب بعد شوية أو استخدم التحويل البنكي.' . ($admin ? ' (للأدمن: السبب ظاهر في صفحة ربط XPay)' : ''), 422);
         }
     }
 
@@ -87,7 +88,7 @@ class XPayController extends Controller
             return $this->error('too large', 413);
         }
         try {
-            $r = (new XPayGateway())->handleWebhook($payload);
+            $r = (new XPayGateway())->handleWebhook($payload, function_exists('getallheaders') ? (getallheaders() ?: []) : []);
             return $this->success(['received' => true, 'status' => $r['status'] ?? 'ignored']);
         } catch (Throwable $e) {
             Logger::error('XPay webhook failed', ['error' => $e->getMessage()]);
@@ -135,7 +136,7 @@ class XPayController extends Controller
         }
         try {
             $in = [];
-            foreach (['enabled', 'public_key', 'secret_key', 'charge_currency', 'min_usd', 'max_usd'] as $k) {
+            foreach (['enabled', 'public_key', 'secret_key', 'webhook_secret', 'charge_currency', 'min_usd', 'max_usd', 'api_base'] as $k) {
                 if ($this->get($k) !== null) {
                     $in[$k] = $this->get($k);
                 }
@@ -155,6 +156,6 @@ class XPayController extends Controller
             return $e;
         }
         $r = (new XPayGateway())->testConnection();
-        return $r['ok'] ? $this->success($r, $r['message']) : $this->error($r['message'], 422, $r);
+        return $this->success($r, $r['message']);
     }
 }

@@ -18,6 +18,7 @@ class XPayGateway
 {
     public const CONFIG_KEY = 'xpay_config';
     public const SECRET_KEY = 'integration_xpay_secret_key';
+    public const WEBHOOK_SECRET = 'integration_xpay_webhook_secret';
     public const DEFAULT_API = 'https://api.xpay.app';
 
     /** @var callable|null للاختبار: fn(string $method, string $url, ?array $body, string $key): array{code:int, body:?array} */
@@ -49,6 +50,9 @@ class XPayGateway
             'max_usd' => min(10000, max(10, (float) ($raw['max_usd'] ?? 5000))),
             'api_base' => self::cleanBase((string) ($raw['api_base'] ?? '')),
             'last_test' => $raw['last_test'] ?? null,
+            'last_error' => $raw['last_error'] ?? null,
+            'last_webhook' => $raw['last_webhook'] ?? null,
+            'has_webhook_secret' => $this->settings && $this->settings->get(self::WEBHOOK_SECRET, '') !== '',
         ];
     }
 
@@ -67,7 +71,7 @@ class XPayGateway
     {
         $u = rtrim(trim($u), '/');
         // عشان المفتاح السري مايتبعتش لأي مكان غير XPay
-        return preg_match('#^https://([a-z0-9-]+\.)*xpay\.app$#i', $u) ? $u : self::DEFAULT_API;
+        return preg_match('#^https://([a-z0-9-]+\.)*xpay\.app(/[a-z0-9/_\-]*)?$#i', $u) ? rtrim($u, '/') : self::DEFAULT_API;
     }
 
     /** حفظ من الأدمن - المفتاح السري الفاضي = سيب القديم */
@@ -94,6 +98,9 @@ class XPayGateway
                 throw new InvalidArgumentException('المفتاح السري لازم يبدأ بـ sk_test_ أو sk_live_');
             }
         }
+        if (isset($in['api_base']) && trim((string) $in['api_base']) !== '' && self::cleanBase((string) $in['api_base']) !== rtrim(trim((string) $in['api_base']), '/')) {
+            throw new InvalidArgumentException('عنوان الـ API لازم يكون https ومن دومين xpay.app');
+        }
         foreach (['charge_currency', 'min_usd', 'max_usd', 'api_base'] as $k) {
             if (array_key_exists($k, $in)) {
                 $raw[$k] = $in[$k];
@@ -112,26 +119,76 @@ class XPayGateway
         }
         if ($sk !== '') {
             $this->settings->set(self::SECRET_KEY, $sk);
+            unset($raw['last_error']);
+        }
+        $wh = trim((string) ($in['webhook_secret'] ?? ''));
+        if ($wh !== '') {
+            if (strlen($wh) < 10 || strlen($wh) > 300 || preg_match('/\s/', $wh)) {
+                throw new InvalidArgumentException('مفتاح الـ Webhook شكله مش مظبوط - انسخه كامل من غير مسافات');
+            }
+            $this->settings->set(self::WEBHOOK_SECRET, $wh);
         }
         $this->settings->set(self::CONFIG_KEY, json_encode($raw));
         return $this->config();
     }
 
-    /** اختبار الاتصال بالمفتاح السري */
+    /** آخر رد غلط من XPay (بيظهر للأدمن عشان يعرف السبب بالظبط) */
+    private function remember(string $field, array $value): void
+    {
+        if (!$this->settings) {
+            return;
+        }
+        $raw = json_decode($this->settings->get(self::CONFIG_KEY, ''), true) ?: [];
+        $raw[$field] = $value + ['at' => date('Y-m-d H:i')];
+        $this->settings->set(self::CONFIG_KEY, json_encode($raw));
+    }
+
+    /** رسالة الخطأ اللي XPay رجّعها (من غير أي مفاتيح) */
+    private static function errorText(?array $b): string
+    {
+        $b = $b ?? [];
+        $e = is_array($b['error'] ?? null) ? $b['error'] : $b;
+        $parts = [];
+        foreach (['type', 'code', 'message', 'param'] as $k) {
+            $v = $e[$k] ?? null;
+            if (is_array($v)) {
+                $v = implode('، ', array_map(fn ($x) => is_scalar($x) ? (string) $x : json_encode($x), $v));
+            }
+            if (is_scalar($v) && (string) $v !== '') {
+                $parts[] = $k . ': ' . $v;
+            }
+        }
+        $t = implode(' · ', $parts);
+        return mb_substr(preg_replace('/(sk|rk)_(test|live)_[A-Za-z0-9_]+/', '[key]', $t), 0, 400);
+    }
+
+    /**
+     * اختبار الاتصال: بنسأل عن جلسة مش موجودة.
+     * 404 "مش موجودة" = XPay قبل المفتاح ووصلنا للمكان الصح، 401/403 = المفتاح مرفوض.
+     */
     public function testConnection(): array
     {
         if ($this->secret() === '') {
             return ['ok' => false, 'message' => 'مفيش مفتاح سري محفوظ'];
         }
-        $r = $this->call('GET', '/checkout/sessions?limit=1');
-        $ok = $r['code'] >= 200 && $r['code'] < 300;
-        $msg = $ok ? 'الاتصال بـ XPay شغال ✅' : ($r['code'] === 401 || $r['code'] === 403 ? 'XPay رفض المفتاح السري - اتأكد إنك نسخته صح' : 'XPay مردّش صح (كود ' . $r['code'] . ')');
-        if ($this->settings) {
-            $raw = json_decode($this->settings->get(self::CONFIG_KEY, ''), true) ?: [];
-            $raw['last_test'] = ['ok' => $ok, 'at' => date('Y-m-d H:i'), 'code' => $r['code']];
-            $this->settings->set(self::CONFIG_KEY, json_encode($raw));
+        $r = $this->call('GET', '/checkout/sessions/cs_test_tourfecto_probe');
+        $code = $r['code'];
+        // 404 لازم يكون رد JSON من XPay نفسه ("الجلسة مش موجودة")، مش صفحة 404 عادية = مسار غلط
+        $ok = ($code >= 200 && $code < 300) || (in_array($code, [400, 404, 422], true) && is_array($r['body']));
+        $detail = self::errorText($r['body']);
+        if ($code === 0) {
+            $msg = 'السيرفر مقدرش يوصل لـ XPay خالص (النت أو الجدار الناري في السيرفر)';
+        } elseif ($code === 401 || $code === 403) {
+            $msg = 'XPay رفض المفتاح السري - اتأكد إنك نسخت الـ Secret key كامل ومن نفس الوضع (test/live)';
+        } elseif ($ok) {
+            $msg = 'الاتصال بـ XPay شغال ✅ والمفتاح مقبول';
+        } elseif ($code === 404) {
+            $msg = 'العنوان ده مش موجود عند XPay (404) - غالبًا عنوان الـ API لحسابك مختلف. ابعتلنا رابط الـ API من لوحة XPay';
+        } else {
+            $msg = 'XPay رد بكود ' . $code;
         }
-        return ['ok' => $ok, 'code' => $r['code'], 'message' => $msg];
+        $this->remember('last_test', ['ok' => $ok, 'code' => $code, 'detail' => $detail]);
+        return ['ok' => $ok, 'code' => $code, 'message' => $msg, 'detail' => $detail];
     }
 
     // ------------------------------------------------------------------ الدفع
@@ -170,23 +227,35 @@ class XPayGateway
         $txId = (int) ($db->query('SELECT id FROM payment_transactions WHERE internal_transaction_id = ? LIMIT 1', [$internal])[0]['id'] ?? 0);
 
         $sep = str_contains($returnUrl, '?') ? '&' : '?';
-        $body = [
-            'uiMode' => 'hosted',
-            'lineItems' => [[
-                'priceData' => ['unitAmount' => $charge['minor'], 'currency' => $charge['currency'], 'productData' => ['name' => 'Tourfecto wallet top-up ($' . number_format($usd, 2) . ')']],
-                'quantity' => 1,
-            ]],
-            'afterCompletion' => ['type' => 'redirect', 'redirect' => ['url' => $returnUrl . $sep . 'session_id={CHECKOUT_SESSION_ID}']],
-        ];
-        // الحقول الموثّقة بس (حقل زيادة ممكن XPay يرفض الطلب بسببه) - الربط بيننا وبينهم برقم الجلسة
-        $r = $this->call('POST', '/checkout/sessions', $body, 'xpay-' . $reference);
-        $s = $r['body'] ?? [];
-        $sid = (string) ($s['id'] ?? '');
-        if ($r['code'] >= 300 || $sid === '') {
+        $line = [[
+            'priceData' => ['unitAmount' => $charge['minor'], 'currency' => $charge['currency'], 'productData' => ['name' => 'Tourfecto wallet top-up ($' . number_format($usd, 2) . ')']],
+            'quantity' => 1,
+        ]];
+        $after = ['type' => 'redirect', 'redirect' => ['url' => $returnUrl . $sep . 'session_id={CHECKOUT_SESSION_ID}']];
+        // الحقول الموثّقة بس (حقل زيادة ممكن XPay يرفض الطلب بسببه) - الربط بيننا وبينهم برقم الجلسة.
+        // "embedded" = نافذة الدفع بتاعة XPay فوق صفحتنا (الطريقة الموثّقة)، ولو اترفضت نجرب صفحة XPay (hosted).
+        $tries = [];
+        $s = [];
+        $sid = '';
+        foreach (['embedded', 'hosted'] as $mode) {
+            $r = $this->call('POST', '/checkout/sessions', ['uiMode' => $mode, 'lineItems' => $line, 'afterCompletion' => $after], 'xpay-' . $reference . '-' . $mode);
+            $s = $r['body'] ?? [];
+            $sid = (string) ($s['id'] ?? '');
+            if ($r['code'] < 300 && $sid !== '') {
+                break;
+            }
+            $tries[] = $mode . ' → ' . $r['code'] . ($r['body'] ? ' (' . self::errorText($r['body']) . ')' : '');
+            $sid = '';
+            // مفتاح مرفوض أو مسار غلط: مفيش داعي نجرب تاني
+            if (in_array($r['code'], [0, 401, 403, 404], true)) {
+                break;
+            }
+        }
+        if ($sid === '') {
             $db->query('UPDATE payment_transactions SET status = ? WHERE id = ?', ['failed', $txId]);
-            $err = (string) ($s['error']['message'] ?? $s['message'] ?? '');
-            if (class_exists('Logger')) Logger::error('XPay session failed', ['code' => $r['code'], 'error' => $err]);
-            throw new RuntimeException('XPay رفض إنشاء الدفع' . ($err !== '' ? ': ' . $err : ''));
+            $this->remember('last_error', ['stage' => 'إنشاء الدفع', 'detail' => implode(' | ', $tries)]);
+            if (class_exists('Logger')) Logger::error('XPay session failed', ['tries' => $tries]);
+            throw new RuntimeException('XPay رفض إنشاء الدفع');
         }
         $url = (string) ($s['url'] ?? $s['hostedUrl'] ?? $s['checkoutUrl'] ?? '');
         $meta += ['checkout_url' => $url, 'livemode' => !empty($s['livemode'])];
@@ -248,19 +317,76 @@ class XPayGateway
         return ['status' => 'paid', 'credited' => (float) $tx['amount'], 'balance' => $top['balance'] ?? null, 'user_id' => (int) $tx['user_id']];
     }
 
+    /**
+     * فحص توقيع الـ Webhook لو الأدمن حط الـ Signing secret (للمعلومية بس:
+     * الأمان الحقيقي إننا بنسأل XPay بنفسنا عن الجلسة قبل أي شحن).
+     * بيدعم الشكلين المنتشرين: "t=..,v1=hex" و Standard Webhooks "v1,base64".
+     */
+    public function signatureState(string $payload, array $headers): string
+    {
+        $secret = $this->settings ? trim($this->settings->get(self::WEBHOOK_SECRET, '')) : '';
+        $h = array_change_key_case($headers, CASE_LOWER);
+        $sig = (string) ($h['xpay-signature'] ?? $h['x-xpay-signature'] ?? $h['webhook-signature'] ?? $h['x-signature'] ?? '');
+        if ($sig === '') {
+            return 'none';
+        }
+        if ($secret === '') {
+            return 'no_secret';
+        }
+        $keys = [$secret];
+        if (str_starts_with($secret, 'whsec_')) {
+            $raw = base64_decode(substr($secret, 6), true);
+            if ($raw !== false) {
+                $keys[] = $raw;
+            }
+            $keys[] = substr($secret, 6);
+        }
+        $cands = [];
+        if (preg_match('/t=(\d+)/', $sig, $tm) && preg_match_all('/v1=([0-9a-f]+)/i', $sig, $vm)) {
+            foreach ($keys as $k) {
+                $cands[] = [hash_hmac('sha256', $tm[1] . '.' . $payload, $k), $vm[1]];
+            }
+        } else {
+            $id = (string) ($h['webhook-id'] ?? '');
+            $ts = (string) ($h['webhook-timestamp'] ?? '');
+            $given = [];
+            foreach (preg_split('/\s+/', $sig) as $part) {
+                $given[] = str_contains($part, ',') ? substr($part, strpos($part, ',') + 1) : $part;
+            }
+            foreach ($keys as $k) {
+                $cands[] = [base64_encode(hash_hmac('sha256', $id . '.' . $ts . '.' . $payload, $k, true)), $given];
+                $cands[] = [hash_hmac('sha256', $payload, $k), $given];
+            }
+        }
+        foreach ($cands as [$expected, $given]) {
+            foreach ((array) $given as $g) {
+                if (hash_equals($expected, (string) $g)) {
+                    return 'ok';
+                }
+            }
+        }
+        return 'mismatch';
+    }
+
     /** Webhook: بناخد رقم الجلسة بس، والتأكيد من XPay نفسه */
-    public function handleWebhook(string $payload): array
+    public function handleWebhook(string $payload, array $headers = []): array
     {
         $e = json_decode($payload, true);
+        $sigState = $this->signatureState($payload, $headers);
         if (!is_array($e)) {
+            $this->remember('last_webhook', ['type' => 'invalid', 'signature' => $sigState]);
             return ['handled' => false];
         }
         $obj = $e['data']['object'] ?? $e['data'] ?? [];
         $sid = (string) ($obj['id'] ?? $e['sessionId'] ?? '');
-        if ($sid === '' || !str_starts_with((string) ($e['type'] ?? 'checkout.session'), 'checkout.session')) {
+        $type = (string) ($e['type'] ?? '');
+        if ($sid === '' || !str_starts_with($type !== '' ? $type : 'checkout.session', 'checkout.session')) {
+            $this->remember('last_webhook', ['type' => mb_substr($type, 0, 60), 'signature' => $sigState, 'status' => 'ignored']);
             return ['handled' => false];
         }
-        return ['handled' => true] + $this->confirm($sid);
+        $r = $this->confirm($sid);
+        $this->remember('last_webhook', ['type' => mb_substr($type, 0, 60), 'signature' => $sigState, 'status' => $r['status']]);
+        return ['handled' => true] + $r;
     }
 
     // ------------------------------------------------------------------ HTTP
@@ -285,6 +411,11 @@ class XPayGateway
         $res = curl_exec($ch);
         $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        return ['code' => $res === false ? 0 : $code, 'body' => is_string($res) ? (json_decode($res, true) ?: null) : null];
+        $body = is_string($res) ? (json_decode($res, true) ?: null) : null;
+        // بعض الردود بتيجي جوه {"data": {...}}
+        if (is_array($body) && !isset($body['id']) && is_array($body['data'] ?? null) && isset($body['data']['id'])) {
+            $body = $body['data'];
+        }
+        return ['code' => $res === false ? 0 : $code, 'body' => $body];
     }
 }
