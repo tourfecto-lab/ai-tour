@@ -1481,7 +1481,7 @@ JS;
     <link rel="stylesheet" href="{$styleCssUrl}">
     <link rel="stylesheet" href="{$panelCssUrl}">
     <link rel="stylesheet" href="/assets/css/tf-theme.css">
-    <script src="/assets/js/tf-theme.js"></script>
+    <script src="/assets/js/tf-theme.js?v=20261016"></script>
     <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>body{padding:40px 20px;max-width:1100px;margin:0 auto;} h1{text-align:center;margin-bottom:8px;} .sub{text-align:center;color:var(--gray-500,#666);margin-bottom:30px;}</style>
 </head>

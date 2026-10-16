@@ -1672,6 +1672,7 @@ $router->post('/api/admin/plans-studio/config', 'PlansStudioController', 'adminS
 $router->post('/api/admin/plans-studio/preset', 'PlansStudioController', 'adminPreset', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/currency/rates', 'PlansStudioController', 'adminSaveRates', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/currency/refresh', 'PlansStudioController', 'adminRefreshRates', ['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/currency/auto', 'PlansStudioController', 'adminSaveAuto', ['AuthMiddleware','AdminMiddleware']);
 // XPay (الدفع بالكارت لشحن المحفظة)
 $router->get('/api/admin/xpay', 'XPayController', 'adminData', ['AuthMiddleware','AdminMiddleware']);
 $router->post('/api/admin/xpay/save', 'XPayController', 'adminSave', ['AuthMiddleware','AdminMiddleware']);

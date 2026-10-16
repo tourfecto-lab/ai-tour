@@ -90,6 +90,8 @@ class PublicLayout
         $menuLabel = $e($C::t(['القائمة', 'Menu']));
         $isAr_label = $isAr ? 'English' : 'العربية';
         $skip = $e($C::t(['تخطى للمحتوى', 'Skip to content']));
+        $themeJs = function_exists('asset_v') ? asset_v('/assets/js/tf-theme.js') : '/assets/js/tf-theme.js';
+        $curJs = function_exists('asset_v') ? asset_v('/assets/js/tf-currency.js') : '/assets/js/tf-currency.js';
 
         return <<<HTML
 <!DOCTYPE html>
@@ -115,7 +117,8 @@ class PublicLayout
 {$favicon}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<script src="/assets/js/tf-theme.js"></script>
+<script src="{$e($curJs)}" defer></script>
+<script src="{$e($themeJs)}"></script>
 <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/css/compass.css">
 <link rel="stylesheet" href="/assets/css/site.css">

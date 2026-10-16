@@ -25,8 +25,16 @@
 
 <section class="ps-box ps-adm"><h3>5) العملات وأسعار الصرف</h3><p class="p-cell-muted">المنصة بالدولار للكل (العملاء أجانب). الجنيه بيظهر صغير جنب السعر (شرط البنك)، وأي عميل يقدر يختار عملته بنفسه = السعر بالدولار × سعر الصرف (+ الهامش). لو البنك (XPay) محدد سعر، اكتبه واقفله.</p>
 <label style="display:block;margin:8px 0"><input type="checkbox" id="paAutoLocal" ${D.auto_local ? 'checked' : ''}> اعرض للزائر عملة بلده تلقائي (مقفولة = الدولار للكل)</label>
+<div class="xp-urls" style="margin-top:6px"><b>🏦 ربط الجنيه بسعر البنك لحظي</b>${(() => { const A = D.fx_auto || {}; const SRC = { cbe: 'البنك المركزي المصري', market: 'سعر السوق' }; return `
+<div class="ps-cur-plan" style="margin-top:8px"><label><input type="checkbox" id="fxOn" ${A.enabled ? 'checked' : ''}> مربوط تلقائي</label>
+<label>المصدر <select id="fxSrc" class="p-select"><option value="cbe" ${A.source === 'cbe' ? 'selected' : ''}>البنك المركزي المصري (CBE)</option><option value="market" ${A.source === 'market' ? 'selected' : ''}>سعر السوق العالمي</option></select></label>
+<label>السعر <select id="fxSide" class="p-select"><option value="sell" ${A.side === 'sell' ? 'selected' : ''}>سعر البيع</option><option value="mid" ${A.side === 'mid' ? 'selected' : ''}>المتوسط</option><option value="buy" ${A.side === 'buy' ? 'selected' : ''}>سعر الشراء</option></select></label>
+<label>يتحدّث كل <select id="fxEvery" class="p-select">${[5, 15, 30, 60, 180].map(m => `<option value="${m}" ${+A.every === m ? 'selected' : ''}>${m < 60 ? m + ' دقيقة' : m / 60 + ' ساعة'}</option>`).join('')}</select></label>
+<button class="p-btn primary" data-save-auto>حفظ الربط</button></div>
+<div class="p-cell-muted">${A.last_run ? `آخر تحديث: ${esc(A.last_run.slice(0, 16))} من ${esc(SRC[A.last_source] || '-')} · سعر الدولار دلوقتي: <b>${R.EGP.base} ج.م</b>${R.EGP.margin ? ` (+${R.EGP.margin}% هامش = ${R.EGP.rate})` : ''}` : 'لسه ماتحدّثش'}${A.last_error ? `<br><span style="color:#b45309">⚠️ ${esc(A.last_error)}</span>` : ''}</div>
+<div class="p-cell-muted">لو بتدفع في XPay بالدولار، XPay بيحوّل بسعر البنك بتاعه وقت الدفع. الرقم هنا للعرض وللدفع بالجنيه.</div>`; })()}</div>
 <table><thead><tr><th>العملة</th><th>سعر 1$</th><th>هامش %</th><th>السعر النهائي</th><th>مقفول (يدوي)</th><th>تظهر للعملاء</th><th>آخر تحديث</th></tr></thead><tbody>${Object.entries(R).filter(([k]) => k !== 'USD').map(([k, r]) => `<tr><td><b>${k}</b> ${esc(D.currencies[k].ar)}</td><td><input class="p-select" type="number" step="0.0001" min="0" data-rb="${k}" value="${r.base}"></td><td><input class="p-select" type="number" step="0.1" min="0" max="20" data-rm="${k}" value="${r.margin}" style="max-width:70px"></td><td>${r.rate}</td><td><input type="checkbox" data-rl="${k}" ${r.locked ? 'checked' : ''}></td><td><input type="checkbox" data-re="${k}" ${r.enabled ? 'checked' : ''}></td><td class="p-cell-muted">${esc(r.updated_at || (r.source === 'default' ? 'افتراضي - حدّثه' : ''))}</td></tr>`).join('')}</tbody></table>
-<button class="p-btn" data-save-rates>حفظ أسعار الصرف</button> <button class="p-btn outline" data-refresh>حدّث من السوق (غير المقفولة)</button></section>`;
+<button class="p-btn" data-save-rates>حفظ أسعار الصرف</button> <button class="p-btn outline" data-refresh>حدّث دلوقتي من البنك</button></section>`;
     };
     const bind = () => root.addEventListener('click', e => {
         const b = e.target.closest('button'); if (!b) return;
@@ -42,7 +50,12 @@
             const rates = {}; root.querySelectorAll('[data-rb]').forEach(i => { const k = i.dataset.rb; rates[k] = { base: +i.value, margin: +root.querySelector(`[data-rm="${k}"]`).value, locked: root.querySelector(`[data-rl="${k}"]`).checked, enabled: root.querySelector(`[data-re="${k}"]`).checked }; });
             const r = await api('/api/admin/currency/rates', { rates, auto_local: v('paAutoLocal').checked });D.auto_local = v('paAutoLocal').checked; D.rates = r.data.rates; render(); msg('✅ اتحفظت أسعار الصرف');
         });
-        if (b.dataset.refresh !== undefined) return run(b, async () => { const r = await api('/api/admin/currency/refresh', {}); D.rates = r.data.rates; render(); msg('✅ ' + (r.message || 'اتحدّثت')); });
+        if (b.dataset.refresh !== undefined) return run(b, async () => { const r = await api('/api/admin/currency/refresh', {}); D.rates = r.data.rates; D.fx_auto = r.data.fx_auto; render(); msg('✅ ' + (r.message || 'اتحدّثت')); });
+        if (b.dataset.saveAuto !== undefined) return run(b, async () => {
+            const r = await api('/api/admin/currency/auto', { fx_auto: { enabled: v('fxOn').checked, source: v('fxSrc').value, side: v('fxSide').value, every: +v('fxEvery').value } });
+            D.fx_auto = r.data.fx_auto; D.rates = r.data.rates; render();
+            msg((r.data.refresh && r.data.refresh.error ? '⚠️ ' + r.data.refresh.error : '✅ ' + (r.message || 'اتحفظ')), !!(r.data.refresh && r.data.refresh.error));
+        });
     });
     window.PlansAdmin = { init: async panel => { P = panel; root = document.getElementById('plansAdmin'); if (!root) return; try { const r = await api('/api/admin/plans-studio'); D = r.data; bind(); render(); } catch (e) { root.innerHTML = '<p class="ps-msg bad">' + esc(e.message) + '</p>'; } } };
 })();

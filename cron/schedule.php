@@ -109,6 +109,10 @@ return [
         'file' => 'monitor_backlinks.php', 'when' => '0 5 * * 1', 'group' => 'seo',
         'title' => 'فحص الباك لينكس (أسبوعي)', 'enabled' => true, 'max_minutes' => 60,
     ],
+    'fx_refresh' => [
+        'file' => 'fx_refresh.php', 'when' => '*/5 * * * *', 'group' => 'core',
+        'title' => 'سعر الصرف مربوط بالبنك المركزي (حسب الميعاد اللي في الأدمن)', 'enabled' => true, 'max_minutes' => 3,
+    ],
     'platform_outreach' => [
         'file' => 'platform_outreach.php', 'when' => '*/5 * * * *', 'group' => 'growth',
         'title' => 'تسويق المنصة بالإيميل (دفعات صغيرة في مواعيد العمل)', 'enabled' => true, 'max_minutes' => 4,

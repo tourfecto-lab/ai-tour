@@ -226,6 +226,164 @@ class CurrencyService
         return $updated;
     }
 
+    // ------------------------------------------------------------------ الربط بسعر البنك
+
+    /** صفحة أسعار البنك المركزي المصري (الجنيه مقابل كل عملة: شراء / بيع) */
+    public const CBE_URL = 'https://www.cbe.org.eg/en/economic-research/statistics/cbe-exchange-rates';
+    /** اسم العملة في جدول البنك المركزي */
+    private const CBE_NAMES = ['USD' => 'US Dollar', 'EUR' => 'Euro', 'GBP' => 'Pound Sterling', 'SAR' => 'Saudi Riyal', 'AED' => 'UAE Dirham', 'KWD' => 'Kuwaiti Dinar', 'QAR' => 'Qatari Riyal'];
+
+    /** إعدادات الربط التلقائي */
+    public static function autoConfig(): array
+    {
+        $s = self::settings();
+        $c = $s ? json_decode($s->get('fx_auto', ''), true) : null;
+        $c = is_array($c) ? $c : [];
+        return [
+            'enabled' => !empty($c['enabled']),
+            'source' => in_array($c['source'] ?? 'cbe', ['cbe', 'market'], true) ? ($c['source'] ?? 'cbe') : 'cbe',
+            'side' => in_array($c['side'] ?? 'sell', ['sell', 'buy', 'mid'], true) ? ($c['side'] ?? 'sell') : 'sell',
+            'every' => in_array((int) ($c['every'] ?? 15), [5, 15, 30, 60, 180], true) ? (int) ($c['every'] ?? 15) : 15,
+            'last_run' => (string) ($c['last_run'] ?? ''),
+            'last_source' => (string) ($c['last_source'] ?? ''),
+            'last_error' => (string) ($c['last_error'] ?? ''),
+        ];
+    }
+
+    public static function saveAutoConfig(array $in): array
+    {
+        $s = self::settings();
+        $c = $s ? json_decode($s->get('fx_auto', ''), true) : null;
+        $c = is_array($c) ? $c : [];
+        foreach (['enabled', 'source', 'side', 'every'] as $k) {
+            if (array_key_exists($k, $in)) {
+                $c[$k] = $k === 'enabled' ? !empty($in[$k]) : $in[$k];
+            }
+        }
+        $s->set('fx_auto', json_encode($c));
+        // الربط التلقائي معناه إن الجنيه مايبقاش مقفول على رقم يدوي
+        if (!empty($c['enabled'])) {
+            $saved = json_decode($s->get('fx_rates', ''), true) ?: [];
+            if (!empty($saved['EGP']['locked'])) {
+                $saved['EGP']['locked'] = false;
+                $s->set('fx_rates', json_encode($saved));
+                self::$cache = null;
+            }
+        }
+        return self::autoConfig();
+    }
+
+    /**
+     * يقرا جدول البنك المركزي: [code => ['buy'=>, 'sell'=>]] بالجنيه لكل وحدة.
+     * الصفحة HTML، فبنحوّلها لنص ونقرا أول رقمين بعد اسم كل عملة.
+     */
+    public static function parseCbe(string $html): array
+    {
+        // كل تاج بيتحوّل لمسافة (عشان خانات الجدول ماتلزقش في بعض)
+        $text = preg_replace('/<[^>]*>/', ' ', preg_replace('#<(script|style)\b.*?</\1>#is', ' ', $html));
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/[\s\x{00A0}]+/u', ' ', $text);
+        $out = [];
+        foreach (self::CBE_NAMES as $code => $name) {
+            if (preg_match('/' . preg_quote($name, '/') . '\s*(?:\([A-Z]{3}\))?\s*([0-9]{1,4}\.[0-9]{2,6})\s+([0-9]{1,4}\.[0-9]{2,6})/i', $text, $m)) {
+                $a = (float) $m[1];
+                $b = (float) $m[2];
+                if ($a > 0 && $b > 0) {
+                    $out[$code] = ['buy' => min($a, $b), 'sell' => max($a, $b)];
+                }
+            }
+        }
+        return $out;
+    }
+
+    /** عدد وحدات كل عملة مقابل 1 دولار من جدول البنك (الجنيه مباشر، والباقي محسوب من الجنيه) */
+    public static function ratesFromCbe(array $table, string $side = 'sell'): array
+    {
+        $pick = fn ($r) => $side === 'mid' ? ($r['buy'] + $r['sell']) / 2 : $r[$side];
+        if (empty($table['USD'])) {
+            return [];
+        }
+        $usdEgp = $pick($table['USD']);
+        $out = ['EGP' => round($usdEgp, 4)];
+        foreach ($table as $code => $r) {
+            if ($code !== 'USD' && isset(self::CURRENCIES[$code]) && $pick($r) > 0) {
+                $out[$code] = round($usdEgp / $pick($r), 6);
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * التحديث التلقائي (الكرون كل دقيقة بيندهها، وهي بتشتغل بس لما ييجي الميعاد).
+     * البنك المركزي الأول، ولو موقعه مردّش: سعر السوق. والسعر الغريب (فرق كبير مرة واحدة) مابيتسجلش.
+     * @param callable|null $fetch للاختبار: fn(string $source): ?string|array
+     */
+    public static function autoRefresh(bool $force = false, ?callable $fetch = null): array
+    {
+        $cfg = self::autoConfig();
+        if (!$force && (!$cfg['enabled'] || ($cfg['last_run'] !== '' && strtotime($cfg['last_run']) > time() - $cfg['every'] * 60 + 30))) {
+            return ['ran' => false];
+        }
+        $fetch ??= static function (string $source) {
+            if ($source === 'cbe') {
+                $r = SafeHttp::exec(self::CBE_URL, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_SSL_VERIFYPEER => true, CURLOPT_HTTPHEADER => ['User-Agent: Mozilla/5.0 (compatible; TourfectoRates/1.0)', 'Accept: text/html']], 3);
+                return is_string($r['response'] ?? null) ? $r['response'] : null;
+            }
+            $r = SafeHttp::exec('https://open.er-api.com/v6/latest/USD', [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_SSL_VERIFYPEER => true], 3);
+            $d = is_string($r['response'] ?? null) ? json_decode($r['response'], true) : null;
+            return is_array($d['rates'] ?? null) ? $d['rates'] : null;
+        };
+        $order = $cfg['source'] === 'cbe' ? ['cbe', 'market'] : ['market'];
+        $rates = [];
+        $used = '';
+        $errors = [];
+        foreach ($order as $src) {
+            try {
+                $raw = $fetch($src);
+                $rates = $src === 'cbe' ? (is_string($raw) ? self::ratesFromCbe(self::parseCbe($raw), $cfg['side']) : []) : (is_array($raw) ? $raw : []);
+            } catch (Throwable $e) {
+                $rates = [];
+            }
+            if (!empty($rates['EGP'])) {
+                $used = $src;
+                break;
+            }
+            $errors[] = $src === 'cbe' ? 'موقع البنك المركزي مردّش أو شكل الجدول اتغيّر' : 'سعر السوق مش متاح';
+        }
+        $s = self::settings();
+        $c = json_decode($s->get('fx_auto', ''), true) ?: [];
+        $c['last_run'] = date('Y-m-d H:i:s');
+        if ($used === '') {
+            $c['last_error'] = implode(' / ', $errors);
+            $s->set('fx_auto', json_encode($c));
+            return ['ran' => true, 'updated' => [], 'error' => $c['last_error']];
+        }
+        $saved = json_decode($s->get('fx_rates', ''), true) ?: [];
+        $current = self::rates();
+        $updated = [];
+        $skipped = [];
+        foreach ($rates as $code => $v) {
+            if ($code === 'USD' || !isset(self::CURRENCIES[$code]) || !is_numeric($v) || $v <= 0 || !empty($saved[$code]['locked'])) {
+                continue;
+            }
+            $v = (float) $v;
+            $old = (float) ($current[$code]['base'] ?? 0);
+            // حماية: لو الرقم اتغيّر أكتر من 15% مرة واحدة غالبًا قراية غلط - مانسجلوش
+            if ($old > 0 && ($current[$code]['source'] ?? '') !== 'default' && abs($v - $old) / $old > 0.15 && !$force) {
+                $skipped[] = $code;
+                continue;
+            }
+            $saved[$code] = array_merge($saved[$code] ?? [], ['base' => round($v, $code === 'EGP' ? 4 : 6), 'source' => $used === 'cbe' ? 'cbe' : 'market', 'updated_at' => date('Y-m-d H:i')]);
+            $updated[] = $code;
+        }
+        $s->set('fx_rates', json_encode($saved));
+        self::$cache = null;
+        $c['last_source'] = $used;
+        $c['last_error'] = ($used !== $cfg['source'] ? implode(' / ', $errors) . ' - استخدمنا سعر السوق مؤقتًا. ' : '') . ($skipped ? 'اتجاهلنا تغيير كبير مفاجئ في: ' . implode('، ', $skipped) : '');
+        $s->set('fx_auto', json_encode($c));
+        return ['ran' => true, 'updated' => $updated, 'source' => $used, 'skipped' => $skipped];
+    }
+
     public static function resetCache(): void
     {
         self::$cache = null;

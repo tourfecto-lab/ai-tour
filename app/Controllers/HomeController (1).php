@@ -93,6 +93,7 @@ XML;
         $lang = current_lang();
         $dir = current_dir();
 
+        $curJs = htmlspecialchars(function_exists('asset_v') ? asset_v('/assets/js/tf-currency.js') : '/assets/js/tf-currency.js', ENT_QUOTES, 'UTF-8');
         $fromPriceHero = $this->fromPrice(false);
         $fromPriceCta = $this->fromPrice(true);
         $langMenu = '';
@@ -149,7 +150,7 @@ XML;
     <link rel="stylesheet" href="/assets/css/compass.css">
     <link rel="stylesheet" href="/assets/css/home-pro.css">
     <link rel="stylesheet" href="/assets/css/home-3d.css">
-    <script src="/assets/js/tf-currency.js?v=1" defer></script>
+    <script src="{$curJs}" defer></script>
 </head>
 <body class="compass">
 <script>document.documentElement.classList.add('js-ready')</script>

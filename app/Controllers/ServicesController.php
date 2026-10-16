@@ -236,7 +236,7 @@ class ServicesController extends Controller
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>الصفحة مش موجودة | {$appName}</title>
-    <script src="/assets/js/tf-theme.js"></script>
+    <script src="/assets/js/tf-theme.js?v=20261016"></script>
     <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/compass.css">
 </head>
@@ -299,7 +299,7 @@ HTML;
     <meta name="description" content="{$tagline}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <script src="/assets/js/tf-theme.js"></script>
+    <script src="/assets/js/tf-theme.js?v=20261016"></script>
     <link href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/compass.css">
     <link rel="stylesheet" href="/assets/css/services.css">

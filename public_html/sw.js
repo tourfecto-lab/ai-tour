@@ -7,7 +7,7 @@
  * محدّثة. لو النت مقطوع، الصفحة اللي كانت مفتوحة قبل كده هتفضل شغالة
  * (مش هنعمل offline page كامل - مش مناسب لأداة SaaS بيانات حيّة).
  */
-const CACHE_VERSION = 'tourfecto-static-v1';
+const CACHE_VERSION = 'tourfecto-static-v2';
 const STATIC_ASSETS = [
     '/assets/css/style.css',
     '/assets/css/panel.css',
@@ -46,15 +46,19 @@ self.addEventListener('fetch', (event) => {
         /\.(css|js|png|jpg|jpeg|svg|woff2?)$/i.test(url.pathname);
 
     if (isStaticAsset) {
-        event.respondWith(
-            caches.match(event.request).then((cached) => {
-                if (cached) return cached;
-                return fetch(event.request).then((response) => {
-                    const clone = response.clone();
-                    caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, clone));
-                    return response;
-                });
-            })
+        // ملف عليه رقم نسخة (?v=) مش هيتغير: من الكاش على طول عشان السرعة.
+        // ملف من غير رقم: من الشبكة الأول عشان أي تحديث يوصل فورًا، والكاش لو النت فاصل بس.
+        const versioned = url.searchParams.has('v');
+        const save = (response) => {
+            if (response && response.ok) {
+                const clone = response.clone();
+                caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, clone));
+            }
+            return response;
+        };
+        event.respondWith(versioned
+            ? caches.match(event.request).then((cached) => cached || fetch(event.request).then(save))
+            : fetch(event.request).then(save).catch(() => caches.match(event.request))
         );
     }
     // أي صفحة HTML أو أي حاجة تانية: نسيبها تروح للشبكة عادي من غير تدخل

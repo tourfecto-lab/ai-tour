@@ -238,7 +238,7 @@ class PlansStudioController extends Controller
         }
         header('Cache-Control: private, no-store');
         $x = new PlanExtras();
-        return $this->success(['config' => $x->config(), 'preset' => PlanExtras::PRESET, 'plans' => BillingPlanCatalog::read(), 'rates' => CurrencyService::rates(), 'currencies' => CurrencyService::CURRENCIES, 'auto_local' => (new SystemSettingsService())->get('fx_auto_local', '0') === '1', 'csrf_token' => Csrf::token()]);
+        return $this->success(['config' => $x->config(), 'preset' => PlanExtras::PRESET, 'plans' => BillingPlanCatalog::read(), 'rates' => CurrencyService::rates(), 'currencies' => CurrencyService::CURRENCIES, 'auto_local' => (new SystemSettingsService())->get('fx_auto_local', '0') === '1', 'fx_auto' => CurrencyService::autoConfig(), 'csrf_token' => Csrf::token()]);
     }
 
     private function adminGuard(): ?array
@@ -292,17 +292,33 @@ class PlansStudioController extends Controller
         }
     }
 
-    /** POST /api/admin/currency/refresh */
+    /** POST /api/admin/currency/refresh - تحديث دلوقتي من البنك (أو السوق) */
     public function adminRefreshRates(array $params = []): array
     {
         if ($e = $this->adminGuard()) {
             return $e;
         }
         try {
-            $u = CurrencyService::refreshFromMarket();
-            return $this->success(['updated' => $u, 'rates' => CurrencyService::rates()], $u ? 'اتحدّثت: ' . implode('، ', $u) : 'كل العملات مقفولة على سعر يدوي');
+            $r = CurrencyService::autoRefresh(true);
+            if (!empty($r['error'])) {
+                return $this->error($r['error'], 502, ['fx_auto' => CurrencyService::autoConfig()]);
+            }
+            $src = ($r['source'] ?? '') === 'cbe' ? 'البنك المركزي المصري' : 'سعر السوق';
+            return $this->success(['updated' => $r['updated'], 'rates' => CurrencyService::rates(), 'fx_auto' => CurrencyService::autoConfig()], $r['updated'] ? 'اتحدّثت من ' . $src . ': ' . implode('، ', $r['updated']) : 'كل العملات مقفولة على سعر يدوي');
         } catch (Throwable $e) {
             return $this->error($e->getMessage(), 502);
         }
+    }
+
+    /** POST /api/admin/currency/auto - الربط التلقائي بسعر البنك */
+    public function adminSaveAuto(array $params = []): array
+    {
+        if ($e = $this->adminGuard()) {
+            return $e;
+        }
+        $in = $this->get('fx_auto', []);
+        $c = CurrencyService::saveAutoConfig(is_array($in) ? $in : []);
+        $r = $c['enabled'] ? CurrencyService::autoRefresh(true) : null;
+        return $this->success(['fx_auto' => CurrencyService::autoConfig(), 'rates' => CurrencyService::rates(), 'refresh' => $r], $c['enabled'] ? 'الجنيه بقى مربوط بسعر البنك ويتحدّث كل ' . $c['every'] . ' دقيقة' : 'اتقفل الربط التلقائي');
     }
 }
