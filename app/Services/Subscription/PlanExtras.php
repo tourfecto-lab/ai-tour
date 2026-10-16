@@ -208,6 +208,9 @@ class PlanExtras
             'trial_days' => max(1, min(60, (int) (((int) ($raw['trial_v'] ?? 1)) >= 2 ? ($raw['trial_days'] ?? 3) : 3))),
             'trial_requires_card' => ($raw['trial_requires_card'] ?? true) !== false,
             'trial_card_usd' => max(0.5, min(20, (float) ($raw['trial_card_usd'] ?? 1))),
+            // prepay: العميل يدفع أول شهر بالكارت قبل التجربة (بيتحط في محفظته) والاشتراك بيتخصم تلقائي بعد التجربة
+            // verify: مبلغ صغير لتأكيد الكارت بس
+            'trial_card_mode' => in_array($raw['trial_card_mode'] ?? 'prepay', ['prepay', 'verify'], true) ? ($raw['trial_card_mode'] ?? 'prepay') : 'prepay',
             'trial_caps' => self::trialCaps(),
             'trial_plan' => in_array($raw['trial_plan'] ?? '', ['starter', 'professional', 'enterprise'], true) ? $raw['trial_plan'] : 'professional',
             'builder_enabled' => ($raw['builder_enabled'] ?? true) !== false,
@@ -228,6 +231,9 @@ class PlanExtras
         if (isset($in['trial_days'])) {
             $raw['trial_days'] = max(1, min(60, (int) $in['trial_days']));
             $raw['trial_v'] = 2;
+        }
+        if (isset($in['trial_card_mode']) && in_array($in['trial_card_mode'], ['prepay', 'verify'], true)) {
+            $raw['trial_card_mode'] = $in['trial_card_mode'];
         }
         if (isset($in['trial_card_usd']) && is_numeric($in['trial_card_usd'])) {
             $raw['trial_card_usd'] = max(0.5, min(20, round((float) $in['trial_card_usd'], 2)));
@@ -313,7 +319,63 @@ class PlanExtras
     /** التجربة محتاجة كارت الأول؟ */
     public function trialNeedsCard(int $uid): bool
     {
-        return $this->config()['trial_requires_card'] && !$this->cardVerified($uid);
+        return $this->config()['trial_requires_card'] && !$this->cardVerifiedFor($uid, $this->trialCardAmount());
+    }
+
+    /** المبلغ اللي العميل بيدفعه بالكارت عشان يبدأ التجربة */
+    public function trialCardAmount(): float
+    {
+        $cfg = $this->config();
+        if ($cfg['trial_card_mode'] === 'prepay') {
+            $p = BillingPlanCatalog::read()[$cfg['trial_plan']] ?? null;
+            if ($p && (float) $p['price_monthly'] > 0) {
+                return round((float) $p['price_monthly'], 2);
+            }
+        }
+        return $cfg['trial_card_usd'];
+    }
+
+    /** الكارت لازم يكون اتأكد بنفس مبلغ التجربة المطلوب (مش أي دفعة صغيرة قديمة) */
+    public function cardVerifiedFor(int $uid, float $amount): bool
+    {
+        try {
+            return (bool) $this->q("SELECT 1 FROM payment_transactions WHERE user_id=? AND gateway='xpay' AND status='succeeded' AND amount >= ? LIMIT 1", [$uid, $amount - 0.01])->fetchColumn();
+        } catch (Throwable $e) {
+            return false;
+        }
+    }
+
+    /** العميل يلغي التحويل التلقائي بعد التجربة (التجربة تكمل لآخرها، والرصيد يفضل في محفظته) */
+    public function cancelTrialRenewal(int $uid, bool $cancel = true): bool
+    {
+        $st = $this->q("UPDATE subscriptions SET cancel_at_period_end=? WHERE user_id=? AND status='trialing' AND trial_ends_at > NOW()", [$cancel ? 1 : 0, $uid]);
+        return $st->rowCount() > 0;
+    }
+
+    /**
+     * التجربة خلصت: نخصم الاشتراك من المحفظة تلقائي (لو العميل ماألغاش).
+     * @return string converted | cancelled | no_funds
+     */
+    public function convertExpiredTrial(int $subId, int $uid): string
+    {
+        $row = $this->q('SELECT * FROM subscriptions WHERE id=? AND user_id=?', [$subId, $uid])->fetch(PDO::FETCH_ASSOC);
+        if (!$row || $row['status'] !== 'trialing') {
+            return 'cancelled';
+        }
+        if (!empty($row['cancel_at_period_end'])) {
+            $this->q("UPDATE subscriptions SET status='expired', updated_at=NOW() WHERE id=?", [$subId]);
+            return 'cancelled';
+        }
+        $plan = preg_replace('/_(monthly|yearly)$/', '', (string) $row['plan_name']);
+        $r = (new WalletService())->subscribeWithBalance($uid, $plan, 'monthly', 'trial_convert_' . $subId);
+        if (!empty($r['success'])) {
+            $this->q("UPDATE subscriptions SET status='expired', updated_at=NOW() WHERE id=? AND status='trialing'", [$subId]);
+            if (class_exists('ActivityLog')) {
+                ActivityLog::record('subscription', 'subscription.trial_converted', ['user_id' => $uid, 'subject_type' => 'subscriptions', 'subject_id' => $subId, 'meta' => ['plan' => $plan, 'charged' => $r['charged'] ?? null]]);
+            }
+            return 'converted';
+        }
+        return 'no_funds';
     }
 
     /**
@@ -324,8 +386,8 @@ class PlanExtras
         if (!$this->trialEligible($uid) && !($byAdmin && !Subscription::activeSubscriptionRow($uid) && !(int) $this->q("SELECT COUNT(*) FROM subscriptions WHERE user_id=? AND status='trialing'", [$uid])->fetchColumn())) {
             throw new InvalidArgumentException('التجربة المجانية متاحة مرة واحدة بس للحسابات الجديدة.');
         }
-        if (!$byAdmin && $this->trialNeedsCard($uid)) {
-            throw new DomainException(json_encode(['error' => 'card_required', 'card_usd' => $this->config()['trial_card_usd']]));
+        if (!$byAdmin && $this->config()['trial_requires_card'] && !$this->cardVerifiedFor($uid, $this->trialCardAmount())) {
+            throw new DomainException(json_encode(['error' => 'card_required', 'card_usd' => $this->trialCardAmount(), 'mode' => $this->config()['trial_card_mode']]));
         }
         $cfg = $this->config();
         $sub = Subscription::createSubscription($uid, $cfg['trial_plan'], 'monthly');
@@ -513,6 +575,27 @@ class PlanExtras
     }
 
     // ------------------------------------------------------------------ الباقات المقترحة
+
+    /**
+     * الباقات الجديدة بتتطبق لوحدها مرة واحدة لو الأسعار لسه القديمة بالظبط ($49 / $99 / $299)
+     * (لو الأدمن غيّر الأسعار بنفسه مابنلمسهاش).
+     */
+    public function autoApplyPresetIfLegacy(): bool
+    {
+        if (!$this->settings || $this->settings->get('plans_preset_auto', '') !== '') {
+            return false;
+        }
+        $cat = BillingPlanCatalog::read();
+        $now = [(float) ($cat['starter']['price_monthly'] ?? 0), (float) ($cat['professional']['price_monthly'] ?? 0), (float) ($cat['enterprise']['price_monthly'] ?? 0)];
+        if ($now !== [49.0, 99.0, 299.0]) {
+            $this->settings->set('plans_preset_auto', 'skipped ' . date('Y-m-d H:i'));
+            return false;
+        }
+        $this->applyPreset();
+        $this->settings->set('plans_preset_auto', 'applied ' . date('Y-m-d H:i'));
+        if (class_exists('Logger')) Logger::info('Recommended plans applied automatically (legacy prices found)');
+        return true;
+    }
 
     public function applyPreset(): array
     {

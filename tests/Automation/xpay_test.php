@@ -120,13 +120,18 @@ echo "trial card step\n";
 require_once ROOT_PATH . '/app/Services/Subscription/PlanExtras.php';
 $pdo->prepare("INSERT INTO users(company_name,email,password) VALUES('Trial Card Co',?,'x')")->execute(['xtrial' . getmypid() . '@example.com']);
 $u3 = (int) $pdo->lastInsertId();
-$st = $g->createWalletTopUp($u3, 1, 'https://t.test/r', 'https://t.test/c', 'trial_card');
-check(end($calls)[2]['lineItems'][0]['priceData']['unitAmount'] === 5000, '$1 card check sent as 50.00 EGP (below the normal minimum is allowed)');
+$pe = new PlanExtras(); $pe->applyPreset();
+$first = $pe->trialCardAmount();
+$st = $g->createWalletTopUp($u3, $first, 'https://t.test/r', 'https://t.test/c', 'trial_card');
+check(end($calls)[2]['lineItems'][0]['priceData']['unitAmount'] === (int) round($first * 50 * 100), 'first month ($' . $first . ') sent to XPay in EGP');
 check(!Subscription::activeSubscriptionRow($u3), 'no trial before payment');
 $remote[$st['session_id']]['status'] = ['type' => 'complete', 'paymentStatus' => 'paid']; $remote[$st['session_id']]['paymentStatus'] = 'paid';
 $cr = $g->confirm($st['session_id']);
 $sub3 = Subscription::activeSubscriptionRow($u3);
-check($cr['status'] === 'paid' && $sub3 && $sub3['status'] === 'trialing' && abs($ws->getBalance($u3) - 1) < 0.01, 'card paid: trial started automatically and $1 is in the wallet');
+check($cr['status'] === 'paid' && $sub3 && $sub3['status'] === 'trialing' && abs($ws->getBalance($u3) - $first) < 0.01, 'card paid: trial started automatically and the first month is in the wallet');
+$pe->saveConfig(['trial_card_mode' => 'verify']);
+check($pe->trialCardAmount() == 1.0, 'admin can switch to a small $1 card check instead');
+$pe->saveConfig(['trial_card_mode' => 'prepay']);
 foreach (['payment_transactions', 'wallet_transactions', 'subscriptions'] as $tbl) { $pdo->exec("DELETE FROM $tbl WHERE user_id=$u3"); }
 $pdo->exec("DELETE FROM users WHERE id=$u3");
 

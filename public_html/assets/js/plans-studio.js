@@ -41,9 +41,12 @@
 <label class="ps-cur">${t('العملة', 'Currency')} <select id="psCur" class="p-select">${D.currencies.map(c => `<option value="${c.code}" ${c.code === D.currency ? 'selected' : ''}>${esc(c.name)} (${esc(c.symbol)})</option>`).join('')}</select></label></div>
 <div id="psMsg" class="ps-msg" hidden></div>
 ${D.currency !== 'USD' ? `<p class="ps-note">${t('الأسعار محسوبة بسعر الصرف النهارده (1$ = ', 'Prices use today’s exchange rate ($1 = ')}${esc(fmtLocal(1))})${t('. المحفظة والفواتير بالدولار، والدفع بعملتك بنفس السعر.', '. Wallet and invoices are in USD; you can pay in your currency at this rate.')}</p>` : ''}
-${D.trial.eligible ? `<section class="ps-trial"><div><h3>🎁 ${t('جرّب باقة ' + esc(plan(D.trial.plan)?.name || '') + ' مجانًا ' + D.trial.days + (D.trial.days <= 10 ? ' أيام' : ' يوم'), 'Try ' + esc(plan(D.trial.plan)?.name || '') + ' free for ' + D.trial.days + ' days')}</h3><p>${t('جرّب كل خدمات المنصة بنفسك باستخدام بسيط لكل خدمة (' + trialSummary() + ')، ولما الحد يخلص يخلص.', 'Try every service with a small allowance each (' + trialSummary() + '); when it runs out, it stops.')}${D.trial.needs_card ? '<br><b>' + t('بنأكد كارتك الأول بـ ' + esc(D.trial.card_money.label) + ' بيتشحنوا في محفظتك (مش رسوم).', 'We verify your card with ' + esc(D.trial.card_money.label) + ', added to your wallet (not a fee).') + '</b>' : ''}</p></div><button class="p-btn" data-trial>${D.trial.needs_card ? t('أكّد كارتك وابدأ التجربة', 'Verify card & start trial') : t('ابدأ التجربة المجانية', 'Start free trial')}</button></section>` : ''}
+${D.trial.eligible ? `<section class="ps-trial"><div><h3>🎁 ${t('جرّب باقة ' + esc(plan(D.trial.plan)?.name || '') + ' مجانًا ' + D.trial.days + (D.trial.days <= 10 ? ' أيام' : ' يوم'), 'Try ' + esc(plan(D.trial.plan)?.name || '') + ' free for ' + D.trial.days + ' days')}</h3><p>${t('جرّب كل خدمات المنصة بنفسك باستخدام بسيط لكل خدمة (' + trialSummary() + ')، ولما الحد يخلص يخلص.', 'Try every service with a small allowance each (' + trialSummary() + '); when it runs out, it stops.')}${D.trial.needs_card ? '<br><b>' + (D.trial.card_mode === 'prepay'
+            ? t('بتربط كارتك وتدفع أول شهر (' + esc(D.trial.card_money.label) + ') بيتحط في محفظتك. أول ' + D.trial.days + ' أيام مجانًا، وبعدها الاشتراك بيتخصم تلقائي من المحفظة. لو لغيت قبل ما التجربة تخلص مفيش خصم والمبلغ يفضل في محفظتك.', 'Link your card and pay the first month (' + esc(D.trial.card_money.label) + ') into your wallet. The first ' + D.trial.days + ' days are free, then the plan is charged automatically from the wallet. Cancel before the trial ends and nothing is charged.')
+            : t('بنأكد كارتك الأول بـ ' + esc(D.trial.card_money.label) + ' بيتشحنوا في محفظتك (مش رسوم).', 'We verify your card with ' + esc(D.trial.card_money.label) + ', added to your wallet (not a fee).')) + '</b>' : ''}</p></div><button class="p-btn" data-trial>${D.trial.needs_card ? (D.trial.card_mode === 'prepay' ? t('اربط كارتك وابدأ التجربة', 'Link card & start trial') : t('أكّد كارتك وابدأ التجربة', 'Verify card & start trial')) : t('ابدأ التجربة المجانية', 'Start free trial')}</button></section>` : ''}
 ${cur ? `<section class="ps-box"><h3>${t('باقتك دلوقتي', 'Your current plan')}</h3><div class="ps-cur-plan"><span class="ps-badge">${esc(plan(cur.plan)?.name || cur.plan)}${cur.custom ? ' + ' + t('مخصصة', 'custom') : ''}</span>
-<span>${cur.status === 'trialing' ? '🎁 ' + t('تجربة مجانية لحد ', 'Free trial until ') + esc((cur.trial_ends_at || '').slice(0, 10)) : t('بتتجدد ', 'Renews ') + esc((cur.period_end || '').slice(0, 10))}</span>
+<span>${cur.status === 'trialing' ? '🎁 ' + t('تجربة مجانية لحد ', 'Free trial until ') + esc((cur.trial_ends_at || '').slice(0, 16).replace('T', ' ')) : t('بتتجدد ', 'Renews ') + esc((cur.period_end || '').slice(0, 10))}</span>
+${cur.status === 'trialing' && cur.after_trial ? `<span>${cur.auto_renew ? t('بعد التجربة هيتخصم ', 'After the trial ') + money(cur.after_trial) + t(' تلقائي من المحفظة', ' is charged from your wallet') : t('التجديد ملغي: مفيش خصم بعد التجربة', 'Renewal cancelled: no charge after the trial')}</span><button class="p-btn outline sm" data-trial-renew="${cur.auto_renew ? '0' : '1'}">${cur.auto_renew ? t('إلغاء التجديد', 'Cancel renewal') : t('رجّع التجديد', 'Resume renewal')}</button>` : ''}
 <span>${t('رصيد المحفظة: ', 'Wallet: ')}${money(D.wallet)}</span></div>
 ${cur.extras?.length ? `<div class="ps-extras">${cur.extras.map(x => `<span>+${Number(x.amount).toLocaleString()} ${esc((services.find(s => s.key === x.feature) || {}).label || x.feature)} <small>${x.source === 'custom' ? t('شهريًا', 'monthly') : t('لحد ', 'until ') + esc(x.expires_at.slice(0, 10))}</small></span>`).join('')}</div>` : ''}</section>` : ''}
 
@@ -74,6 +77,13 @@ ${D.builder.enabled && services.length ? `<section class="ps-box"><h3>🧩 ${t('
 
     root.addEventListener('click', e => {
         const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.trialRenew !== undefined) return run(b, async () => {
+            const cancel = b.dataset.trialRenew === '0';
+            if (cancel && !confirm(t('متأكد؟ التجربة هتكمل لآخرها، وبعدها مفيش خصم والخدمات هتقف. رصيدك يفضل في محفظتك.', 'Sure? The trial continues to its end, then nothing is charged and services stop. Your balance stays in the wallet.'))) return;
+            const r = await P.fetchJSON('/api/plans/trial/renewal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cancel, csrf_token: D?.csrf_token }) });
+            if (!r?.success) throw new Error(r?.error || t('حصلت مشكلة', 'Something went wrong'));
+            await reload(); say(r.message);
+        });
         if (b.dataset.trial !== undefined) return run(b, async () => {
             try {
                 const r = await api('/api/plans/trial', {}); await reload();
@@ -82,7 +92,9 @@ ${D.builder.enabled && services.length ? `<section class="ps-box"><h3>🧩 ${t('
                 if (!e.data?.details?.card_required && !e.data?.card_required) throw e;
                 const d = e.data.details || e.data;
                 if (!d.card_ready || !window.TFXPay) throw e;
-                if (!confirm(t('هنفتحلك صفحة الدفع الآمنة عشان تأكد كارتك بـ ' + D.trial.card_money.label + '. المبلغ بيتشحن في محفظتك وتقدر تستخدمه، والتجربة بتبدأ على طول بعد التأكيد. تكمّل؟', 'We will open the secure payment page to verify your card with ' + D.trial.card_money.label + '. It is added to your wallet and the trial starts right after. Continue?'))) return;
+                if (!confirm(D.trial.card_mode === 'prepay'
+                    ? t('هنفتحلك صفحة الدفع الآمنة: هتدفع ' + D.trial.card_money.label + ' (أول شهر) بيتحطوا في محفظتك، والتجربة المجانية تبدأ على طول. بعد ' + D.trial.days + ' أيام الاشتراك بيتخصم تلقائي من المحفظة، وتقدر تلغي قبلها. تكمّل؟', 'We will open the secure payment page: you pay ' + D.trial.card_money.label + ' (first month) into your wallet and the free trial starts. After ' + D.trial.days + ' days the plan is charged from the wallet unless you cancel. Continue?')
+                    : t('هنفتحلك صفحة الدفع الآمنة عشان تأكد كارتك بـ ' + D.trial.card_money.label + '. المبلغ بيتشحن في محفظتك وتقدر تستخدمه، والتجربة بتبدأ على طول بعد التأكيد. تكمّل؟', 'We will open the secure payment page to verify your card with ' + D.trial.card_money.label + '. It is added to your wallet and the trial starts right after. Continue?'))) return;
                 await window.TFXPay.pay({ purpose: 'trial_card' });
             }
         });

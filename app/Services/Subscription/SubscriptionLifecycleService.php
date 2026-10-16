@@ -189,14 +189,31 @@ class SubscriptionLifecycleService
             $rows = $this->db->query(
                 "SELECT id, user_id FROM subscriptions WHERE status = 'trialing' AND trial_ends_at IS NOT NULL AND trial_ends_at <= NOW()"
             );
+            require_once __DIR__ . '/PlanExtras.php';
+            $extras = new PlanExtras();
             foreach ($rows as $row) {
+                // التجربة خلصت: الاشتراك بيتخصم تلقائي من المحفظة (اللي اتشحنت بالكارت قبل التجربة)
+                $res = 'no_funds';
+                try {
+                    $res = $extras->convertExpiredTrial((int) $row['id'], (int) $row['user_id']);
+                } catch (Throwable $e) {
+                    Logger::error('Trial auto-convert failed', ['subscription_id' => $row['id'], 'error' => $e->getMessage()]);
+                }
+                if ($res === 'converted') {
+                    $this->notifyAndLog((int) $row['id'], (int) $row['user_id'], 'trial_ended', 'اشتراكك اشتغل', 'خلصت التجربة المجانية واشتراكك اتفعّل تلقائي من رصيد محفظتك. تقدر تكمّل شغلك عادي.');
+                    continue;
+                }
+                if ($res === 'cancelled') {
+                    $this->notifyAndLog((int) $row['id'], (int) $row['user_id'], 'trial_ended', 'انتهت فترة التجربة المجانية', 'خلصت تجربتك ومفيش خصم لأنك لغيت التجديد. رصيدك لسه في محفظتك، وتقدر تشترك في أي وقت.');
+                    continue;
+                }
                 $this->db->exec("UPDATE subscriptions SET status = 'past_due', updated_at = NOW() WHERE id = ?", [(int) $row['id']]);
                 $this->notifyAndLog(
                     (int) $row['id'],
                     (int) $row['user_id'],
                     'trial_ended',
                     'انتهت فترة التجربة المجانية',
-                    'خلصت فترة تجربتك المجانية - جدّد اشتراكك عشان تستمر في استخدام الباقة.'
+                    'خلصت فترة تجربتك المجانية ورصيد محفظتك مش كفاية للاشتراك - اشحن المحفظة عشان تستمر في استخدام الباقة.'
                 );
             }
             return count($rows);

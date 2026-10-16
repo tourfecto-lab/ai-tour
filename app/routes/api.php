@@ -1686,6 +1686,7 @@ $router->post('/api/currency', 'PlansStudioController', 'setCurrency', []);
 $router->get('/api/currency', 'PlansStudioController', 'currencies', []);
 $router->get('/api/plans/overview', 'PlansStudioController', 'overview', ['AuthMiddleware']);
 $router->post('/api/plans/trial', 'PlansStudioController', 'trial', ['AuthMiddleware']);
+$router->post('/api/plans/trial/renewal', 'PlansStudioController', 'trialRenewal', ['AuthMiddleware']);
 $router->post('/api/plans/addon', 'PlansStudioController', 'addon', ['AuthMiddleware']);
 $router->post('/api/plans/custom/quote', 'PlansStudioController', 'customQuote', ['AuthMiddleware']);
 $router->post('/api/plans/custom/buy', 'PlansStudioController', 'customBuy', ['AuthMiddleware']);

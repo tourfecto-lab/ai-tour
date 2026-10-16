@@ -9,6 +9,9 @@ require_once dirname(__DIR__) . '/app/Services/Payment/CurrencyService.php';
 
 try {
     echo json_encode(CurrencyService::autoRefresh(), JSON_UNESCAPED_UNICODE) . "\n";
+    // مرة واحدة: الباقات الجديدة لو الأسعار لسه القديمة
+    require_once dirname(__DIR__) . '/app/Services/Subscription/PlanExtras.php';
+    if ((new PlanExtras())->autoApplyPresetIfLegacy()) echo "recommended plans applied\n";
 } catch (Throwable $e) {
     Logger::error('FX refresh cron failed', ['error' => $e->getMessage()]);
     echo 'error: ' . $e->getMessage() . "\n";

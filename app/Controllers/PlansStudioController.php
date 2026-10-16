@@ -101,6 +101,8 @@ class PlansStudioController extends Controller
                     'status' => (string) ($sub['lifecycle_status'] ?? $sub['status'] ?? ''), 'period_end' => (string) ($sub['current_period_end'] ?? ''),
                     'trial_ends_at' => (string) ($sub['trial_ends_at'] ?? ''), 'price' => $this->money((float) ($sub['price'] ?? 0), $cur),
                     'custom' => $x->customFor((int) $sub['id']), 'extras' => $x->activeExtras((int) $sub['id']),
+                    'auto_renew' => empty($sub['cancel_at_period_end']),
+                    'after_trial' => ($sub['status'] ?? '') === 'trialing' && isset($plans) ? (function () use ($sub, $cur) { $p = BillingPlanCatalog::read()[preg_replace('/_(monthly|yearly)$/', '', (string) $sub['plan_name'])] ?? null; return $p ? $this->money((float) $p['price_monthly'], $cur) : null; })() : null,
                 ];
             }
             $packs = [];
@@ -120,7 +122,7 @@ class PlansStudioController extends Controller
             $balance = (new WalletService())->getBalance($uid);
             return $this->success([
                 'currency' => $cur, 'currencies' => CurrencyService::publicList($ar), 'rate' => CurrencyService::rate($cur),
-                'plans' => $plans, 'current' => $current, 'trial' => ['eligible' => $x->trialEligible($uid), 'days' => $cfg['trial_days'], 'plan' => $cfg['trial_plan'], 'needs_card' => $x->trialNeedsCard($uid), 'card_usd' => $cfg['trial_card_usd'], 'card_money' => $this->money($cfg['trial_card_usd'], $cur), 'caps' => $cfg['trial_caps']],
+                'plans' => $plans, 'current' => $current, 'trial' => ['eligible' => $x->trialEligible($uid), 'days' => $cfg['trial_days'], 'plan' => $cfg['trial_plan'], 'needs_card' => $x->trialNeedsCard($uid), 'card_mode' => $cfg['trial_card_mode'], 'card_usd' => $x->trialCardAmount(), 'card_money' => $this->money($x->trialCardAmount(), $cur), 'caps' => $cfg['trial_caps']],
                 'packs' => $packs, 'builder' => ['enabled' => $cfg['builder_enabled'], 'services' => $services],
                 'wallet' => $this->money($balance, $cur), 'csrf_token' => Csrf::token(),
             ]);
@@ -152,6 +154,22 @@ class PlansStudioController extends Controller
         } catch (Throwable $e) {
             return $this->fail($e);
         }
+    }
+
+    /** POST /api/plans/trial/renewal {cancel: bool} - إلغاء/رجوع الاشتراك التلقائي بعد التجربة */
+    public function trialRenewal(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if (($e = $this->verifyCsrf()) || ($e = $this->rateLimitGuard('user', 'plans_trial_renewal', 10, 3600))) {
+            return $e;
+        }
+        $cancel = (bool) $this->get('cancel', true);
+        if (!(new PlanExtras())->cancelTrialRenewal($this->owner(), $cancel)) {
+            return $this->error('مفيش تجربة شغالة دلوقتي.', 422);
+        }
+        return $this->success(['cancelled' => $cancel], $cancel ? 'اتلغى التجديد: التجربة هتكمل لآخرها ومفيش خصم، ورصيدك يفضل في محفظتك.' : 'رجعنا التجديد: الاشتراك هيتخصم تلقائي من محفظتك بعد التجربة.');
     }
 
     /** POST /api/plans/addon */
@@ -246,6 +264,11 @@ class PlansStudioController extends Controller
         }
         header('Cache-Control: private, no-store');
         $x = new PlanExtras();
+        try {
+            $x->autoApplyPresetIfLegacy();
+        } catch (Throwable $e) {
+            Logger::error('Auto preset failed', ['error' => $e->getMessage()]);
+        }
         return $this->success(['config' => $x->config(), 'preset' => PlanExtras::PRESET, 'trial_labels' => PlanExtras::TRIAL_LABELS, 'plans' => BillingPlanCatalog::read(), 'rates' => CurrencyService::rates(), 'currencies' => CurrencyService::CURRENCIES, 'auto_local' => (new SystemSettingsService())->get('fx_auto_local', '0') === '1', 'fx_auto' => CurrencyService::autoConfig(), 'csrf_token' => Csrf::token()]);
     }
 

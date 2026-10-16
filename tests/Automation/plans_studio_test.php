@@ -47,8 +47,9 @@ check($x->trialEligible($uid), 'new account can start a trial');
 check($x->config()['trial_days'] === 3, 'trial is 3 days by default (old 14-day setting ignored)');
 try { $x->startTrial($uid); $ok = false; } catch (DomainException $e) { $ok = (json_decode($e->getMessage(), true)['error'] ?? '') === 'card_required'; }
 check($ok && !Subscription::activeSubscriptionRow($uid), 'no card yet: trial does not start');
-$pdo->prepare("INSERT INTO payment_transactions(internal_transaction_id,user_id,amount,currency,payment_method,gateway,status,reference,metadata) VALUES(?,?,1,'USD','card','xpay','succeeded',?,'{}')")->execute(['PTX-T' . $uid, $uid, 'XTX-T' . $uid]);
-check(!$x->trialNeedsCard($uid), 'card verified through XPay');
+$pdo->prepare("INSERT INTO payment_transactions(internal_transaction_id,user_id,amount,currency,payment_method,gateway,status,reference,metadata) VALUES(?,?,149,'USD','card','xpay','succeeded',?,'{}')")->execute(['PTX-T' . $uid, $uid, 'XTX-T' . $uid]);
+check($x->trialCardAmount() == 149.0, 'trial needs the first month ($149) paid by card');
+check(!$x->trialNeedsCard($uid), 'card linked through XPay (first month paid)');
 $t = $x->startTrial($uid);
 check(abs(strtotime($t['ends_at']) - time() - 3 * 86400) < 60, 'trial ends after 3 days');
 $sub = Subscription::activeSubscriptionRow($uid);
@@ -98,6 +99,34 @@ $balBefore = (new WalletService())->getBalance($uid);
 $rn = (new WalletService())->renewSubscriptionFromBalance($sid);
 check(!empty($rn['success']) && abs($balBefore - (new WalletService())->getBalance($uid) - 169) < 0.01, 'renews at the custom price $169 (' . json_encode($rn) . ')');
 check(PlanExtras::extra($sid, 'article_generation') === 20, 'custom extras granted again for the new period (+10) and pack still on (+10)');
+
+echo "after the trial: automatic charge\n";
+$mk = function (string $tag) use ($pdo, $x) {
+    $pdo->prepare("INSERT INTO users(company_name,email,password) VALUES(?,?,'x')")->execute([$tag, $tag . getmypid() . '@example.com']);
+    $id = (int) $pdo->lastInsertId();
+    $x->startTrial($id, true);
+    $pdo->prepare("UPDATE subscriptions SET trial_ends_at=DATE_SUB(NOW(),INTERVAL 1 MINUTE), current_period_end=DATE_SUB(NOW(),INTERVAL 1 MINUTE) WHERE user_id=?")->execute([$id]);
+    return $id;
+};
+$a1 = $mk('Auto Co'); (new WalletService())->adminAddBalance($a1, 149, $a1, 'first month via card');
+$a2 = $mk('Cancel Co'); (new WalletService())->adminAddBalance($a2, 149, $a2, 'first month via card');
+$pdo->prepare("UPDATE subscriptions SET trial_ends_at=DATE_ADD(NOW(),INTERVAL 1 DAY) WHERE user_id=?")->execute([$a2]);
+check($x->cancelTrialRenewal($a2), 'customer can cancel renewal during the trial');
+$pdo->prepare("UPDATE subscriptions SET trial_ends_at=DATE_SUB(NOW(),INTERVAL 1 MINUTE) WHERE user_id=?")->execute([$a2]);
+$a3 = $mk('Empty Co');
+(new SubscriptionLifecycleService())->runLifecycleChecks();
+$s1 = Subscription::activeSubscriptionRow($a1);
+check($s1 && $s1['status'] === 'active' && (float) $s1['price'] === 149.0 && abs((new WalletService())->getBalance($a1)) < 0.01, 'trial ended: $149 charged automatically, plan active');
+check(!Subscription::activeSubscriptionRow($a2) && abs((new WalletService())->getBalance($a2) - 149) < 0.01, 'cancelled before the end: no charge, $149 stays in the wallet');
+check($pdo->query("SELECT status FROM subscriptions WHERE user_id=$a3 ORDER BY id DESC LIMIT 1")->fetchColumn() === 'past_due', 'no balance: past due (services stop after grace)');
+foreach ([$a1, $a2, $a3] as $id) { foreach (['wallet_transactions', 'subscriptions', 'invoices', 'plan_usage_events'] as $tbl) { try { $pdo->exec("DELETE FROM $tbl WHERE user_id=$id"); } catch (Throwable $e) {} } $pdo->exec("DELETE FROM users WHERE id=$id"); }
+
+echo "new prices applied automatically\n";
+$set->set('plans_preset_auto', '');
+foreach (['starter' => 49, 'professional' => 99, 'enterprise' => 299] as $k => $p) { $pdo->prepare("UPDATE subscription_plans SET price=? WHERE plan_code=?")->execute([$p, $k . '_monthly']); $pdo->prepare("UPDATE plan_pricing_display SET price_monthly=? WHERE plan_key=?")->execute([$p, $k]); }
+check($x->autoApplyPresetIfLegacy() && (float) BillingPlanCatalog::read()['starter']['price_monthly'] === 59.0, 'old $49/$99/$299 prices replaced by $59/$149/$349 once');
+check(!$x->autoApplyPresetIfLegacy(), 'only once (admin edits are kept afterwards)');
+$set->set('plans_preset_auto', '');
 
 echo "admin grant without card\n";
 $pdo->prepare("INSERT INTO users(company_name,email,password) VALUES('NoCard Co',?,'x')")->execute(['nocard' . getmypid() . '@example.com']);

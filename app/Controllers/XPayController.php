@@ -62,7 +62,7 @@ class XPayController extends Controller
                 if (!$x->trialEligible($this->owner())) {
                     return $this->error('التجربة المجانية متاحة مرة واحدة بس للحسابات الجديدة.', 422);
                 }
-                $amount = $x->config()['trial_card_usd'];
+                $amount = $x->trialCardAmount();
                 $purpose = 'trial_card';
             }
             $s = (new XPayGateway())->createWalletTopUp($this->owner(), $amount, $this->base() . '/wallet/xpay/return', $this->base() . '/subscription#wallet', $purpose);
