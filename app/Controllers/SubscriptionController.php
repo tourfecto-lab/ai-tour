@@ -825,6 +825,13 @@ HTML;
 
     function renderDepositInfo() {
         const box = document.getElementById('depositInfoBox');
+        const methodReady = selectedDepositMethod === 'iban' ? !!walletPaymentInfo.iban : !!walletPaymentInfo.paypal_email;
+        if (!methodReady) {
+            const wa = String(walletPaymentInfo.whatsapp_number || '').replace(/[^0-9]/g, '');
+            box.innerHTML = '<div class="p-cell-muted" style="line-height:1.8">' + (selectedDepositMethod === 'iban' ? 'التحويل البنكي' : 'PayPal') + ' مش متاح حاليًا. '
+                + (wa ? 'كلمنا على <a href="https://wa.me/' + wa + '" target="_blank" rel="noopener">واتساب</a> ونبعتلك طريقة الدفع.' : 'استخدم كود الشحن أو كلّم الدعم.') + '</div>';
+            return;
+        }
         if (selectedDepositMethod === 'iban') {
             box.innerHTML = `
                 <div class="p-kv"><span class="k">IBAN</span><span class="v" dir="ltr">${esc(walletPaymentInfo.iban || '-')}</span></div>
@@ -1323,6 +1330,13 @@ HTML;
 
     function renderDepositInfo() {
         const box = document.getElementById('depositInfoBox');
+        const methodReady = selectedDepositMethod === 'iban' ? !!walletPaymentInfo.iban : !!walletPaymentInfo.paypal_email;
+        if (!methodReady) {
+            const wa = String(walletPaymentInfo.whatsapp_number || '').replace(/[^0-9]/g, '');
+            box.innerHTML = '<div class="p-cell-muted" style="line-height:1.8">' + (selectedDepositMethod === 'iban' ? 'التحويل البنكي' : 'PayPal') + ' مش متاح حاليًا. '
+                + (wa ? 'كلمنا على <a href="https://wa.me/' + wa + '" target="_blank" rel="noopener">واتساب</a> ونبعتلك طريقة الدفع.' : 'استخدم كود الشحن أو كلّم الدعم.') + '</div>';
+            return;
+        }
         if (selectedDepositMethod === 'iban') {
             box.innerHTML = `
                 <div class="p-kv"><span class="k">IBAN</span><span class="v" dir="ltr">${esc(walletPaymentInfo.iban || '-')}</span></div>

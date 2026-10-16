@@ -1619,6 +1619,7 @@ $router->post('/api/inventory/{productId}', 'BookingController', 'setInventory',
 // الصلاحية: admin/super_admin (متفرضة داخل الـ Controller)
 // ============================================
 $router->get('/api/integrations', 'IntegrationsController', 'index', ['AuthMiddleware']);
+$router->post('/api/integrations/meta/page-messaging', 'IntegrationsController', 'metaPageMessaging', ['AuthMiddleware']);
 $router->get('/api/integrations/{key}/status', 'IntegrationsController', 'status', ['AuthMiddleware']);
 $router->post('/api/integrations/{key}/save', 'IntegrationsController', 'save', ['AuthMiddleware']);
 $router->post('/api/integrations/{key}/test', 'IntegrationsController', 'test', ['AuthMiddleware']);

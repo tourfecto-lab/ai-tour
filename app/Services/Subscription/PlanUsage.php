@@ -90,7 +90,13 @@ class PlanUsage
             return ['ok' => true, 'source' => 'wallet', 'price' => $w['price'] ?? null];
         }
         $msg = $noFundsMsg;
-        if ($q['subscription_id'] && $q['limit'] > 0) {
+        if (!isset($w['balance']) && empty($w['shortfall'])) {
+            // الميزة مش متاحة بالدفع من المحفظة - مش مشكلة رصيد. كانت الرسالة بتقول
+            // "رصيدك مش كافي" للعميل حتى لو المحفظة مليانة.
+            $msg = $q['subscription_id']
+                ? 'خلصت حصة باقتك من الميزة دي للفترة دي. تقدر ترقّي باقتك من صفحة الاشتراك.'
+                : 'الميزة دي ضمن باقات الاشتراك. اختار باقة من صفحة الاشتراك وادفعها من رصيد محفظتك.';
+        } elseif ($q['subscription_id'] && $q['limit'] > 0) {
             $msg = 'خلصت حصة باقتك من الميزة دي للفترة دي (' . $q['limit'] . ')، و' . $noFundsMsg;
         }
         return ['ok' => false, 'source' => 'none', 'error' => $msg, 'shortfall' => $w['shortfall'] ?? null];

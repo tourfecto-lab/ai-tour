@@ -27,6 +27,13 @@ class WalletController extends Controller
         try {
             $snapshot=CreativeReservations::walletSnapshot((int)$this->user['id']);$balance=$snapshot['balance'];
             $settings = $this->service->getPaymentSettings();
+            // القيم الافتراضية ("حط رقم الـ IBAN بتاعك هنا...") كانت بتظهر للعميل كأنها بيانات دفع
+            foreach (['iban', 'iban_bank_name', 'iban_account_name', 'paypal_email'] as $k) {
+                $v = trim((string) ($settings[$k] ?? ''));
+                if ($v === '' || preg_match('/هنا|لوحة الأدمن|^اسم البنك$|^اسم صاحب الحساب$|example|your/iu', $v)) {
+                    $settings[$k] = '';
+                }
+            }
 
             return $this->success([
                 'balance' => $balance,

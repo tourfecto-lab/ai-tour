@@ -71,9 +71,19 @@ class GbpProfileController extends Controller
                     'detail' => 'الخدمة دي لسه بتتجهّز من فريق المنصة. هتتفعّل قريب ومش محتاج تعمل حاجة دلوقتي - لو مستعجل كلّم الدعم.',
                 ]] : [];
             }
+            $connections = $this->setupStatus->connectionsForUser((int) $this->user['id']);
+            if (!$isAdmin) {
+                // أخطاء إعداد المنصة (مشروع Google Cloud) مش حاجة العميل يقدر يصلحها
+                foreach ($connections as &$c) {
+                    if (!empty($c['last_error']) && preg_match('/Google Cloud|Cloud Console|API (?:has not been used|is disabled)|SERVICE_DISABLED|NOT_SUPPORTED/i', (string) $c['last_error'])) {
+                        $c['last_error'] = 'حسابك اتربط، والمزامنة مع Google بتتجهز من فريق المنصة. مش محتاج تعمل حاجة - هتشتغل لوحدها أول ما تجهز.';
+                    }
+                }
+                unset($c);
+            }
             return $this->success([
                 'system' => $system,
-                'connections' => $this->setupStatus->connectionsForUser((int) $this->user['id']),
+                'connections' => $connections,
                 'websites' => $this->setupStatus->websitesWithConnectionState((int) $this->user['id']),
             ]);
         } catch (Throwable $e) {
@@ -1293,6 +1303,15 @@ JS;
             $linked = $db->query("SELECT 1 FROM platform_connections WHERE user_id = ? AND platform = 'google_business' AND status = 'connected' LIMIT 1", [$userId]);
             if ($linked) {
                 return null;
+            }
+            // اتربط بس المزامنة واقفة بسبب إعداد من ناحية المنصة (مش حاجة العميل يعملها)
+            $pending = $db->query("SELECT last_error FROM platform_connections WHERE user_id = ? AND platform = 'google_business' AND status = 'error' ORDER BY id DESC LIMIT 1", [$userId]);
+            if ($pending && preg_match('/Google Cloud|Cloud Console|SERVICE_DISABLED|NOT_SUPPORTED|has not been used|is disabled/i', (string) $pending[0]['last_error'])) {
+                return '<div class="p-card" style="max-width:720px;margin:20px auto;text-align:center;padding:36px 24px">'
+                    . '<div style="font-size:42px;margin-bottom:8px">⏳</div>'
+                    . '<h2 style="margin:0 0 10px">حسابك على Google Business اتربط</h2>'
+                    . '<p class="p-cell-muted" style="line-height:1.9;margin:0 auto;max-width:520px">المزامنة مع Google بتتجهز من فريق المنصة. مش محتاج تعمل حاجة - أول ما تجهز التقييمات والمؤشرات هتظهر هنا لوحدها.</p>'
+                    . '</div>';
             }
             $sites = $db->query('SELECT id, main_url FROM websites WHERE user_id = ? ORDER BY id DESC LIMIT 10', [$userId]);
         } catch (Throwable $e) {

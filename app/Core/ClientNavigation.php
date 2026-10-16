@@ -6,8 +6,8 @@ class ClientNavigation
         $l=static fn($a,$e)=>$ar?$a:$e;
         return [
             'home'=>[$l('الرئيسية','Home'),'home',[
-                'business_hub'=>[$l('تشغيل الشركة','Company operations'),'/business-hub'],
                 'overview'=>[$l('ملخص الحساب','Account overview'),'/dashboard'],
+                'business_hub'=>[$l('تشغيل الشركة','Company operations'),'/business-hub'],
                 'automation'=>[$l('إعدادات الأتمتة','Automation settings'),'/automation']]],
             'search'=>[$l('الظهور في البحث','Search visibility'),'search',[
                 'seo_expert'=>[$l('الخطة والتنفيذ','Plan and execution'),'/seo-expert'],
@@ -34,9 +34,9 @@ class ClientNavigation
                 'ai_chat_followup'=>[$l('المتابعة','Follow-ups'),'/chat/followup-settings'],
                 'ai_chat_knowledge'=>[$l('معلومات المساعد','Assistant knowledge'),'/chat/knowledge-base'],
                 'ai_chat_learning'=>[$l('تحسين الردود','Improve replies'),'/chat/learning'],
-                'reputation_overview'=>[$l('ملخص التقييمات','Review overview'),'/reputation/overview'],
+                'reputation_overview'=>[$l('ملخص التقييمات','Review overview'),'/reputation/overview',true],
                 'reputation_intelligence'=>[$l('تحليل السمعة','Reputation analysis'),'/reputation/intelligence'],
-                'reputation_stats'=>[$l('إحصائيات التقييمات','Review statistics'),'/reputation/stats']]],
+                'reputation_stats'=>[$l('إحصائيات التقييمات','Review statistics'),'/reputation/stats',true]]],
             'site'=>[$l('الموقع والحجوزات','Website and bookings'),'globe',[
                 '_websites'=>[$l('المواقع والربط','Websites and connection'),'/websites'],
                 'bookings'=>[$l('الحجوزات والتوفر','Bookings and availability'),'/bookings'],
@@ -54,7 +54,7 @@ class ClientNavigation
                 'revenue'=>[$l('الإيراد','Revenue'),'/revenue'],
                 'growth'=>[$l('النمو','Growth'),'/dashboard/growth'],
                 'executive'=>[$l('الملخص التنفيذي','Executive summary'),'/dashboard/executive'],
-                'revenue_intelligence'=>[$l('تحليل الإيراد','Revenue analysis'),'/revenue/intelligence'],
+                'revenue_intelligence'=>[$l('تحليل الإيراد','Revenue analysis'),'/revenue/intelligence',true],
                 'activity'=>[$l('سجل النشاط','Activity log'),'/dashboard/activity']]],
         ];
     }
@@ -68,7 +68,7 @@ class ClientNavigation
         return $html.'</div></div><div class="panel-nav-essentials">'.(self::enabled('ai_assistant',$flags)?'<a class="panel-nav-link" href="/ai-assistant"><span class="ic">'.icon_svg('sparkles').'</span><span class="lbl">'.($ar?'اسأل المساعد':'Ask the assistant').'</span></a>':'').'</div>';
     }
     public static function workspace(string $active,bool $ar,array $flags): string{
-        foreach(self::groups($ar) as [$title,$icon,$items]){if(!array_key_exists($active,$items))continue;$links=[];$more=[];$index=0;foreach($items as $key=>[$label,$url]){if(!self::enabled($key,$flags))continue;$on=$key===$active;$link='<a class="p-btn outline sm'.($on?' on':'').'" href="'.self::esc($url).'"'.($on?' aria-current="page"':'').'>'.self::esc($label).'</a>';if($index++<3||$on)$links[]=$link;else $more[]=$link;}
+        foreach(self::groups($ar) as [$title,$icon,$items]){if(!array_key_exists($active,$items))continue;$links=[];$more=[];$index=0;foreach($items as $key=>$item){[$label,$url]=$item;if(!self::enabled($key,$flags)||(!empty($item[2])&&$key!==$active))continue;$on=$key===$active;$link='<a class="p-btn outline sm'.($on?' on':'').'" href="'.self::esc($url).'"'.($on?' aria-current="page"':'').'>'.self::esc($label).'</a>';if($index++<3||$on)$links[]=$link;else $more[]=$link;}
             // شريط خفيف من غير كارت ولا عنوان: اسم القسم ظاهر في القائمة الجانبية وعنوان الصفحة
             return '<nav aria-label="'.self::esc($title).'" class="panel-subnav" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">'.implode('',$links).($more?'<details style="position:relative"><summary class="p-btn outline sm" style="list-style:none;cursor:pointer">'.($ar?'المزيد ▾':'More ▾').'</summary><div class="p-card" style="position:absolute;z-index:20;inset-inline-start:0;margin-top:6px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:220px">'.implode('',$more).'</div></details>':'').'</nav>';}
         return '';

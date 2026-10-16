@@ -443,7 +443,36 @@
         }
     }
 
+    /** أسماء مفهومة لأحداث سجل النشاط (كانت بتظهر زي monitoring.cycle_completed) */
+    const ACTIVITY_LABELS = {
+        'monitoring.cycle_completed': ['فحص تلقائي للموقع خلص', 'Automatic site check completed'],
+        'monitoring.paused_all': ['المتابعة التلقائية اتوقفت', 'Automatic monitoring paused'],
+        'monitoring.resumed_all': ['المتابعة التلقائية رجعت تشتغل', 'Automatic monitoring resumed'],
+        'onboarding.submitted': ['إعداد الحساب اتحفظ', 'Account setup saved'],
+        'onboarding.viewed': ['فتحت صفحة الإعداد السريع', 'Opened quick setup'],
+        'onboarding.completed': ['إعداد الحساب خلص', 'Account setup completed'],
+        'executive_summary.viewed': ['فتحت الملخص التنفيذي', 'Opened the executive summary'],
+        'wallet.deposit_requested': ['طلب شحن رصيد', 'Wallet top-up requested'],
+        'wallet.deposit_approved': ['شحن الرصيد اتقبل', 'Wallet top-up approved'],
+        'report.generated': ['تقرير جديد اتعمل', 'New report generated'],
+        'report.exported': ['تقرير اتصدّر', 'Report exported'],
+        'report.deleted': ['تقرير اتمسح', 'Report deleted'],
+        'booking.reminder_reconciled': ['تذكير حجز اتراجع', 'Booking reminder reconciled'],
+        'subscription.cancelled': ['الاشتراك اتلغى', 'Subscription cancelled'],
+        'subscription.resumed': ['الاشتراك رجع', 'Subscription resumed'],
+        'subscriptions.metrics_viewed': ['فتحت مؤشرات الاشتراك', 'Opened subscription metrics'],
+    };
+    function activityLabel(key) {
+        const k = String(key || '');
+        const ar = (document.documentElement.lang || 'ar').slice(0, 2) === 'ar';
+        if (ACTIVITY_LABELS[k]) return ACTIVITY_LABELS[k][ar ? 0 : 1];
+        // مفتاح تقني تاني (a.b_c): نحوله لجملة مقروءة بدل ما يظهر زي ما هو
+        if (/^[a-z_]+\.[a-z_]+$/.test(k)) { const t = k.replace(/[._]/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); }
+        return k;
+    }
+
     global.Panel = {
+        activityLabel,
         money: money,
         sessionExpired: showSessionExpired,
         esc: esc,

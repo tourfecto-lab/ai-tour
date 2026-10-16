@@ -344,6 +344,12 @@ class MetaSocialAPI
         return $this->post($pageId . '/subscribed_apps', ['subscribed_fields' => 'messages,messaging_postbacks'], $pageAccessToken);
     }
 
+    /** إلغاء اشتراك الصفحة: رسائلها مش هتوصل للمنصة تاني */
+    public function unsubscribeMessaging(string $pageId, string $pageAccessToken): array
+    {
+        return $this->request('DELETE', $pageId . '/subscribed_apps', ['access_token' => $pageAccessToken]);
+    }
+
     private function get(string $path, array $query = []): array
     {
         $query['access_token'] = $this->accessToken;

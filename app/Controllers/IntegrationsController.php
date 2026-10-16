@@ -116,6 +116,12 @@ class IntegrationsController extends Controller
                 'connect' => '/ads/connect/meta',
                 'icon' => 'megaphone',
             ],
+            'whatsapp_cloud' => [
+                'label' => 'WhatsApp Business',
+                'desc' => 'رقم واتساب شركتك: الشات بوت يرد على العملاء، وتأكيدات وتذكيرات الحجز',
+                'connect' => '/chat/settings',
+                'icon' => 'message',
+            ],
             'google_search_console' => [
                 'label' => 'Google Search Console',
                 'desc' => 'بيانات البحث وظهور موقعك في Google',
@@ -226,6 +232,12 @@ class IntegrationsController extends Controller
                             $linkedCount++;
                         }
                         $status = $linked ? 'مربوط' : ($linkStatus === 'token_expired' ? 'انتهت الصلاحية - اربط تاني' : 'غير مربوط');
+                        // اتربط بس المزامنة واقفة بسبب إعداد من ناحية المنصة: مش "غير مربوط"
+                        if ($linkStatus === 'error' && preg_match('/Google Cloud|Cloud Console|SERVICE_DISABLED|NOT_SUPPORTED|has not been used|is disabled/i', (string) $links[0]->getAttribute('last_error'))) {
+                            $status = 'مربوط - المزامنة بتتجهز من فريقنا';
+                            $linked = true;
+                            $linkedCount++;
+                        }
                         $button = $linked ? 'إعادة الربط' : $perWebsite[$key]['label'];
                         $action .= '<div style="margin:8px 0;overflow-wrap:anywhere;"><div class="p-cell-muted">' . $label . ' — ' . $status . '</div><a class="p-btn ' . ($linked ? 'outline' : 'primary') . ' xs" href="' . $perWebsite[$key]['url'] . $siteId . '">' . $button . '</a></div>';
                     }
@@ -952,12 +964,63 @@ JS;
         return substr($envKey, 0, 3) . str_repeat('*', $len - 3);
     }
 
+    /**
+     * POST /api/integrations/meta/page-messaging - تشغيل/إيقاف الرد على رسائل صفحة فيسبوك
+     * (وإنستجرام المرتبط بيها). بيشترك أو يلغي اشتراك الصفحة في تطبيق المنصة.
+     */
+    public function metaPageMessaging(array $params = []): array
+    {
+        if (!$this->isAuthenticated()) {
+            return $this->error('Unauthorized', 401);
+        }
+        if ($csrfError = $this->verifyCsrf()) {
+            return $csrfError;
+        }
+        $userId = (int) $this->user['id'];
+        $id = (int) $this->get('connection_id');
+        $enable = filter_var($this->get('enable'), FILTER_VALIDATE_BOOLEAN);
+        $rows = $this->db->query(
+            "SELECT id, website_id, external_location_id, external_location_name, access_token FROM platform_connections
+             WHERE id = ? AND user_id = ? AND platform = 'facebook' AND status = 'connected' LIMIT 1",
+            [$id, $userId]
+        );
+        if (!$rows) {
+            return $this->error('الصفحة مش موجودة أو مش مربوطة', 404);
+        }
+        $page = $rows[0];
+        try {
+            $token = (new Encryption())->decrypt((string) $page['access_token']);
+        } catch (Throwable $e) {
+            return $this->error('اربط Meta تاني من زرار "إعادة الربط"', 409);
+        }
+        $api = new MetaSocialAPI($token);
+        $pageId = (string) $page['external_location_id'];
+        if ($enable) {
+            $res = $api->subscribeMessaging($pageId, $token);
+            if (empty($res['success'])) {
+                Logger::warning('Page messaging enable failed', ['user_id' => $userId, 'page' => $pageId, 'error' => mb_substr((string) ($res['error'] ?? ''), 0, 200)]);
+                return $this->error('فيسبوك رفض تفعيل الرسائل. اضغط "إعادة الربط" ووافق على صلاحية الرسائل، وبعدين جرّب تاني.', 422);
+            }
+            $exists = $this->db->query("SELECT id FROM platform_connections WHERE website_id = ? AND platform = 'messenger' AND external_location_id = ? LIMIT 1", [(int) $page['website_id'], $pageId]);
+            if ($exists) {
+                $this->db->exec("UPDATE platform_connections SET user_id = ?, access_token = ?, external_location_name = ?, status = 'connected', last_error = NULL WHERE id = ?", [$userId, $page['access_token'], $page['external_location_name'], $exists[0]['id']]);
+            } else {
+                $this->db->exec("INSERT INTO platform_connections (website_id, user_id, platform, access_token, external_location_id, external_location_name, status) VALUES (?, ?, 'messenger', ?, ?, ?, 'connected')",
+                    [(int) $page['website_id'], $userId, $page['access_token'], $pageId, $page['external_location_name']]);
+            }
+            return $this->success(['enabled' => true], 'اتفعّل الرد على رسائل الصفحة');
+        }
+        $api->unsubscribeMessaging($pageId, $token);
+        $this->db->exec("DELETE FROM platform_connections WHERE user_id = ? AND platform = 'messenger' AND external_location_id = ?", [$userId, $pageId]);
+        return $this->success(['enabled' => false], 'اتوقف الرد على رسائل الصفحة');
+    }
+
     /** الصفحات والحسابات اللي اتربطت مع Meta: النشر والرسائل لكل واحدة، ولينك واتساب */
     private function metaPagesSummary(int $userId): string
     {
         try {
             $rows = $this->db->query(
-                "SELECT platform, external_location_id, external_location_name FROM platform_connections
+                "SELECT id, platform, external_location_id, external_location_name FROM platform_connections
                  WHERE user_id = ? AND status = 'connected' AND platform IN ('facebook','instagram','messenger')",
                 [$userId]
             );
@@ -979,13 +1042,24 @@ JS;
             $label = $r['platform'] === 'facebook' ? 'صفحة فيسبوك' : 'إنستجرام';
             // رسائل إنستجرام بتوصل عن طريق اشتراك الصفحة المرتبطة بيه
             $msg = $r['platform'] === 'facebook' ? isset($messenger[(string) $r['external_location_id']]) : !empty($messenger);
-            $items .= '<li>' . $label . ': <b>' . $name . '</b> — نشر ✓ · رسائل ' . ($msg ? '✓' : '✗') . '</li>';
+            $toggle = '';
+            if ($r['platform'] === 'facebook') {
+                $toggle = ' <button type="button" class="p-btn ' . ($msg ? 'outline' : 'primary') . ' xs" data-tf-page-msg="' . (int) $r['id'] . '" data-enable="' . ($msg ? '0' : '1') . '">'
+                    . ($msg ? 'إيقاف الرد على رسائلها' : 'شغّل الرد على رسائلها') . '</button>';
+            }
+            $items .= '<li>' . $label . ': <b>' . $name . '</b> — نشر ✓ · رسائل ' . ($msg ? '✓' : '✗') . $toggle . '</li>';
         }
         if ($items === '') {
             return '<div class="p-cell-muted" style="font-size:12px;margin-top:6px">لسه مفيش صفحات فيسبوك أو إنستجرام. اضغط "إعادة الربط" واختار صفحاتك في نافذة فيسبوك.</div>';
         }
-        $hint = !empty($messenger) ? '' : '<div class="p-cell-muted" style="font-size:12px">الرسائل لسه مش مفعّلة: اضغط "إعادة الربط" ووافق على صلاحية الرسائل.</div>';
-        return '<ul style="margin:6px 0;padding-inline-start:18px;font-size:12.5px;line-height:1.9">' . $items . '</ul>' . $hint
+        $hint = '<div class="p-cell-muted" style="font-size:12px">شغّل الرد على الرسائل للصفحات اللي بتاعة نشاطك بس - الشات بوت هيرد على أي رسالة توصل للصفحة.</div>';
+        $csrf = htmlspecialchars(Csrf::token(), ENT_QUOTES, 'UTF-8');
+        $script = '<script>document.addEventListener("click",async function(e){var b=e.target.closest("[data-tf-page-msg]");if(!b)return;b.disabled=true;'
+            . 'try{var r=await fetch("/api/integrations/meta/page-messaging",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json",Accept:"application/json"},'
+            . 'body:JSON.stringify({connection_id:+b.dataset.tfPageMsg,enable:b.dataset.enable==="1",csrf_token:"' . $csrf . '"})});var j=await r.json();'
+            . 'if(j.success){location.reload();}else{(window.Panel&&Panel.toast)?Panel.toast(j.error||"تعذر التنفيذ","error"):alert(j.error||"تعذر التنفيذ");b.disabled=false;}}'
+            . 'catch(x){b.disabled=false;}});</script>';
+        return '<ul style="margin:6px 0;padding-inline-start:18px;font-size:12.5px;line-height:2.2">' . $items . '</ul>' . $hint . $script
             . '<a class="p-cell-muted" style="font-size:12px" href="/chat/settings">واتساب بيتربط من إعدادات الشات ←</a>';
     }
 

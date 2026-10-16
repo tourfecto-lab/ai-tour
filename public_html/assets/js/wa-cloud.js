@@ -56,7 +56,9 @@
                 + '<div id="waEmbedAlert" class="alert alert-danger" style="display:none;margin-top:10px"></div>'
                 + '<details style="margin-top:16px"><summary style="cursor:pointer;color:var(--panel-text-muted)">' + L('عندي تطبيق Meta بتاعي - ربط يدوي', 'I have my own Meta app - connect manually') + '</summary><div style="margin-top:10px">' + manualForm(d) + '</div></details>';
         } else {
-            html += manualForm(d);
+            // الربط بضغطة لسه بيتجهز من المنصة: منبدأش العميل بخانات تقنية (Phone Number ID / توكن)
+            html += '<p style="margin:6px 0 10px;font-size:14px">' + L('الربط بضغطة واحدة (من غير أي أكواد) بيتجهز من فريق المنصة. لحد ما يجهز تقدر تستخدم ربط UltraMsg تحت.', 'One-click connection (no codes needed) is being prepared by our team. Until then you can use the UltraMsg connection below.') + '</p>'
+                + '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--panel-text-muted)">' + L('عندي تطبيق Meta بتاعي - ربط يدوي (للمطورين)', 'I have my own Meta app - manual connection (developers)') + '</summary><div style="margin-top:10px">' + manualForm(d) + '</div></details>';
         }
         if (d.ultramsg_connected) html += '<p class="p-cell-muted" style="margin-top:10px;font-size:12.5px">' + L('UltraMsg مربوط حاليًا - بعد ربط الرسمي هيبقى هو الأساسي، وUltraMsg احتياطي لو الرسمي فشل.', 'UltraMsg is connected - once official WhatsApp is linked it becomes primary, with UltraMsg as a fallback.') + '</p>';
         card.innerHTML = html;

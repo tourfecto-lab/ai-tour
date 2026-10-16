@@ -1855,13 +1855,17 @@ JS;
                     $this->upsertSocialConnection($websiteId, $userId, 'facebook', $page['id'], $page['name'], $encryptedPageToken);
                     $count++;
 
-                    // رسائل الصفحة (Messenger + Instagram DM): نشترك بالصفحة في تطبيق
-                    // المنصة فالرسائل توصل على /api/meta/webhook من غير أي إعداد من العميل
-                    $sub = $api->subscribeMessaging((string) $page['id'], (string) $page['access_token']);
+                    // رسائل الصفحة (Messenger + Instagram DM): لو حساب فيسبوك عليه صفحة
+                    // واحدة بنفعّلها على طول. لو عليه كذا صفحة (ممكن تكون لشركات تانية
+                    // بيديرها نفس الشخص) العميل بيختار من صفحة الحسابات - عشان الشات
+                    // بوت ميردّش على رسائل نشاط مش بتاعه.
+                    $sub = count($pagesResult['pages']) === 1
+                        ? $api->subscribeMessaging((string) $page['id'], (string) $page['access_token'])
+                        : ['success' => false, 'skipped' => true];
                     if (!empty($sub['success'])) {
                         $this->upsertSocialConnection($websiteId, $userId, 'messenger', $page['id'], $page['name'], $encryptedPageToken);
                         $diag['messaging'] = ($diag['messaging'] ?? 0) + 1;
-                    } else {
+                    } elseif (empty($sub['skipped'])) {
                         Logger::warning('Meta page messaging subscribe failed', ['page' => $page['id'], 'error' => mb_substr((string) ($sub['error'] ?? ''), 0, 200)]);
                     }
 

@@ -1869,7 +1869,7 @@ JS;
             </div>
         </div>
         <div id="waCloudCard" class="p-card" style="display:none;margin-top:14px;"></div>
-        <script src="/assets/js/wa-cloud.js?v=2" defer></script>
+        <script src="/assets/js/wa-cloud.js?v=3" defer></script>
         <div id="ultramsgCard" class="p-card" style="display:none;margin-top:14px;">
             <div class="p-card-head"><h3>📱 {$tWhatsappTitle}</h3><span class="p-card-sub">{$tWhatsappSub}</span></div>
             <div id="ultramsgConnected" style="display:none;">

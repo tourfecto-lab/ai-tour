@@ -827,10 +827,11 @@ class DashboardController extends Controller
     async function loadOverviewActivity() {
         const data = requireSuccess(await fetchJSON('/api/dashboard/activity'));
         const tbody = document.querySelector('#activityTable tbody');
-        const rows = Array.isArray(data.activity) ? data.activity : [];
+        // الفحص التلقائي بيتسجل كل نص ساعة ويغطي على أي نشاط مهم
+        const rows = (Array.isArray(data.activity) ? data.activity : []).filter(row => (row.action || row.event) !== 'monitoring.cycle_completed');
         tbody.innerHTML = rows.length
             ? rows.slice(0, 6).map(row => {
-                const label = row.action || row.event || row.description || '—';
+                const label = Panel.activityLabel(row.action || row.event || row.description || '—');
                 return `<tr><td>${esc(label)}</td><td class="p-cell-muted">${timeAgo(row.created_at)}</td></tr>`;
             }).join('')
             : `<tr><td colspan="2" class="p-cell-muted text-center">${esc(__NO_ACTIVITY__)}</td></tr>`;
@@ -933,7 +934,7 @@ class DashboardController extends Controller
 
     function lineChart(canvasId, labels, datasets) {
         const ctx = document.getElementById(canvasId);
-        if (!ctx) return;
+        if (!ctx || typeof Chart === 'undefined') return; // مكتبة الرسوم متحملتش: نكمّل باقي الصفحة من غير رسالة خطأ
         const key = canvasId;
         destroyChart(key);
         charts[key] = new Chart(ctx, {
@@ -998,7 +999,7 @@ class DashboardController extends Controller
         const actBody = document.querySelector('#fullActivityTable tbody');
         if (activityRes.success && Array.isArray(activityRes.data.activity) && activityRes.data.activity.length) {
             actBody.innerHTML = activityRes.data.activity.map(row => {
-                const label = row.action || row.event || row.description || 'نشاط';
+                const label = Panel.activityLabel(row.action || row.event || row.description || 'نشاط');
                 return `<tr><td>${esc(label)}</td><td class="p-cell-muted">${formatDate(row.created_at)}</td></tr>`;
             }).join('');
         } else {
@@ -1201,8 +1202,11 @@ class DashboardController extends Controller
 
         if (dashRes.success && dashRes.data && dashRes.data.scores) {
             const s = dashRes.data.scores;
-            const scoreLabel = (v) => v === null || v === undefined ? I18N['growth.scores.no_data'] : Math.round(v);
-            const scoreTile = (icon, value, label) => `<div class="p-card stat-tile"><div class="stat-icon blue">${icon}</div><div class="stat-info"><div class="stat-value">${scoreLabel(value)}</div><div class="stat-label">${label}</div></div></div>`;
+            // من غير بيانات: "—" في مكان الرقم وجملة صغيرة تحته (كانت الجملة بتتكتب بخط الرقم الكبير)
+            const scoreTile = (icon, value, label) => {
+                const empty = value === null || value === undefined;
+                return `<div class="p-card stat-tile"><div class="stat-icon blue">${icon}</div><div class="stat-info"><div class="stat-value">${empty ? '—' : Math.round(value)}</div><div class="stat-label">${label}${empty ? `<div class="p-cell-muted" style="font-size:11px">${I18N['growth.scores.no_data']}</div>` : ''}</div></div></div>`;
+            };
             document.getElementById('growthScores').innerHTML =
                 scoreTile('🚀', s.overall_growth_score, I18N['growth.scores.overall']) +
                 scoreTile('🔍', s.seo_score, I18N['growth.scores.seo']) +
