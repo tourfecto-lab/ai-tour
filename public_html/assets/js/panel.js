@@ -51,10 +51,13 @@
         }
         if (!res.ok) {
             body.success = false;
-            if (res.status === 401 || res.status === 419) {
+            if (res.status === 401) {
                 // السيرفر بيرجّع "Authentication token required" - رسالة مش مفهومة للعميل
                 body.error = 'انتهت جلستك. سجّل الدخول مرة أخرى.';
                 showSessionExpired();
+            } else if (res.status === 419) {
+                // العميل لسه داخل - بس الصفحة مفتوحة من بدري وتوكن الحماية بتاعها اتغير
+                body.error = 'الصفحة دي مفتوحة من بدري. اعمل تحديث للصفحة (F5) وكمّل.';
             } else if (!body.error) {
                 body.error = 'تعذر إتمام الطلب الآن. حاول مرة أخرى.';
             }

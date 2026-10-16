@@ -74,7 +74,8 @@ ini_set('session.cookie_httponly', 1);
 ini_set('session.cookie_secure', 1);
 ini_set('session.cookie_samesite', 'Lax');
 ini_set('session.use_only_cookies', 1);
-ini_set('session.gc_maxlifetime', SESSION_LIFETIME);
+// بيانات الجلسة (ومنها توكن الحماية CSRF) لازم تعيش قد جلسة الدخول - كانت بتتمسح بعد ساعة فالفورمز تفشل
+ini_set('session.gc_maxlifetime', max((int) SESSION_LIFETIME, 3 * 86400));
 ini_set('session.save_path', TOURFECTO_STORAGE . '/sessions');
 
 // ============================================

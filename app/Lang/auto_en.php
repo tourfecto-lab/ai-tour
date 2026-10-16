@@ -6810,4 +6810,5 @@ return [
     'عنوان الـ FTP مش صحيح' => 'The FTP host is not valid',
     'حاولت كذا مرة - استنى 10 دقايق وجرّب تاني' => 'Too many attempts - wait 10 minutes and try again',
     'الموقع ماردّش صح بعد التعديل، فرجّعنا index.php زي ما كان فورًا. موقعك شغال عادي.' => 'The site did not respond correctly after the change, so we restored index.php immediately. Your site is running normally.',
+    'الصفحة دي مفتوحة من بدري. اعمل تحديث للصفحة (F5) وكمّل.' => 'This page has been open for a while. Refresh it (F5) and continue.',
 ];
