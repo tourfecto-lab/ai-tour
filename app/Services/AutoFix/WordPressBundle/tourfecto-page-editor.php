@@ -11,6 +11,7 @@ require_once __DIR__.'/tourfecto-traveler.php';
 require_once __DIR__.'/tourfecto-tour-draft.php';
 require_once __DIR__.'/tourfecto-tour-settings.php';
 require_once __DIR__.'/tourfecto-native-seo.php';
+require_once __DIR__.'/tourfecto-content-seo.php';
 require_once __DIR__.'/tourfecto-tour-calendar.php';
 final class TourfectoPageEditor {
     public static function routes(): void {
@@ -36,8 +37,7 @@ final class TourfectoPageEditor {
     }
     private static function adapter(): string {return TourfectoNativeSeo::adapter();}
     private static function keys(string $adapter): array {
-        if($adapter==='native')return TourfectoNativeSeo::keys();
-        return $adapter==='yoast'?['seo_title'=>'_yoast_wpseo_title','seo_description'=>'_yoast_wpseo_metadesc','seo_keyword'=>'_yoast_wpseo_focuskw']:($adapter==='rankmath'?['seo_title'=>'rank_math_title','seo_description'=>'rank_math_description','seo_keyword'=>'rank_math_focus_keyword']:[]);
+        return TourfectoNativeSeo::keys($adapter);
     }
     private static function otherBuilder($p): bool {
         return get_post_meta($p->ID,'_elementor_edit_mode',true)==='builder'||get_post_meta($p->ID,'_elementor_data',true)!==''||preg_match('/\[(?:vc_|et_pb_|fusion_)/i',$p->post_content)===1;

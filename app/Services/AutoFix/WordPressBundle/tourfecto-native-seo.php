@@ -16,7 +16,14 @@ final class TourfectoNativeSeo {
         if(count($plugins)>1)return 'conflict';if($plugins)return $plugins[0];
         return defined('TF_NATIVE_HEAD_BRIDGE')&&TF_NATIVE_HEAD_BRIDGE&&function_exists('current_theme_supports')&&current_theme_supports('title-tag')?'native':'none';
     }
-    public static function keys(): array {return ['seo_title'=>'_tourfecto_native_title','seo_description'=>'_tourfecto_native_description','seo_keyword'=>'_tourfecto_native_keyword'];}
+    public static function keys(string $adapter='native'): array {
+        return match($adapter) {
+            'native'=>['seo_title'=>'_tourfecto_native_title','seo_description'=>'_tourfecto_native_description','seo_keyword'=>'_tourfecto_native_keyword'],
+            'yoast'=>['seo_title'=>'_yoast_wpseo_title','seo_description'=>'_yoast_wpseo_metadesc','seo_keyword'=>'_yoast_wpseo_focuskw'],
+            'rankmath'=>['seo_title'=>'rank_math_title','seo_description'=>'rank_math_description','seo_keyword'=>'rank_math_focus_keyword'],
+            default=>[],
+        };
+    }
     private static function pageId(): int {
         if(self::adapter()!=='native'||!function_exists('is_singular')||!is_singular())return 0;
         $id=(int)get_queried_object_id();$p=get_post($id);

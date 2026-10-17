@@ -199,10 +199,12 @@ class SeoContentService
         }
 
         try {
+            $existingPages=array_merge((new ContentQualityService($this->db))->knownPages($ownerId,$websiteId),$existingPages);
             $targetLanguage = ContentLanguageService::forWebsite($websiteId, (int)$campaign['user_id']);
 
+            $brief = (new ContentBriefService($this->db))->forKeyword($ownerId, $websiteId, (string)($item['keyword'] ?: $item['topic']));
             $generator = new ArticleGenerator();
-            $result = $generator->generate((string) $item['topic'], $targetLanguage, 'professional', $companyName, $websiteUrl, $existingPages);
+            $result = $generator->generate((string) $item['topic'], $targetLanguage, 'professional', $companyName, $websiteUrl, $existingPages, $brief);
 
             if (!$result['success']) {
                 $this->markItemFailed($itemId, $result['error'] ?? 'فشل التوليد');
@@ -223,9 +225,13 @@ class SeoContentService
                 'content' => $data['content'],
                 'suggested_keywords' => json_encode($data['suggested_keywords'] ?? [], JSON_UNESCAPED_UNICODE),
                 'word_count' => $data['word_count'],
+                'faqs_json' => json_encode($data['faqs'] ?? [], JSON_UNESCAPED_UNICODE),
+                'schema_suggestion' => $data['schema_suggestion'] ?? null,
+                'internal_link_suggestions_json' => json_encode($data['internal_link_suggestions'] ?? [], JSON_UNESCAPED_UNICODE),
                 'status' => 'completed',
             ]);
             $articleId = $article->save();
+            (new ContentQualityService($this->db))->remember($ownerId, $websiteId, 'article:'.(int)$articleId, $brief, $data, (int)$articleId, null, $existingPages, (string)$websiteUrl);
 
             $this->db->exec(
                 "UPDATE seo_content_items SET article_id = ?, title = ?, slug = ?, status = 'generated', error_message = NULL, updated_at = NOW() WHERE id = ?",

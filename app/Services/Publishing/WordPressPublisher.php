@@ -54,6 +54,7 @@ class WordPressPublisher
     public function createPost(string $siteUrl, string $username, string $appPassword, string $title, string $htmlContent, string $excerpt = '', string $status = 'publish', ?int $featuredMedia = null, ?string $slug = null): array
     {
         $payload = [
+            'tourfecto_source' => 'content-quality-v1',
             'title' => $title,
             'content' => $htmlContent,
             'excerpt' => $excerpt,
@@ -137,6 +138,26 @@ class WordPressPublisher
             'post_id' => $response['data']['id'] ?? null,
             'url' => $response['data']['link'] ?? null,
         ];
+    }
+
+    public function postUrl(string $siteUrl,string $username,string $appPassword,int $postId): array
+    {
+        $r=$this->request('GET',$siteUrl,'/wp-json/wp/v2/posts/'.$postId,$username,$appPassword);
+        return $r['success'] && (int)($r['data']['id']??0)===$postId && is_string($r['data']['link']??null)
+            ? ['success'=>true,'url'=>$r['data']['link']] : ['success'=>false];
+    }
+
+    /** Plugin signs a short-lived preview bound to the authenticated creator and post. */
+    public function setSeoFields(string $siteUrl,string $username,string $appPassword,int $postId,array $fields): array
+    {
+        $preview=$this->request('POST',$siteUrl,'/wp-json/tourfecto-editor/v1/content-seo-preview',$username,$appPassword,['post_id'=>$postId,'fields'=>$fields]);
+        if (!$preview['success']) return $preview;
+        $token=$preview['data']['token']??null;
+        if (!is_string($token) || $token==='') return ['success'=>false,'error'=>'Plugin did not return a signed SEO preview. Update Tourfecto Connect.'];
+        $applied=$this->request('POST',$siteUrl,'/wp-json/tourfecto-editor/v1/content-seo-apply',$username,$appPassword,['token'=>$token]);
+        if (!$applied['success']) return $applied;
+        return !empty($applied['data']['success']) && (int)($applied['data']['post_id']??0)===$postId
+            ? ['success'=>true,'post_id'=>$postId] : ['success'=>false,'error'=>'Plugin did not confirm SEO fields for this post.'];
     }
 
     private function request(string $method, string $siteUrl, string $path, string $username, string $appPassword, array $data = [], ?string $rawBody = null, ?string $rawContentType = null, array $extraHeaders = []): array

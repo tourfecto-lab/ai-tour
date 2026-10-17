@@ -5,7 +5,7 @@ final class TourfectoPluginBundle
     public static function files(int $websiteId, string $endpoint, string $host): array
     {
         $base = EdgeRules::pluginFiles($websiteId, $endpoint, $host);
-        $main = str_replace(['Plugin Name: Tourfecto SEO', 'Version: 2.0.0', 'Requires PHP: 7.2'], ['Plugin Name: Tourfecto Connect', 'Version: 3.5.0', 'Requires PHP: 8.1'], $base['php']);
+        $main = str_replace(['Plugin Name: Tourfecto SEO', 'Version: 2.0.0', 'Requires PHP: 7.2'], ['Plugin Name: Tourfecto Connect', 'Version: 3.6.0', 'Requires PHP: 8.1'], $base['php']);
         // Reviewed connector v4 bridge. Fail closed if the underlying runtime shape changed.
         $bridges=[
             "define( 'TF_EDGE_RUNTIME_V4', true );"=>"define( 'TF_EDGE_RUNTIME_V4', true );\ndefine( 'TF_NATIVE_HEAD_BRIDGE', true );",
@@ -20,8 +20,8 @@ final class TourfectoPluginBundle
         if (substr_count($main, $marker) !== 1) throw new RuntimeException('Connector bootstrap unavailable.');
         $main = str_replace($marker, $marker . $bootstrap, $main);
         $files = ['tourfecto-seo/tourfecto-seo.php'=>$main,
-            'tourfecto-seo/readme.txt'=>"=== Tourfecto Connect ===\nStable tag: 3.5.0\nRequires PHP: 8.1\nLicense: GPLv2 or later\n\nIncludes the site-bound SEO connector, guarded original-page editor, Traveler 3.4 text adapter, and optional WooCommerce measurement. WordPress publishing/editor authentication and measurement configuration remain explicit separate permissions. No content is changed and no orders are sent merely by installation. Replace the existing Tourfecto SEO plugin using this archive; the plugin path and approved-rule cache remain compatible. Deactivate standalone Tourfecto Page Editor and Tourfecto Measure before activation; their saved settings and history are retained. Disable legacy connector snippets. Google measurement connections remain in the platform.\n"];
-        foreach (['bootstrap.php','tourfecto-page-editor.php','tourfecto-block-text.php','tourfecto-traveler.php','tourfecto-measure.php','tourfecto-tour-draft.php','tourfecto-tour-settings.php','tourfecto-native-seo.php','tourfecto-tour-calendar.php'] as $name) {
+            'tourfecto-seo/readme.txt'=>"=== Tourfecto Connect ===\nStable tag: 3.6.0\nRequires PHP: 8.1\nLicense: GPLv2 or later\n\nIncludes the site-bound SEO connector, guarded original-page editor, Traveler 3.4 text adapter, and optional WooCommerce measurement. WordPress publishing/editor authentication and measurement configuration remain explicit separate permissions. No content is changed and no orders are sent merely by installation. Replace the existing Tourfecto SEO plugin using this archive; the plugin path and approved-rule cache remain compatible. Deactivate standalone Tourfecto Page Editor and Tourfecto Measure before activation; their saved settings and history are retained. Disable legacy connector snippets. Google measurement connections remain in the platform.\n"];
+        foreach (['tourfecto-content-seo.php','bootstrap.php','tourfecto-page-editor.php','tourfecto-block-text.php','tourfecto-traveler.php','tourfecto-measure.php','tourfecto-tour-draft.php','tourfecto-tour-settings.php','tourfecto-native-seo.php','tourfecto-tour-calendar.php'] as $name) {
             $path=__DIR__.'/WordPressBundle/'.$name;
             $bytes=@file_get_contents($path);
             if ($bytes===false || $bytes==='') throw new RuntimeException('Unified plugin module unavailable.');

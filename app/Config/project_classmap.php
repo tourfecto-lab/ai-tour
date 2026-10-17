@@ -804,4 +804,9 @@ return [
     'YouTubeAPI' => dirname(__DIR__,2).'/app/Services/SocialMedia/YouTubeAPI.php',
     'ZapierService' => dirname(__DIR__,2).'/app/Services/Integrations/ZapierService.php',
     'ZoomService' => dirname(__DIR__,2).'/app/Services/Integrations/ZoomService.php',
+    'ContentBriefService' => dirname(__DIR__,2).'/app/Services/Seo/ContentBriefService.php',
+    'ContentDecayJob' => dirname(__DIR__,2).'/app/Jobs/ContentDecayJob.php',
+    'ContentDecayService' => dirname(__DIR__,2).'/app/Services/Seo/ContentDecayService.php',
+    'ContentQualityService' => dirname(__DIR__,2).'/app/Services/Seo/ContentQualityService.php',
+    'TourfectoContentSeo' => dirname(__DIR__,2).'/app/Services/AutoFix/WordPressBundle/tourfecto-content-seo.php',
 ];

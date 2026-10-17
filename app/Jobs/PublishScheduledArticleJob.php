@@ -68,6 +68,7 @@ class PublishScheduledArticleJob implements QueueJobInterface
         $encryption = new Encryption();
 
         try {
+            if (class_exists('ContentQualityService')) (new ContentQualityService(Database::getInstance()))->assertCurrent($article->toArray(),$websiteId);
             $title = (string) $article->getAttribute('title');
             $markdown = (string) $article->getAttribute('content');
             $excerpt = (string) $article->getAttribute('meta_description');
@@ -118,6 +119,14 @@ class PublishScheduledArticleJob implements QueueJobInterface
                 $connection->save();
                 $this->markFailed($article, $result['error'] ?? 'خطأ غير معروف أثناء النشر المجدول', 'publish_failed');
                 return;
+            }
+
+            if ($platform === 'wordpress' && class_exists('ContentQualityService')) {
+                $qualityArticle=$article->toArray();$qualityArticle['website_id']=$websiteId;
+                try {
+                    $seo=(new ContentQualityService(Database::getInstance()))->syncWordPress($qualityArticle,$publisher,$siteUrl,$username,$appPassword,(int)$newPostId,(string)($result['url']??''),$draft);
+                    if (!$seo['success']) Logger::warning('Article published; SEO fields need connector update',['article_id'=>$articleId,'error'=>$seo['error']??'']);
+                } catch (Throwable $seoError) { Logger::warning('Article SEO sync needs attention',['article_id'=>$articleId,'error'=>$seoError->getMessage()]); }
             }
 
             $article->setAttribute('website_id', $websiteId);

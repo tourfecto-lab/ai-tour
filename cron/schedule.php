@@ -151,6 +151,7 @@ return [
         'file' => 'monitor_competitors.php', 'when' => '*/30 * * * *', 'group' => 'competitors',
         'title' => 'مراقبة المنافسين', 'enabled' => true, 'max_minutes' => 25,
     ],
+    'seo_content_decay' => ['file'=>'seo_content_decay.php','when'=>'0 7 * * 1','group'=>'seo','title'=>'Weekly content refresh review','enabled'=>true,'max_minutes'=>10],
     'seo_ai_visibility' => ['file'=>'seo_ai_visibility.php','when'=>'0 6 * * 1','group'=>'seo','title'=>'قياس ظهور AI الأسبوعي','enabled'=>true,'max_minutes'=>10],
     'ci_rankings' => [
         'file' => 'ci_keyword_rankings.php', 'when' => '0 5 * * *', 'group' => 'competitors',

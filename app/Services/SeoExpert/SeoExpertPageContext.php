@@ -5,6 +5,7 @@ class SeoExpertPageContext extends PageContext
 {
     private string $robotsHeader='';
     private bool $nativeOwner=false;
+    private bool $wordpress=false;
     protected function isImage(string $url): bool { return false; } // No image URL is presented as verified.
     protected function textLimit(): int { return 2500; }
     protected function get(string $url,bool $withBody,string $method='GET'): array {
@@ -13,11 +14,12 @@ class SeoExpertPageContext extends PageContext
             CURLOPT_HEADERFUNCTION=>static function($c,$line)use(&$body,&$headers){if(preg_match('#^HTTP/#i',$line)){$headers=[];$body='';}elseif(strpos($line,':')!==false){[$k,$v]=explode(':',$line,2);$headers[strtolower(trim($k))]=trim($v);}return strlen($line);},
             CURLOPT_WRITEFUNCTION=>static function($c,$chunk)use(&$body,$withBody){if($withBody)$body.=$chunk;return strlen($body)>1500000?0:strlen($chunk);}],4);
         if($withBody&&class_exists('DOMDocument')){$doc=new DOMDocument();$old=libxml_use_internal_errors(true);try{if($doc->loadHTML($body,LIBXML_NONET)){$xp=new DOMXPath($doc);$this->nativeOwner=$xp->query('//head/meta[@name="tourfecto-seo-owner" and @content="native"]')->length>0;}}finally{libxml_clear_errors();libxml_use_internal_errors($old);}}
+        $this->wordpress=$withBody && preg_match('~wp-content/|wp-includes/|wp-json/|name=["\']generator["\'][^>]*WordPress~i',$body)===1;
         $this->robotsHeader=(string)($headers['x-robots-tag']??'');
         return ['http'=>$r['code'],'body'=>$body,'headers'=>$headers,'error'=>$r['error']!==''?'fetch_failed':null,'final_url'=>$r['url']?:$url];
     }
     public function fresh(string $url): array {
-        $this->nativeOwner=false;$this->robotsHeader='';$started=microtime(true);$r=$this->fetch($url);$r['fetch_seconds']=round(microtime(true)-$started,3);$r['url']=$url;$r['robots_header']=$this->robotsHeader;$r['native_seo_owner']=!empty($r['ok'])&&$this->nativeOwner;if($this->robotsHeader!=='' && !empty($r['ok']))$r['robots']=trim((string)($r['robots']??'').' '.strtolower($this->robotsHeader));
+        $this->nativeOwner=false;$this->robotsHeader='';$started=microtime(true);$r=$this->fetch($url);$r['fetch_seconds']=round(microtime(true)-$started,3);$r['url']=$url;$r['wordpress']=$this->wordpress;$r['robots_header']=$this->robotsHeader;$r['native_seo_owner']=!empty($r['ok'])&&$this->nativeOwner;if($this->robotsHeader!=='' && !empty($r['ok']))$r['robots']=trim((string)($r['robots']??'').' '.strtolower($this->robotsHeader));
         if(isset($r['final_url'])){$r['final_url']=preg_replace('/([?&])_tourfecto_audit=[a-f0-9]+(?:&|$)/','$1',$r['final_url']);$r['final_url']=rtrim(str_replace('?&','?',$r['final_url']),'?&');}
         return $r;
     }

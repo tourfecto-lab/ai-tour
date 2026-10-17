@@ -69,6 +69,24 @@ check(strpos($index, 'href="/guides/discover-egypt"') !== false, 'guides index l
 $missing = (string) render($connector, '/guides/unknown', $page);
 check(strpos($missing, '<title>Old</title>') !== false, 'unknown article falls through to the site');
 
+// Phase 4 uses the customer's explicitly configured local header/footer.
+file_put_contents($dir.'/header.php','<!doctype html><html><head><title>Site theme</title></head><body><header>Customer navigation</header>');
+file_put_contents($dir.'/footer.php','<footer>Customer footer</footer></body></html>');
+file_put_contents($dir.'/router.php','<?php $_SERVER["DOCUMENT_ROOT"]=__DIR__; define("TF_EDGE_ARTICLE_HEADER",__DIR__."/header.php"); define("TF_EDGE_ARTICLE_FOOTER",__DIR__."/footer.php"); require __DIR__."/tourfecto-connect.php"; echo file_get_contents(__DIR__."/page.html");');
+$themed=(string)render($connector,'/guides/discover-egypt',$page);
+check(str_contains($themed,'Customer navigation') && str_contains($themed,'Customer footer') && str_contains($themed,'<h1>Discover Egypt</h1>'),'guide uses configured site header/footer and keeps article body');
+check(str_contains($themed,'<title>Discover Egypt</title>') && !str_contains($themed,'<title>Site theme</title>'),'themed guide retains its own SEO title');
+$sitemap=(string)render($connector,'/tourfecto-guides-sitemap.xml',$page);
+check(str_contains($sitemap,'<urlset') && str_contains($sitemap,'/guides/discover-egypt</loc>'),'published guides appear in the connector sitemap');
+file_put_contents($dir.'/page.html','<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://example.com/existing.xml</loc></sitemap></sitemapindex>');
+$siteMapIndex=(string)render($connector,'/sitemap.xml',$page);
+check(str_contains($siteMapIndex,'https://example.com/existing.xml') && str_contains($siteMapIndex,'/tourfecto-guides-sitemap.xml'),'existing sitemap index retains entries and adds guide sitemap');
+file_put_contents($dir.'/page.html','<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://example.com/existing</loc></url></urlset>');
+$urlset=(string)render($connector,'/sitemap.xml',$page);
+check(str_contains($urlset,'https://example.com/existing') && str_contains($urlset,'/guides/discover-egypt</loc>'),'flat site sitemap retains existing pages and adds published guides');
+file_put_contents($dir.'/page.html',$page);
+@unlink($dir.'/header.php');@unlink($dir.'/footer.php');
+
 file_put_contents($cache, json_encode(['t' => time(), 'f' => 0, 'rules' => []]));
 $plain = (string) render($connector, '/', $page);
 check(strpos($plain, '<title>Old</title>') !== false && strpos($plain, 'content="old"') !== false, 'no rules: page unchanged');

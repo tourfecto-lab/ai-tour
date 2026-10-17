@@ -2499,7 +2499,9 @@ JS;
             ]);
             $articleId = $article->save();
 
-            $result = $this->articleGenerator->generate($topic, $language, $tone, $companyName, $websiteUrl, $existingPages);
+            if ($websiteId) $existingPages=array_merge((new ContentQualityService($this->db))->knownPages($userId,(int)$websiteId),$existingPages);
+            $contentBrief = $websiteId ? (new ContentBriefService($this->db))->forKeyword($userId, $websiteId, $topic) : null;
+            $result = $this->articleGenerator->generate($topic, $language, $tone, $companyName, $websiteUrl, $existingPages, $contentBrief);
 
             $saved = (new AIArticle())->find($articleId);
             if (!$saved) {
@@ -2522,6 +2524,7 @@ JS;
             $saved->setAttribute('word_count', $data['word_count']);
             $saved->setAttribute('status', 'completed');
             $saved->save();
+            if ($contentBrief !== null) (new ContentQualityService($this->db))->remember($userId, $websiteId, 'article:'.(int)$articleId, $contentBrief, $data, (int)$articleId, null, $existingPages, (string)$websiteUrl);
             if (class_exists('PlanUsage')) {
                 PlanUsage::charge((int) $userId, 'article_generation', 'article_generation', 'مقال: ' . mb_substr((string) $data['title'], 0, 120));
             }
@@ -3049,6 +3052,7 @@ JS;
         $encryption = new Encryption();
 
         try {
+            (new ContentQualityService($this->db))->assertCurrent($article->toArray(),$websiteId);
             $title = (string) $article->getAttribute('title');
             $markdown = (string) $article->getAttribute('content');
             $excerpt = (string) $article->getAttribute('meta_description');
@@ -3118,6 +3122,14 @@ JS;
                 }
 
                 return $this->error('تعذر النشر: ' . ($result['error'] ?? ''), 502);
+            }
+
+            if ($platform === 'wordpress') {
+                $qualityArticle=$article->toArray();$qualityArticle['website_id']=$websiteId;
+                try {
+                    $seo=(new ContentQualityService($this->db))->syncWordPress($qualityArticle,$publisher,$siteUrl,$username,$appPassword,(int)$newPostId,(string)($result['url']??''),$draft);
+                    if (!$seo['success']) Logger::warning('Article SEO needs plugin update',['article_id'=>$article->getAttribute('id'),'error'=>$seo['error']??'']);
+                } catch (Throwable $e) { Logger::warning('Article SEO sync needs review',['error'=>$e->getMessage()]); }
             }
 
             $article->setAttribute('website_id', $websiteId);
