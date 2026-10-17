@@ -807,6 +807,8 @@ return [
     'ContentBriefService' => dirname(__DIR__,2).'/app/Services/Seo/ContentBriefService.php',
     'ContentDecayJob' => dirname(__DIR__,2).'/app/Jobs/ContentDecayJob.php',
     'ContentDecayService' => dirname(__DIR__,2).'/app/Services/Seo/ContentDecayService.php',
+    'GuideContent' => dirname(__DIR__,2).'/app/Services/Seo/GuideContent.php',
+    'SeoPublicationAudit' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoPublicationAudit.php',
     'ContentQualityService' => dirname(__DIR__,2).'/app/Services/Seo/ContentQualityService.php',
     'TourfectoContentSeo' => dirname(__DIR__,2).'/app/Services/AutoFix/WordPressBundle/tourfecto-content-seo.php',
     'GbpBackgroundScheduler' => dirname(__DIR__,2).'/app/Services/GoogleBusiness/GbpBackgroundScheduler.php',

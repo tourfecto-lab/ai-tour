@@ -68,10 +68,44 @@ $fallback = (string) render($connector, '/?tf_article=discover-egypt', $page);
 check(strpos($fallback, '<h1>Discover Egypt</h1>') !== false, 'fallback ?tf_article= works');
 check(str_contains($fallback,'rel="canonical" href="http://127.0.0.1:'.$port.'/?tf_article=discover-egypt"'),'fallback article canonical uses its accessible URL');
 $index = (string) render($connector, '/guides', $page);
-check(strpos($index, 'href="/guides/discover-egypt"') !== false, 'guides index lists the article');
+check(strpos($index, 'href="http://127.0.0.1:' . $port . '/guides/discover-egypt"') !== false, 'guides index lists the article');
 $missing = (string) render($connector, '/guides/unknown', $page);
 check(str_contains($missing,'Guide not found.') && !str_contains($missing,'<title>Old</title>'), 'unknown article is explicit, never a soft homepage success');
 check(str_contains($GLOBALS['lastConnectorStatus'],'404'),'unknown article returns an actual HTTP 404');
+
+// Automatic same-request theme reuse and query-specific schema/link rules.
+$canonical='http://127.0.0.1:'.$port.'/?tf_article=discover-egypt';
+$faq=['@context'=>'https://schema.org','@graph'=>[['@type'=>'Article','headline'=>'Discover Egypt','mainEntityOfPage'=>$canonical],['@type'=>'FAQPage','mainEntity'=>[['@type'=>'Question','name'=>'Is pickup included?','acceptedAnswer'=>['@type'=>'Answer','text'=>'Confirm pickup before booking.']]]]]];
+$rules=['title'=>'Customer homepage title','jsonld'=>'{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}',
+    'articles'=>['discover-egypt'=>['url'=>$canonical,'title'=>'Discover Egypt','description'=>'Guide to confirmed Egypt tours.','body'=>"## Luxor temples\nA confirmed itinerary.\n\nIs pickup included?\nConfirm pickup before booking."]],
+    'page_rules'=>['/?tf_article=discover-egypt'=>['jsonld'=>json_encode($faq),'related_links'=>[['url'=>'http://127.0.0.1:'.$port.'/tours/luxor','title'=>'Luxor day tour']]]]];
+file_put_contents($cache,json_encode(['t'=>time(),'f'=>0,'rules'=>$rules]));
+$customerTheme='<!doctype html><html><head><title>Original homepage</title><meta name="description" content="Home description"><script>const markup="<main>fake</main>";</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[]}</script></head><body><header class="customer-header">Customer brand navigation</header><main class="hero"><h1>Homepage hero</h1></main><footer>Customer booking footer</footer></body></html>';
+file_put_contents($dir.'/page.html',$customerTheme);
+$auto=(string)render($connector,'/?tf_article=discover-egypt',$customerTheme);
+check(str_contains($auto,'Customer brand navigation')&&str_contains($auto,'Customer booking footer')&&!str_contains($auto,'<h1>Homepage hero</h1>'),'query article reuses normal site header/footer without configured PHP includes');
+check(str_contains($auto,'<h2>Luxor temples</h2>')&&str_contains($auto,'<title>Discover Egypt</title>'),'themed article has structured sections and its own title');
+check(str_contains($auto,'data-tf-related')&&str_contains($auto,'/tours/luxor'),'query article receives its contextual pillar link');
+check(substr_count($auto,'FAQPage')===1&&substr_count($auto,'id="tourfecto-schema"')===1,'query article has one FAQ schema graph and no inherited homepage FAQ');
+check(str_contains($auto,'rel="canonical" href="'.$canonical.'"'),'themed article uses the actual query canonical');
+file_put_contents($dir.'/router.php','<?php require __DIR__."/tourfecto-connect.php"; $html=file_get_contents(__DIR__."/page.html");echo substr($html,0,100);ob_flush();echo substr($html,100);');
+$chunked=(string)render($connector,'/?tf_article=discover-egypt',$page);
+check(str_contains($chunked,'Customer brand navigation')&&str_contains($chunked,'Customer booking footer')&&substr_count($chunked,'<h1>Discover Egypt</h1>')===1,'chunked site output is assembled once before article theme replacement');
+file_put_contents($dir.'/router.php','<?php require __DIR__."/tourfecto-connect.php"; echo file_get_contents(__DIR__."/page.html");');
+$sitemap=(string)render($connector,'/tourfecto-guides-sitemap.xml',$page);
+check(str_contains($sitemap,'<loc>'.$canonical.'</loc>')&&!str_contains($sitemap,'/guides/discover-egypt</loc>'),'connector sitemap lists the stored working fallback URL');
+$queryMap=(string)render($connector,'/?tf_guides_sitemap=1',$page);
+check(str_contains($queryMap,'<urlset')&&str_contains($queryMap,'<loc>'.$canonical.'</loc>'),'sitemap fallback works through root PHP without server rewrite rules');
+$queryIndex=(string)render($connector,'/?tf_guides=1',$page);
+check(str_contains($queryIndex,'Travel guides')&&str_contains($queryIndex,'href="'.$canonical.'"'),'guide index fallback lists working article links without rewrite rules');
+$flat='<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://example.com/existing</loc></url></urlset>';
+file_put_contents($dir.'/page.html',$flat);$flatMap=(string)render($connector,'/sitemap.xml',$flat);
+check(str_contains($flatMap,'<loc>'.$canonical.'</loc>')&&str_contains($flatMap,'https://example.com/existing'),'customer sitemap includes the working query article and preserves existing URLs');
+file_put_contents($dir.'/page.html',$customerTheme);$plainHome=(string)render($connector,'/',$customerTheme);
+check(!str_contains($plainHome,'Luxor day tour')&&str_contains($plainHome,'Homepage hero'),'article links and body never leak into homepage');
+if(getenv('TF_GUIDE_UI_ARTIFACT'))file_put_contents(getenv('TF_GUIDE_UI_ARTIFACT'),$auto);
+file_put_contents($dir.'/page.html',$page);
+file_put_contents($cache,json_encode(['t'=>time(),'f'=>0,'rules'=>['articles'=>['discover-egypt'=>['title'=>'Discover Egypt','description'=>'Guide to Egypt tours.','body'=>'Egypt is wonderful.']]]]));
 
 // Phase 4 uses the customer's explicitly configured local header/footer.
 file_put_contents($dir.'/header.php','<!doctype html><html><head><title>Site theme</title></head><body><header>Customer navigation</header>');
@@ -84,7 +118,7 @@ $sitemap=(string)render($connector,'/tourfecto-guides-sitemap.xml',$page);
 check(str_contains($sitemap,'<urlset') && str_contains($sitemap,'/guides/discover-egypt</loc>'),'published guides appear in the connector sitemap');
 file_put_contents($dir.'/page.html','<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://example.com/existing.xml</loc></sitemap></sitemapindex>');
 $siteMapIndex=(string)render($connector,'/sitemap.xml',$page);
-check(str_contains($siteMapIndex,'https://example.com/existing.xml') && str_contains($siteMapIndex,'/tourfecto-guides-sitemap.xml'),'existing sitemap index retains entries and adds guide sitemap');
+check(str_contains($siteMapIndex,'https://example.com/existing.xml') && str_contains($siteMapIndex,'/?tf_guides_sitemap=1'),'existing sitemap index retains entries and adds guide sitemap');
 file_put_contents($dir.'/page.html','<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://example.com/existing</loc></url></urlset>');
 $urlset=(string)render($connector,'/sitemap.xml',$page);
 check(str_contains($urlset,'https://example.com/existing') && str_contains($urlset,'/guides/discover-egypt</loc>'),'flat site sitemap retains existing pages and adds published guides');

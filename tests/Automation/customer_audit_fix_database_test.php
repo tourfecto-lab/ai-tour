@@ -19,6 +19,7 @@ check($payload['operation']==='verify'&&(int)$payload['attempt']===3&&(int)$payl
 $service->recheck(1,9001);check((int)$pdo->query("SELECT COUNT(*) FROM jobs WHERE job_class='SeoExpertExecuteJob'")->fetchColumn()===1,'repeated recheck does not create duplicate pending jobs');
 check((int)$pdo->query('SELECT COUNT(*) FROM plan_usage_events')->fetchColumn()===$billing,'verification request consumes no generation allowance');
 class AuditPublicationReader extends SeoExpertPageContext {
+    public function publicationSitemap(string $siteUrl,string $articleUrl,bool $connector): array {return ['state'=>'not_measured'];}
     public bool $complete=false;
     public function fresh(string $url): array {return ['ok'=>true,'final_url'=>$url,'title'=>'Guide title','text'=>$this->complete?'Intro Heading Main content with 2 temples.':'Intro Heading','values'=>[]];}
 }

@@ -181,7 +181,8 @@ class ArticleGenerator
         $text = (string)($data['title'] ?? '') . ' ' . (string)($data['meta_description'] ?? '') . ' ' . (string)($data['content'] ?? '') . ' ' . json_encode($data['faqs'] ?? [], JSON_UNESCAPED_UNICODE);
         if (preg_match('/<script\b|application\/ld\+json/i', $text)) return 'Structured data belongs in connector page_rules, not article content.';
         $facts = json_encode($brief['confirmed_facts'] ?? [], JSON_UNESCAPED_UNICODE);
-        $pattern='/(?:[$€£]\s*\d[\d,.]*|\b(?:USD|EUR|GBP|EGP|AED|SAR)\s*\d[\d,.]*|\d[\d,.]*\s*(?:USD|EUR|GBP|EGP|AED|SAR)\b)/u';
+        $number='[0-9]+(?:[.,][0-9]+)*';
+        $pattern='/(?:[$€£]\s*'.$number.'|\b(?:USD|EUR|GBP|EGP|AED|SAR)\s*'.$number.'|'.$number.'\s*(?:USD|EUR|GBP|EGP|AED|SAR)\b)/u';
         preg_match_all($pattern, $text, $prices);preg_match_all($pattern,$facts,$confirmedPrices);
         $normalize=static fn($price)=>preg_replace('/\s+/u','',$price);
         $allowed=array_map($normalize,$confirmedPrices[0]);

@@ -38,6 +38,16 @@ class ContentQualityService
         if (preg_match('/[\x00-\x20\\\\]/',$path) || preg_match('/%(?:2f|5c|00)/i',$path) || preg_match('~(?:^|/)\.\.?(?:/|$)~',rawurldecode($path))) return null;
         return rtrim($path,'/')?:'/';
     }
+    /** Only the connector's exact article query is allowed; arbitrary query URLs remain forbidden. */
+    public static function publicationPath(string $url,string $host): ?string
+    {
+        $path=self::pagePath($url,$host);
+        if($path!==null)return $path;
+        $p=parse_url($url);
+        if(!$p||strtolower($p['host']??'')!==strtolower($host)||!in_array($p['scheme']??'',['https','http'],true)||isset($p['user'])||isset($p['pass'])||isset($p['fragment'])||!in_array($p['path']??'/',['/','/index.php'],true))return null;
+        if(!preg_match('/^tf_article=([a-z0-9][a-z0-9-]{0,120})$/D',$p['query']??'',$m))return null;
+        return '/?tf_article='.$m[1];
+    }
     public function remember(int $uid,int $wid,string $key,array $brief,array $data,?int $articleId=null,?int $taskId=null,array $pages=[],string $siteUrl=''): void
     {
         if (!$this->ready()) throw new RuntimeException('Apply the Phase 4 content quality migration first.');
@@ -49,7 +59,7 @@ class ContentQualityService
     public function published(int $uid,int $wid,string $key,string $url,?string $content=null): void
     {
         $site=$this->db->query('SELECT main_url FROM websites WHERE id=? AND user_id=?',[$wid,$uid]);
-        if (!$site || !self::pagePath($url,(string)parse_url($site[0]['main_url'],PHP_URL_HOST))) throw new InvalidArgumentException('Publication URL must be a canonical same-site page without query parameters.');
+        if (!$site || !self::publicationPath($url,(string)parse_url($site[0]['main_url'],PHP_URL_HOST))) throw new InvalidArgumentException('Publication URL must be a same-site page or an exact connector article URL.');
         if ($content!==null) {
             $rows=$this->db->query('SELECT faqs_json FROM seo_content_quality WHERE website_id=? AND user_id=? AND source_key=?',[$wid,$uid,$key]);
             if ($rows) $this->db->exec('UPDATE seo_content_quality SET faqs_json=? WHERE website_id=? AND user_id=? AND source_key=?',[json_encode(self::visibleFaqs(json_decode($rows[0]['faqs_json'],true)?:[],$content),JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$wid,$uid,$key]);
@@ -76,7 +86,7 @@ class ContentQualityService
     {
         $rules=$existing;
         foreach ($rows as $row) {
-            $path=self::pagePath((string)($row['page_url']??''),$host); if (!$path || empty($row['published_at'])) continue;
+            $path=self::publicationPath((string)($row['page_url']??''),$host); if (!$path || empty($row['published_at'])) continue;
             $old=json_decode($rules[$path]['jsonld']??'{}',true)?:[];$graph=$old['@graph']??(isset($old['@type'])?[$old]:[]);
             $new=self::schema($row)['@graph'];$ids=array_column($new,'@id');
             $graph=array_values(array_filter($graph,static fn($node)=>!in_array($node['@id']??null,$ids,true)));
@@ -103,6 +113,20 @@ class ContentQualityService
         if (!$profile || empty($profile['confirmed_at']) || !empty($profile['needs_reconfirmation']) || (int)$profile['version']!==(int)$brief['profile_version']) throw new RuntimeException('Customer facts changed. Rebuild and review the content brief before publishing.');
         $error=ArticleGenerator::validateBriefOutput(['content'=>$article['content']??'','faqs'=>json_decode($article['faqs_json']??'[]',true)?:[]],$brief);
         if ($error!==null) throw new RuntimeException($error);
+    }
+    public function assertTaskCurrent(int $uid,int $wid,array $task): void
+    {
+        require_once dirname(__DIR__).'/BusinessHub/BusinessHubService.php';
+        require_once dirname(__DIR__).'/AI/ArticleGenerator.php';
+        if(!$this->ready())return;
+        $rows=$this->db->query('SELECT * FROM seo_content_quality WHERE website_id=? AND user_id=? AND source_key=?',[$wid,$uid,'task:'.(int)$task['id']]);
+        if(!$rows)return; // Existing explicitly approved legacy drafts keep their publication path.
+        $row=$rows[0];$brief=json_decode($row['brief_json'],true,512,JSON_THROW_ON_ERROR);
+        $profile=(new BusinessHubService($this->db))->profile($uid,$wid);
+        if(!$profile||empty($profile['confirmed_at'])||!empty($profile['needs_reconfirmation'])||(int)$profile['version']!==(int)$brief['profile_version'])throw new RuntimeException('Customer facts changed. Rebuild and review this article before publishing.');
+        $error=ArticleGenerator::validateBriefOutput(['title'=>$task['title'],'meta_description'=>$row['description'],'content'=>$task['expected_value'],'faqs'=>json_decode($row['faqs_json'],true)?:[]],$brief);
+        if($error!==null)throw new RuntimeException($error);
+        $this->db->exec('UPDATE seo_content_quality SET title=?,updated_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?',[$task['title'],$row['id'],$uid]);
     }
     public function syncWordPress(array $article,WordPressPublisher $publisher,string $siteUrl,string $username,string $password,int $postId,string $url,bool $draft=false): array
     {

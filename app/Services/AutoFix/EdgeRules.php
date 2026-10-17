@@ -11,6 +11,8 @@
  *
  * @version 1.0.0
  */
+require_once dirname(__DIR__).'/Seo/GuideContent.php';
+
 class EdgeRules
 {
     private const FIELDS = ['title', 'description', 'canonical', 'robots', 'viewport', 'lang', 'og', 'jsonld', 'hsts', 'llms_txt', 'related_links'];
@@ -154,6 +156,7 @@ class EdgeRules
                 unset($rules[$field]);
             }
         }
+        require_once dirname(__DIR__).'/Seo/ContentQualityService.php';
         $exists=$db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_expert_tasks'");
         if($exists){
             $pageRows=$db->query("SELECT page_path,field_name,expected_value FROM seo_expert_tasks WHERE website_id=? AND kind='metadata' AND is_active=1 AND status IN ('active','verified','needs_client') ORDER BY id",[$websiteId]);
@@ -165,15 +168,36 @@ class EdgeRules
             if($sx){$pol=json_decode((string)$sx[0]['policy_json'],true)?:[];if(($pol['auto_alt']??true)!==false)$rules['auto_alt']=1;}
             // مقالات معتمدة بتتنشر من خلال ملف الربط في مواقع PHP (/guides/{slug}) - نص بس
             $articles=[];
+            $knownPages=null;
             foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified','needs_client') AND (published_url LIKE '%/guides/%' OR published_url LIKE '%tf_article=%') ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
                 // الرابط ممكن يكون /guides/{slug} أو البديل ?tf_article={slug}
                 parse_str((string)parse_url((string)$a['published_url'],PHP_URL_QUERY),$q);
                 $slug=isset($q['tf_article'])&&is_string($q['tf_article'])?$q['tf_article']:basename((string)parse_url((string)$a['published_url'],PHP_URL_PATH));
-                if(!preg_match('/^[a-z0-9][a-z0-9-]{0,120}$/',$slug))continue;
+                if(!preg_match('/^[a-z0-9][a-z0-9-]{0,120}$/D',$slug)||isset($articles[$slug]))continue;
                 $title=self::line((string)$a['title']);$body=trim(str_replace("\r",'',strip_tags((string)$a['expected_value'])));
                 if($title===''||$body==='')continue;
-                $articles[$slug]=['title'=>mb_substr($title,0,150),'description'=>mb_substr(self::line(preg_replace('/\*\*/','',$body)),0,155),'body'=>mb_substr($body,0,12000),'published_at'=>substr((string)$a['updated_at'],0,10)];
-                $img=(json_decode((string)$a['before_json'],true)?:[])['article_image']??null;
+                $articles[$slug]=['url'=>(string)$a['published_url'],'title'=>mb_substr($title,0,150),'description'=>mb_substr(self::line(preg_replace('/\*\*/','',$body)),0,155),'body'=>mb_substr($body,0,12000),'published_at'=>substr((string)$a['updated_at'],0,10)];
+                $before=json_decode((string)$a['before_json'],true)?:[];
+                $links=$before['article_links']??[];
+                if(!$links){
+                    if($knownPages===null){
+                        $snapshots=$db->query('SELECT snapshot_json FROM seo_expert_runs WHERE website_id=? AND snapshot_json IS NOT NULL ORDER BY id DESC LIMIT 1',[$websiteId]);
+                        $knownPages=array_values(array_filter(json_decode($snapshots[0]['snapshot_json']??'{}',true)['pages']??[],static fn($p)=>empty($p['error'])&&(!isset($p['ok'])||$p['ok'])));
+                    }
+                    $pillar=ContentQualityService::cluster($title,$knownPages,'https://'.$siteHost);
+                    if($pillar)$links=[$pillar];
+                }
+                $cleanLinks=$links?self::sanitize('related_links',json_encode($links),$siteHost):null;
+                if($cleanLinks!==null)$articles[$slug]['related_links']=json_decode($cleanLinks,true);
+                if($cleanLinks!==null && ContentQualityService::publicationPath((string)$a['published_url'],$siteHost)!==null){
+                    foreach(json_decode($cleanLinks,true) as $link){
+                        $pillarPath=ContentQualityService::pagePath($link['url'],$siteHost);if(!$pillarPath)continue;
+                        $backLinks=$rules['page_rules'][$pillarPath]['related_links']??[];
+                        if(!in_array($a['published_url'],array_column($backLinks,'url'),true)&&count($backLinks)<4)$backLinks[]=['url'=>$a['published_url'],'title'=>mb_substr($title,0,90)];
+                        $rules['page_rules'][$pillarPath]['related_links']=$backLinks;
+                    }
+                }
+                $img=$before['article_image']??null;
                 if(is_array($img)&&preg_match('#^https://[^\s"<>]{8,490}$#',(string)($img['src']??''))){$articles[$slug]['image']=(string)$img['src'];$articles[$slug]['image_alt']=mb_substr(self::line((string)($img['alt']??'')),0,150);}
             }
             if($articles)$rules['articles']=$articles;
@@ -181,6 +205,12 @@ class EdgeRules
         require_once dirname(__DIR__).'/Seo/ContentQualityService.php';
         if ($db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_content_quality'")) {
             $qualityRows=$db->query('SELECT q.* FROM seo_content_quality q JOIN websites w ON w.id=q.website_id AND w.user_id=q.user_id WHERE q.website_id=? AND q.published_at IS NOT NULL ORDER BY q.id',[$websiteId]);
+            foreach($qualityRows as &$row){
+                $path=(string)parse_url((string)($row['page_url']??''),PHP_URL_PATH);
+                $slug=basename($path);
+                if(str_starts_with($path,'/guides/') && isset($rules['articles'][$slug]['url']))$row['page_url']=$rules['articles'][$slug]['url'];
+            }
+            unset($row);
             $pageRules=ContentQualityService::rules($qualityRows,$siteHost,$rules['page_rules']??[]);
             foreach ($pageRules as $path=>&$fields) foreach ($fields as $field=>&$value) {
                 $clean=self::sanitize($field,is_array($value)?json_encode($value):$value,$siteHost);
@@ -467,6 +497,7 @@ if (defined('TF_EDGE_RUNTIME_V4') || PHP_SAPI === 'cli') {
     return;
 }
 define('TF_EDGE_RUNTIME_V4', true);
+TF_GUIDE_CONTENT_CLASS
 define('TF_EDGE_ENDPOINT', '__ENDPOINT__');
 define('TF_EDGE_TOKEN', '__TOKEN__');
 
@@ -538,6 +569,12 @@ function tf_edge_page_rules()
 {
     $all = tf_edge_rules();
     $path = tf_edge_path();
+    $slug=tf_edge_article_slug();
+    if($slug!==null){
+        $key=isset($_GET['tf_article'])?'/?tf_article='.$slug:'/guides/'.$slug;
+        return $all['page_rules'][$key]??$all['page_rules']['/guides/'.$slug]??[];
+    }
+    if(($_GET['tf_guides']??null)==='1')return $all['page_rules']['/guides']??[];
     $page = [];
     if ($path === '/' || $path === '/index.php') {
         foreach (['title', 'description', 'canonical', 'robots', 'viewport', 'lang', 'og', 'jsonld'] as $k) {
@@ -614,8 +651,31 @@ TF_EDGE_BODY_HELPERS
 
 function tf_edge_buffer($html, $override = null)
 {
+    if (isset($GLOBALS['tf_edge_guide_page']) && is_string($html)) {
+        $phase=is_int($override)?$override:PHP_OUTPUT_HANDLER_FINAL;
+        $buffer=$GLOBALS['tf_edge_guide_buffer']??'';
+        if(strlen($buffer)+strlen($html)<=2000000)$buffer.=$html;else $GLOBALS['tf_edge_guide_overflow']=true;
+        $GLOBALS['tf_edge_guide_buffer']=$buffer;
+        if(($phase & PHP_OUTPUT_HANDLER_FINAL)===0)return '';
+        $html=$buffer;unset($GLOBALS['tf_edge_guide_buffer']);
+        if(!headers_sent()){header_remove('Content-Length');header_remove('ETag');header_remove('Last-Modified');header_remove('Location');header('Cache-Control: no-store');}
+        $guide=$GLOBALS['tf_edge_guide_page'];
+        unset($GLOBALS['tf_edge_guide_page']);
+        $themed=empty($GLOBALS['tf_edge_guide_overflow'])?GuideContent::theme($html,$guide['main']):null;
+        unset($GLOBALS['tf_edge_guide_overflow']);
+        if ($themed!==null && http_response_code()<300) {
+            $html=$themed;$override=$guide['fields'];
+            if(!headers_sent())header('Content-Type: text/html; charset=utf-8');
+        } else {
+            // Keep approved content available when the site's route cannot supply a theme.
+            http_response_code(200);
+            if (!headers_sent()) header('Content-Type: text/html; charset=utf-8');
+            $html=tf_edge_fallback_page($guide['title'],$guide['description'],$guide['canonical'],$guide['main'],$guide['jsonld'],$guide['image']);
+            $override=$guide['fields'];
+        }
+    }
     if (is_string($html) && preg_match('~/(?:[^/]*sitemap[^/]*)\.xml$~i',tf_edge_path()) && !empty(tf_edge_rules()['articles'])) {
-        $loc=tf_edge_site().'/tourfecto-guides-sitemap.xml';
+        $loc=tf_edge_site().'/?tf_guides_sitemap=1';
         if (preg_match('/^\s*(?:<\?xml[^>]*>\s*)?<sitemapindex\b/i',$html) && stripos($html,'</sitemapindex>')!==false) {
             if (strpos($html,$loc)===false) $html=str_ireplace('</sitemapindex>','<sitemap><loc>'.htmlspecialchars($loc,ENT_XML1|ENT_QUOTES,'UTF-8').'</loc></sitemap></sitemapindex>',$html);
             return $html;
@@ -624,7 +684,7 @@ function tf_edge_buffer($html, $override = null)
             $extra='';
             foreach (tf_edge_rules()['articles'] as $slug=>$article) {
                 if (!preg_match('/^[a-z0-9][a-z0-9-]{0,120}$/',$slug)) continue;
-                $url=htmlspecialchars(tf_edge_site().'/guides/'.$slug,ENT_XML1|ENT_QUOTES,'UTF-8');
+                $url=htmlspecialchars(tf_edge_article_url($slug,$article),ENT_XML1|ENT_QUOTES,'UTF-8');
                 if (strpos($html,'<loc>'.$url.'</loc>')===false) $extra.='<url><loc>'.$url.'</loc></url>';
             }
             return str_ireplace('</urlset>',$extra.'</urlset>',$html);
@@ -665,7 +725,9 @@ function tf_edge_buffer($html, $override = null)
             return $html;
         }
         $head = strtr(substr($masked, $open, $close - $open), $hidden);
+        $head=preg_replace('/<meta\b[^>]*\bname=["\']tourfecto-connector(?:-features)?["\'][^>]*>/i','',$head);
         $marker = "\n<meta name=\"tourfecto-connector\" content=\"4\"><meta name=\"tourfecto-connector-features\" content=\"body\">\n";
+        if(!empty(tf_edge_rules()['articles']) && stripos($head,'rel="sitemap"')===false)$marker.='<link rel="sitemap" type="application/xml" href="'.tf_edge_e(tf_edge_site().'/?tf_guides_sitemap=1').'">';
         $newHead = $marker . ($r ? tf_edge_apply_head($head, $r) : $head);
         $rest = substr($masked, $close);
         // الجسم: وصف الصور الناقص + روابط رحلات مشابهة (من غير لمس الـ scripts)
@@ -690,6 +752,16 @@ function tf_edge_buffer($html, $override = null)
 }
 
 /** Approved article slug from /guides/{slug} or the fallback ?tf_article={slug}. */
+function tf_edge_article_url($slug,$article)
+{
+    $url=(string)($article['url']??'');$p=parse_url($url);$site=parse_url(tf_edge_site());
+    if($p && ($p['scheme']??'')===($site['scheme']??'') && ($p['host']??'')===($site['host']??'') && ($p['port']??null)===($site['port']??null) && !isset($p['user']) && !isset($p['pass']) && !isset($p['fragment'])){
+        if(($p['path']??'')==='/guides/'.$slug && !isset($p['query']))return $url;
+        if(in_array($p['path']??'/',['/','/index.php'],true) && ($p['query']??'')==='tf_article='.$slug)return $url;
+    }
+    return tf_edge_site().'/guides/'.$slug;
+}
+
 function tf_edge_article_slug()
 {
     if (preg_match('#^/guides/([a-z0-9][a-z0-9\-]{0,120})$#', tf_edge_path(), $m)) {
@@ -702,37 +774,10 @@ function tf_edge_article_slug()
 /** Plain text to safe HTML: paragraphs, "- " lists, **bold**, and bold-only lines as headings. */
 function tf_edge_article_html($text)
 {
-    $html = '';
-    foreach (preg_split("/\n\s*\n/", trim((string) $text)) as $block) {
-        $lines = array_values(array_filter(array_map('trim', explode("\n", $block)), 'strlen'));
-        if (!$lines) {
-            continue;
-        }
-        $isList = true;
-        foreach ($lines as $l) {
-            if (strpos($l, '- ') !== 0) {
-                $isList = false;
-            }
-        }
-        $fmt = function ($t) {
-            return preg_replace('/\*\*(.+?)\*\*/u', '<strong>$1</strong>', tf_edge_e($t));
-        };
-        if ($isList) {
-            $html .= '<ul>';
-            foreach ($lines as $l) {
-                $html .= '<li>' . $fmt(substr($l, 2)) . '</li>';
-            }
-            $html .= '</ul>';
-        } elseif (count($lines) === 1 && preg_match('/^\*\*([^*]{3,120})\*\*:?$/u', $lines[0], $h)) {
-            $html .= '<h2>' . tf_edge_e($h[1]) . '</h2>';
-        } else {
-            $html .= '<p>' . implode('<br>', array_map($fmt, $lines)) . '</p>';
-        }
-    }
-    return $html;
+    return GuideContent::html((string)$text);
 }
 
-function tf_edge_page($title, $description, $canonical, $main, $jsonld = '', $image = '')
+function tf_edge_page($title, $description, $canonical, $main, $jsonld = '', $image = '', $useTheme = true)
 {
     $host = preg_replace('/^www\./', '', parse_url(tf_edge_site(), PHP_URL_HOST) ?: '');
     if (!headers_sent()) {
@@ -752,6 +797,7 @@ function tf_edge_page($title, $description, $canonical, $main, $jsonld = '', $im
             echo '<main data-tourfecto-guide>' . $main . '</main>';
             require $footer;
             $layout = ob_get_clean();
+            $layout=preg_replace('~</head>~i','<meta name="tourfecto-guide-layout" content="configured">'.GuideContent::style().'</head>',$layout,1);
             $fields=tf_edge_page_rules();$fields['title']=$title;$fields['description']=$description;$fields['canonical']=$canonical;
             if ($jsonld!=='') $fields['jsonld']=$jsonld;
             $layout=tf_edge_buffer($layout,$fields);
@@ -759,12 +805,28 @@ function tf_edge_page($title, $description, $canonical, $main, $jsonld = '', $im
             exit;
         }
     }
-    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    if ($useTheme) {
+        $fields=tf_edge_page_rules();
+        $fields['title']=$title;$fields['description']=$description;$fields['canonical']=$canonical;
+        $fields['og']=['og:type'=>'article','og:title'=>$title,'og:description'=>$description,'og:url'=>$canonical];
+        if($image!=='')$fields['og']['og:image']=$image;
+        if($jsonld!=='')$fields['jsonld']=$jsonld;
+        $GLOBALS['tf_edge_guide_page']=compact('title','description','canonical','main','jsonld','image','fields');
+        return;
+    }
+    echo tf_edge_fallback_page($title,$description,$canonical,$main,$jsonld,$image);
+    exit;
+}
+
+function tf_edge_fallback_page($title,$description,$canonical,$main,$jsonld='',$image='')
+{
+    $host=preg_replace('/^www\./','',parse_url(tf_edge_site(),PHP_URL_HOST)?:'');
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="tourfecto-guide-layout" content="standalone"><meta name="viewport" content="width=device-width,initial-scale=1">'
         . '<meta name="tourfecto-connector" content="4"><title>' . tf_edge_e($title) . '</title>'
         . '<meta name="description" content="' . tf_edge_e($description) . '"><link rel="canonical" href="' . tf_edge_e($canonical) . '">'
         . '<meta property="og:type" content="article"><meta property="og:title" content="' . tf_edge_e($title) . '"><meta property="og:description" content="' . tf_edge_e($description) . '">'
         . ($image !== '' ? '<meta property="og:image" content="' . tf_edge_e($image) . '"><meta name="twitter:card" content="summary_large_image">' : '')
-        . ($jsonld !== '' ? '<script type="application/ld+json">' . str_replace('</', '<\/', $jsonld) . '</script>' : '')
+        . ($jsonld !== '' ? '<script id="tourfecto-schema" type="application/ld+json">' . str_replace('</', '<\/', $jsonld) . '</script>' : '')
         . '<style>body{margin:0;font:17px/1.75 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1d2433;background:#fbfaf7}'
         . 'header,main,footer{max-width:760px;margin:0 auto;padding:0 20px}header{display:flex;justify-content:space-between;align-items:center;padding-top:22px;padding-bottom:22px;border-bottom:1px solid #e7e2d8}'
         . 'header a{color:#1d2433;text-decoration:none;font-weight:700}nav a{font-weight:500;margin-left:16px;color:#5b6475}h1{font-size:2.1rem;line-height:1.25;margin:34px 0 8px}'
@@ -772,9 +834,8 @@ function tf_edge_page($title, $description, $canonical, $main, $jsonld = '', $im
         . 'h2{font-size:1.35rem;margin:30px 0 6px}.meta{color:#7a8291;font-size:.9rem;margin-bottom:24px}main a{color:#a35a14}ul{padding-left:22px}'
         . '.list a{display:block;padding:18px 0;border-bottom:1px solid #e7e2d8;text-decoration:none;color:#1d2433}.list span{display:block;color:#5b6475;font-size:.95rem}'
         . 'footer{color:#7a8291;font-size:.9rem;padding-top:40px;padding-bottom:40px}</style></head><body>'
-        . '<header><a href="/">' . tf_edge_e($host) . '</a><nav><a href="/">Home</a><a href="/guides">Guides</a></nav></header>'
-        . '<main>' . $main . '</main><footer>&copy; ' . date('Y') . ' ' . tf_edge_e($host) . '</footer></body></html>';
-    exit;
+        . '<header><a href="/">' . tf_edge_e($host) . '</a><nav><a href="/">Home</a><a href="/?tf_guides=1">Guides</a></nav></header>'
+        . '<main data-tourfecto-guide>' . $main . '</main><footer>&copy; ' . date('Y') . ' ' . tf_edge_e($host) . '</footer></body></html>';
 }
 
 function tf_edge_articles_route()
@@ -792,21 +853,22 @@ function tf_edge_articles_route()
         return;
     }
     $base = tf_edge_site();
-    if (tf_edge_path() === '/tourfecto-guides-sitemap.xml') {
+    if (tf_edge_path() === '/tourfecto-guides-sitemap.xml' || (in_array(tf_edge_path(),['/','/index.php'],true) && ($_GET['tf_guides_sitemap']??null)==='1')) {
         header('Content-Type: application/xml; charset=utf-8');
         echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
         foreach ($articles as $slug=>$article) {
             if (!preg_match('/^[a-z0-9][a-z0-9-]{0,120}$/',$slug)) continue;
-            echo '<url><loc>'.htmlspecialchars($base.'/guides/'.$slug,ENT_XML1|ENT_QUOTES,'UTF-8').'</loc></url>';
+            echo '<url><loc>'.htmlspecialchars(tf_edge_article_url($slug,$article),ENT_XML1|ENT_QUOTES,'UTF-8').'</loc></url>';
         }
         echo '</urlset>';exit;
     }
-    if (tf_edge_path() === '/guides') {
+    if (tf_edge_path() === '/guides' || (in_array(tf_edge_path(),['/','/index.php'],true) && ($_GET['tf_guides']??null)==='1')) {
         $list = '';
         foreach ($articles as $slug => $a) {
-            $list .= '<a href="/guides/' . tf_edge_e($slug) . '"><strong>' . tf_edge_e($a['title'] ?? '') . '</strong><span>' . tf_edge_e($a['description'] ?? '') . '</span></a>';
+            $list .= '<a href="' . tf_edge_e(tf_edge_article_url($slug,$a)) . '"><strong>' . tf_edge_e($a['title'] ?? '') . '</strong><span>' . tf_edge_e($a['description'] ?? '') . '</span></a>';
         }
-        tf_edge_page('Travel guides', 'Travel guides and tips.', $base . '/guides', '<h1>Travel guides</h1><div class="list">' . $list . '</div>');
+        tf_edge_page('Travel guides', 'Travel guides and tips.', $base . '/?tf_guides=1', '<h1>Travel guides</h1><div class="list">' . $list . '</div>');
+        return;
     }
     $slug = tf_edge_article_slug();
     if ($slug === null) return;
@@ -816,6 +878,7 @@ function tf_edge_articles_route()
     $a = $articles[$slug];
     $title = (string) ($a['title'] ?? '');
     $canonical = isset($_GET['tf_article']) ? $base.'/?tf_article='.rawurlencode($slug) : $base . '/guides/' . $slug;
+    if(!empty($a['url']))$canonical=tf_edge_article_url($slug,$a);
     $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($a['published_at'] ?? '')) ? $a['published_at'] : '';
     $image = (is_string($a['image'] ?? null) && preg_match('#^https://[^\s"<>]+$#', $a['image'])) ? $a['image'] : '';
     $figure = $image !== '' ? '<figure><img src="' . tf_edge_e($image) . '" alt="' . tf_edge_e($a['image_alt'] ?? $title) . '" loading="eager"></figure>' : '';
@@ -824,10 +887,10 @@ function tf_edge_articles_route()
         function ($v) { return $v !== null && $v !== ''; }), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     $pageRules=tf_edge_page_rules();
     if (!empty($pageRules['jsonld'])) $jsonld=$pageRules['jsonld'];
-    $related=tf_edge_related_html($pageRules['related_links']??[]);
+    $related=tf_edge_related_html($pageRules['related_links']??$a['related_links']??[]);
     tf_edge_page($title, (string) ($a['description'] ?? ''), $canonical,
         '<article><h1>' . tf_edge_e($title) . '</h1>' . ($date ? '<div class="meta">' . tf_edge_e($date) . '</div>' : '') . $figure
-        . tf_edge_article_html((string) ($a['body'] ?? '')) . $related . '</article><p><a href="/guides">&larr; All guides</a></p>', (string) $jsonld, $image);
+        . tf_edge_article_html((string) ($a['body'] ?? '')) . $related . '</article><p><a href="/?tf_guides=1">&larr; All guides</a></p>', (string) $jsonld, $image);
 }
 
 // فحص سريع لصاحب الموقع: https://your-site.com/?tf_check=1
@@ -837,6 +900,7 @@ if (($_GET['tf_check'] ?? '') === '1') {
     header('Content-Type: text/plain; charset=utf-8');
     header('Cache-Control: no-store');
     echo "Tourfecto Connect v4: the file is installed and running (website #__SITE__).\n";
+    echo "Guide presentation: 2026-10-17 (site theme and query sitemap).\n";
     echo $ok ? "Connection to Tourfecto: OK\n" : "Connection to Tourfecto: FAILED - your server cannot reach tourfecto.pro (check outgoing connections / firewall).\n";
     exit;
 }
@@ -859,7 +923,7 @@ if (in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)) {
     ob_start('tf_edge_buffer');
 }
 PHPCODE;
-        return strtr($code, ['__ENDPOINT__' => addslashes($endpoint), '__TOKEN__' => addslashes($token), '__SITE__' => (string) $websiteId, 'TF_EDGE_BODY_HELPERS' => self::bodyHelpers()]);
+        return strtr($code, ['__ENDPOINT__' => addslashes($endpoint), '__TOKEN__' => addslashes($token), '__SITE__' => (string) $websiteId, 'TF_EDGE_BODY_HELPERS' => self::bodyHelpers(), 'TF_GUIDE_CONTENT_CLASS'=>preg_replace('/^<\?php\s*/','',file_get_contents(dirname(__DIR__).'/Seo/GuideContent.php'))]);
     }
 
     /**

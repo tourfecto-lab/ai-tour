@@ -90,6 +90,10 @@ class ContentBriefService
             if (!is_array($items)) throw new RuntimeException('SERP response has no measured items.');
             $db->exec('REPLACE INTO seo_research_cache(website_id,market_id,cache_key,result_json,fetched_at) VALUES(?,?,?,?,UTC_TIMESTAMP())',[$wid,$market['id'],$key,json_encode($items,JSON_THROW_ON_ERROR)]);
         }
-        return $this->build($rows[0],$items,$profile,$market);
+        $brief=$this->build($rows[0],$items,$profile,$market);
+        $pillar=ContentQualityService::cluster($keyword,(new ContentQualityService($db))->knownPages($uid,$wid),(string)($profile['facts']['source_site_url']??''));
+        $brief['internal_link_targets']=$pillar?[$pillar]:[];
+        $brief['writing_rules'][]='Use ## headings and ### subheadings. Relevant internal links will be added from the known same-site targets; never invent URLs. Unknown opening hours, collections, availability and prices require confirmation before publication.';
+        return $brief;
     }
 }
