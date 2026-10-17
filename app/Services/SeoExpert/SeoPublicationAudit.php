@@ -13,6 +13,7 @@ final class SeoPublicationAudit
         $checks['inline_links']=$expectedLinks?$pass(count(array_diff($expectedLinks,$ctx['publication_links']??[]))===0):'not_required';
         $checks['approved_content']=$pass($expected!==''&&str_contains($normalize($ctx['text']??''),$expected));
         $checks['title']=$pass($normalize($task['title'])!==''&&str_contains($normalize($ctx['title']??''),$normalize($task['title'])));
+        $description=(string)($quality['description']??'');$checks['meta_description']=$description!==''?$pass($normalize($ctx['description']??'')===$normalize($description)):'not_required';
         $checks['canonical']=$pass(html_entity_decode((string)($ctx['canonical']??''),ENT_QUOTES|ENT_HTML5,'UTF-8')===$url);
         $checks['indexable']=empty($ctx['ok'])?'not_measured':$pass(!preg_match('/\b(?:noindex|none)\b/i',(string)($ctx['robots']??'').' '.($ctx['robots_header']??'')));
         $nodes=[];foreach($ctx['schema']??[] as $schema){if(!is_array($schema))continue;foreach($schema['@graph']??(array_is_list($schema)?$schema:[$schema]) as $node)if(is_array($node))$nodes[]=$node;}

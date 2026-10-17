@@ -157,7 +157,7 @@ class EdgeRules
             }
         }
         require_once dirname(__DIR__).'/Seo/ContentQualityService.php';
-        $exists=$db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_expert_tasks'");
+        $articleSources=[];$exists=$db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_expert_tasks'");
         if($exists){
             $pageRows=$db->query("SELECT page_path,field_name,expected_value FROM seo_expert_tasks WHERE website_id=? AND kind='metadata' AND is_active=1 AND status IN ('active','verified','needs_client') ORDER BY id",[$websiteId]);
             $pageRules=[];
@@ -169,13 +169,14 @@ class EdgeRules
             // مقالات معتمدة بتتنشر من خلال ملف الربط في مواقع PHP (/guides/{slug}) - نص بس
             $articles=[];
             $knownPages=null;
-            foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified','needs_client') AND (published_url LIKE '%/guides/%' OR published_url LIKE '%tf_article=%') ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
+            foreach($db->query("SELECT id,title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified','needs_client') AND (published_url LIKE '%/guides/%' OR published_url LIKE '%tf_article=%') ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
                 // الرابط ممكن يكون /guides/{slug} أو البديل ?tf_article={slug}
                 parse_str((string)parse_url((string)$a['published_url'],PHP_URL_QUERY),$q);
                 $slug=isset($q['tf_article'])&&is_string($q['tf_article'])?$q['tf_article']:basename((string)parse_url((string)$a['published_url'],PHP_URL_PATH));
                 if(!preg_match('/^[a-z0-9][a-z0-9-]{0,120}$/D',$slug)||isset($articles[$slug]))continue;
                 $title=self::line((string)$a['title']);$body=trim(str_replace("\r",'',strip_tags((string)$a['expected_value'])));
                 if($title===''||$body==='')continue;
+                $articleSources[$slug]='task:'.(int)$a['id'];
                 $articles[$slug]=['url'=>(string)$a['published_url'],'title'=>mb_substr($title,0,150),'description'=>mb_substr(self::line(preg_replace('/\*\*/','',$body)),0,155),'body'=>mb_substr($body,0,12000),'published_at'=>substr((string)$a['updated_at'],0,10)];
                 $before=json_decode((string)$a['before_json'],true)?:[];
                 $links=$before['article_links']??[];
@@ -209,6 +210,12 @@ class EdgeRules
                 $path=(string)parse_url((string)($row['page_url']??''),PHP_URL_PATH);
                 $slug=basename($path);
                 if(str_starts_with($path,'/guides/') && isset($rules['articles'][$slug]['url']))$row['page_url']=$rules['articles'][$slug]['url'];
+                parse_str((string)parse_url((string)($row['page_url']??''),PHP_URL_QUERY),$articleQuery);
+                $articleSlug=isset($articleQuery['tf_article'])&&is_string($articleQuery['tf_article'])?$articleQuery['tf_article']:$slug;
+                if(isset($rules['articles'][$articleSlug])&&($articleSources[$articleSlug]??null)===($row['source_key']??'')){
+                    $reviewedDescription=self::line((string)($row['description']??''));
+                    if($reviewedDescription!==''&&mb_strlen($reviewedDescription)<=500)$rules['articles'][$articleSlug]['description']=$reviewedDescription;
+                }
             }
             unset($row);
             $pageRules=ContentQualityService::rules($qualityRows,$siteHost,$rules['page_rules']??[]);

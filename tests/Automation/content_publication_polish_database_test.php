@@ -33,4 +33,5 @@ $quality->published(1,1,'task:99','https://example.com/guides/luxor-guide'); // 
 $edge=EdgeRules::rulesFor($db,1,'example.com');
 check(isset($edge['page_rules']['/?tf_article=luxor-guide']['jsonld'])&&!isset($edge['page_rules']['/guides/luxor-guide']),'real edge compiler repairs historical quality URL to currently published fallback URL');
 check($edge['articles']['luxor-guide']['url']===$url,'article payload carries actual canonical route for guide index/sitemap');
+check($edge['articles']['luxor-guide']['description']===$data['meta_description'],'PHP article payload publishes the owned reviewed description instead of a Markdown body excerpt');
 echo PHP_EOL.($n-$fails)."/$n passed".PHP_EOL;exit($fails?1:0);
