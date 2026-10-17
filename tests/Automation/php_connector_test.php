@@ -54,9 +54,10 @@ check(strpos($other, '<title>Old</title>') !== false, 'homepage values not appli
 file_put_contents($cache, json_encode(['t' => time(), 'f' => 0, 'rules' => ['articles' => [
     'discover-egypt' => ['title' => 'Discover Egypt', 'description' => 'Guide to Egypt tours.', 'published_at' => '2026-10-15',
         'image' => 'https://example.com/img/luxor.jpg', 'image_alt' => 'Luxor "temple"',
-        'body' => "Egypt is wonderful.\n\n**Luxor Tours**: temples <script>alert(1)</script> and balloons.\n\n- Valley of the Kings\n- Karnak"],
+        'body' => "Egypt is wonderful.\n\n**Luxor Tours**: temples <script>alert(1)</script> and balloons.\n\n- Valley of the Kings\n- Karnak\n\n[Luxor details](https://example.com/tours/luxor?q=one&lang=en)"],
 ]]]));
 $art = (string) render($connector, '/guides/discover-egypt', $page);
+check(str_contains($art,'<a href="https://example.com/tours/luxor?q=one&amp;lang=en">Luxor details</a>'),'generated PHP connector turns reviewed Markdown links into escaped anchors');
 check(strpos($art, '<h1>Discover Egypt</h1>') !== false, 'article served on /guides/{slug}');
 check(strpos($art, '<strong>Luxor Tours</strong>') !== false && strpos($art, '<li>Valley of the Kings</li>') !== false, 'bold and list formatting');
 check(strpos($art, '<script>alert(1)</script>') === false && strpos($art, '&lt;script&gt;') !== false, 'article text is escaped');

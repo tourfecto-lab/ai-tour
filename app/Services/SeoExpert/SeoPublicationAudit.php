@@ -7,7 +7,10 @@ final class SeoPublicationAudit
     {
         $url=(string)$task['published_url'];$normalize=static fn($s)=>SeoVerificationState::content((string)$s);
         $checks=[];$pass=static fn(bool $ok):string=>$ok?'passed':'missing';
-        $expected=$normalize($task['expected_value']??'');
+        $expected=SeoVerificationState::content((string)($task['expected_value']??''),true);
+        preg_match_all('/<a href="([^"]+)">/',GuideContent::html((string)($task['expected_value']??'')),$inline);
+        $expectedLinks=array_unique(array_map(static fn($url)=>html_entity_decode($url,ENT_QUOTES|ENT_HTML5,'UTF-8'),$inline[1]));
+        $checks['inline_links']=$expectedLinks?$pass(count(array_diff($expectedLinks,$ctx['publication_links']??[]))===0):'not_required';
         $checks['approved_content']=$pass($expected!==''&&str_contains($normalize($ctx['text']??''),$expected));
         $checks['title']=$pass($normalize($task['title'])!==''&&str_contains($normalize($ctx['title']??''),$normalize($task['title'])));
         $checks['canonical']=$pass(html_entity_decode((string)($ctx['canonical']??''),ENT_QUOTES|ENT_HTML5,'UTF-8')===$url);

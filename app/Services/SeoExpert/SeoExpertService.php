@@ -531,7 +531,7 @@ class SeoExpertService
                     if(!$same&&$attempt<3)$pending=true;$this->q('UPDATE seo_expert_tasks SET evidence_json=?,checked_at=UTC_TIMESTAMP() WHERE id=?',[json_encode($evidence,JSON_THROW_ON_ERROR),$t['id']]);continue;
                 }
                 if($t['kind']==='content'){
-                    $expected=SeoVerificationState::content((string)$t['expected_value']);$observed=SeoVerificationState::content((string)($ctx['text']??''));$viaConnector=empty($t['external_post_id'])&&(str_contains((string)$t['published_url'],'/guides/')||str_contains((string)$t['published_url'],'tf_article='));
+                    $expected=SeoVerificationState::content((string)$t['expected_value'],true);$observed=SeoVerificationState::content((string)($ctx['text']??''));$viaConnector=empty($t['external_post_id'])&&(str_contains((string)$t['published_url'],'/guides/')||str_contains((string)$t['published_url'],'tf_article='));
                     if($viaConnector&&(empty($ctx['ok'])||!str_contains(self::normalizeText((string)($ctx['title']??'')),self::normalizeText((string)$t['title'])))){
                         // لو السيرفر مش بيوجّه /guides/ لـ PHP، نجرب الرابط البديل اللي بيعدّي على index.php دايمًا
                         $alt=str_contains((string)$t['published_url'],'tf_article=')?(string)$t['published_url']:rtrim((string)$this->site($uid,$wid)['main_url'],'/').'/?tf_article='.rawurlencode(basename((string)parse_url((string)$t['published_url'],PHP_URL_PATH)));$altCtx=$reader->freshPublication($alt);
@@ -539,7 +539,7 @@ class SeoExpertService
                             if((new ContentQualityService($this->db))->ready())(new ContentQualityService($this->db))->published($uid,$wid,'task:'.$t['id'],$alt,(string)$t['expected_value']);}
                     }
                     $storedBody=$viaConnector?(string)$t['expected_value']:$this->publishedBody($uid,$wid,(int)$t['external_post_id']);
-                    $whole=$expected!==''&&$storedBody!==null&&str_contains(SeoVerificationState::content($storedBody),$expected);
+                    $whole=$expected!==''&&$storedBody!==null&&str_contains(SeoVerificationState::content($storedBody,$viaConnector),$expected);
                     $found=$whole&&!empty($ctx['ok'])&&WordPressConnector::hostsEqual((string)parse_url($url,PHP_URL_HOST),(string)parse_url($ctx['final_url']??'',PHP_URL_HOST))&&str_contains(self::normalizeText((string)$ctx['title']),self::normalizeText((string)$t['title']))&&str_contains($observed,$expected);
                     $check=['state'=>$found?'verified':'not_seen','reason'=>$found?($viaConnector?'Published through tourfecto-connect.php; the public page exposes the approved title and text.':'WordPress contains the approved body and the public page exposes its title and text.'):'Full publication verification is incomplete. Review content, WordPress read permission or public-page cache.','observed'=>['public_title'=>$ctx['title']??null,'approved_body_matches'=>$whole]];
                     $qualityRows=(new ContentQualityService($this->db))->ready()?$this->q('SELECT * FROM seo_content_quality WHERE website_id=? AND user_id=? AND source_key=?',[$wid,$uid,'task:'.$t['id']])->fetchAll(PDO::FETCH_ASSOC):[];

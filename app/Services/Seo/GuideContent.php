@@ -2,10 +2,25 @@
 /** Shared, escaped article presentation. Embedded verbatim in the standalone PHP connector. */
 final class GuideContent
 {
+    private static function inline(string $text): string
+    {
+        $escape=static fn(string $s):string=>htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+        $plain=static fn(string $s):string=>preg_replace('/\*\*([^*\n]+)\*\*/u','<strong>$1</strong>',$escape($s));
+        $parts=preg_split('~(\[[^\]\r\n]{1,500}\]\(https?://[^\s)]+\))~u',$text,-1,PREG_SPLIT_DELIM_CAPTURE)?:[$text];$html='';
+        foreach($parts as $part){
+            if(preg_match('~^\[([^\]\r\n]{1,500})\]\((https?://[^\s)]+)\)$~u',$part,$m)){
+                $url=$m[2];$parsed=parse_url($url);
+                if(filter_var($url,FILTER_VALIDATE_URL)&&$parsed&&in_array($parsed['scheme']??'',['http','https'],true)&&!isset($parsed['user'])&&!isset($parsed['pass'])){$html.='<a href="'.$escape($url).'">'.$plain($m[1]).'</a>';continue;}
+            }
+            $html.=$plain($part);
+        }
+        return $html;
+    }
+
     public static function html(string $text): string
     {
         $escape=static fn(string $s):string=>htmlspecialchars($s,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
-        $inline=static fn(string $s):string=>preg_replace('/\*\*([^*\n]+)\*\*/u','<strong>$1</strong>',$escape($s));
+        $inline=static fn(string $s):string=>self::inline($s);
         $html='';$paragraph=[];$list=[];
         $flush=function()use(&$html,&$paragraph,&$list,$inline):void{
             if($paragraph){$html.='<p>'.implode('<br>',array_map($inline,$paragraph)).'</p>';$paragraph=[];}
