@@ -95,6 +95,7 @@ $router->get('/competitor-intelligence/reports/{id}/export', 'CompetitorIntellig
 // ============================================
 // صفحات الذكاء الاصطناعي
 // ============================================
+$router->get('/ai-visibility','AiVisibilityController','index',['AuthMiddleware']);
 $router->group('/ai', function ($router) {
     $router->get('/analyze', 'AIController', 'showAnalyze', ['AuthMiddleware']);
     $router->get('/reports', 'AIController', 'showReports', ['AuthMiddleware']);

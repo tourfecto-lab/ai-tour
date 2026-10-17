@@ -622,6 +622,7 @@ class AdminController extends Controller
             $service = new SystemSettingsService();
             $allowedKeys = [
                 'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
+                'geo_enabled', 'geo_monthly_budget_usd', 'geo_openai_enabled', 'geo_openai_api_key', 'geo_gemini_enabled', 'geo_gemini_api_key', 'geo_perplexity_enabled', 'geo_perplexity_api_key',
                 'gemini_api_key', 'google_client_id', 'google_client_secret', 'google_maps_api_key',
                 'meta_app_id', 'meta_app_secret', 'support_whatsapp_number',
                 'meta_login_config_id', 'meta_signin_config_id', 'meta_wa_config_id', 'meta_oauth_scopes',
@@ -630,6 +631,9 @@ class AdminController extends Controller
                 'oauth_microsoft_client_id', 'oauth_microsoft_client_secret', 'oauth_microsoft_tenant',
                 'oauth_apple_client_id', 'oauth_apple_team_id', 'oauth_apple_key_id', 'oauth_apple_private_key',
             ];
+            foreach(['geo_enabled','geo_openai_enabled','geo_gemini_enabled','geo_perplexity_enabled'] as $key)if($this->get($key)!==null&&!in_array((string)$this->get($key),['0','1'],true))return $this->error('قيمة تفعيل AI غير صالحة',422);
+            $geoBudget=$this->get('geo_monthly_budget_usd');
+            if($geoBudget!==null&&(!is_numeric($geoBudget)||!is_finite((float)$geoBudget)||(float)$geoBudget<0||(float)$geoBudget>1000000))return $this->error('ميزانية AI غير صالحة',422);
             if ($this->get('serp_enabled')!==null && !in_array((string)$this->get('serp_enabled'),['0','1'],true))
                 return $this->error('اختار تفعيل أو إيقاف DataForSEO',422);
             if ($this->get('serp_device')!==null && !in_array((string)$this->get('serp_device'),['desktop','mobile'],true))
@@ -2414,7 +2418,7 @@ class AdminController extends Controller
                     if (item.key === 'refund_policy_content' && document.getElementById('legalRefundContent')) document.getElementById('legalRefundContent').value = item.value || '';
                 } else {
                     const el = document.getElementById('ss_' + item.key);
-                    if (el && !item.is_secret) el.value = item.value || (item.key === 'serp_enabled' ? '0' : (item.key === 'serp_device' ? 'desktop' : ''));
+                    if (el && !item.is_secret) el.value = item.value || (item.key.endsWith('_enabled') ? '0' : (item.key === 'serp_device' ? 'desktop' : ''));
                     if (el && item.is_secret && item.is_set) el.placeholder = '•••• (مسجّل - اكتب قيمة جديدة عشان تغيّرها)';
                 }
             });
@@ -2496,6 +2500,7 @@ class AdminController extends Controller
 
         const keys = [
             'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
+            'geo_enabled', 'geo_monthly_budget_usd', 'geo_openai_enabled', 'geo_openai_api_key', 'geo_gemini_enabled', 'geo_gemini_api_key', 'geo_perplexity_enabled', 'geo_perplexity_api_key',
             'gemini_api_key', 'google_client_id', 'google_client_secret', 'google_maps_api_key',
             'meta_app_id', 'meta_app_secret', 'support_whatsapp_number',
             'meta_login_config_id', 'meta_signin_config_id', 'meta_wa_config_id', 'meta_oauth_scopes',
@@ -2518,7 +2523,7 @@ class AdminController extends Controller
         if (res.success) {
             toast(I18N['common.updated'], 'success');
             // نفضّي حقول القيم الحساسة اللي اتبعتت عشان محدش يشوفها معروضة تاني
-            ['serp_login', 'serp_password', 'gemini_api_key', 'google_client_secret', 'google_maps_api_key', 'meta_app_secret', 'mail_password', 'oauth_microsoft_client_secret', 'oauth_apple_private_key'].forEach(key => {
+            ['geo_openai_api_key','geo_gemini_api_key','geo_perplexity_api_key','serp_login', 'serp_password', 'gemini_api_key', 'google_client_secret', 'google_maps_api_key', 'meta_app_secret', 'mail_password', 'oauth_microsoft_client_secret', 'oauth_apple_private_key'].forEach(key => {
                 const el = document.getElementById('ss_' + key);
                 if (el) el.value = '';
             });
@@ -4175,6 +4180,18 @@ HTML;
                     <h4 style="margin:14px 0 8px;font-size:13px;color:var(--panel-text-muted);">🤖 {$this->tr('admin.sys.cat.ai')}</h4>
                     <div class="p-grid cols-2">
                         <div class="form-group"><label class="form-label">Gemini API Key</label><input type="password" id="ss_gemini_api_key" class="form-control" placeholder="••••••••" dir="ltr"></div>
+                    </div>
+
+                    <h3>قياس ظهور AI</h3><p>قياس أسبوعي مدفوع. 0 في الميزانية يوقف الطلبات. المفاتيح بتتشفّر ومش بترجع للمتصفح. النماذج: gpt-4.1-mini / gemini-2.5-flash / sonar. راجع أسعار المزودين قبل التفعيل. Perplexity: مسار Sonar التوافقي ممكن يتحوّل إلى Agent API؛ التكلفة تتسجل من رد المزود فقط.</p>
+                    <div class="p-grid cols-2">
+                    <div class="form-group"><label class="form-label" for="ss_geo_enabled">تفعيل قياس ظهور AI المدفوع</label><select id="ss_geo_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
+                    <div class="form-group"><label class="form-label" for="ss_geo_monthly_budget_usd">ميزانية قياس AI الشهرية بالدولار (0 يوقف الطلبات)</label><input type="number" id="ss_geo_monthly_budget_usd" class="form-control" min="0" max="1000000" step="0.01" value="0" dir="ltr"></div>
+                    <div class="form-group"><label class="form-label" for="ss_geo_openai_enabled">تفعيل openai لقياس الظهور</label><select id="ss_geo_openai_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
+                    <div class="form-group"><label class="form-label" for="ss_geo_openai_api_key">openai GEO API Key</label><input type="password" id="ss_geo_openai_api_key" class="form-control" autocomplete="new-password" dir="ltr"></div>
+                    <div class="form-group"><label class="form-label" for="ss_geo_gemini_enabled">تفعيل gemini لقياس الظهور</label><select id="ss_geo_gemini_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
+                    <div class="form-group"><label class="form-label" for="ss_geo_gemini_api_key">gemini GEO API Key</label><input type="password" id="ss_geo_gemini_api_key" class="form-control" autocomplete="new-password" dir="ltr"></div>
+                    <div class="form-group"><label class="form-label" for="ss_geo_perplexity_enabled">تفعيل perplexity لقياس الظهور</label><select id="ss_geo_perplexity_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
+                    <div class="form-group"><label class="form-label" for="ss_geo_perplexity_api_key">perplexity GEO API Key</label><input type="password" id="ss_geo_perplexity_api_key" class="form-control" autocomplete="new-password" dir="ltr"></div>
                     </div>
 
                     <h4 style="margin:18px 0 8px;font-size:13px;color:var(--panel-text-muted);">DataForSEO — بحث الكلمات والترتيب</h4>

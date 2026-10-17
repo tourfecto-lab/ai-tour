@@ -106,11 +106,9 @@ class FixValueBuilder
                 if ($r['description'] !== '') {
                     $org['description'] = $r['description'];
                 }
-                if (!empty($ctx['social'])) {
-                    $org['sameAs'] = array_values($ctx['social']);
-                } else {
-                    $w[] = 'no_social_found';
-                }
+                $profiles=[];
+                try{$profiles=AiVisibilityService::customerProfiles($userId,(int)($fix['website_id']??0));}catch(Throwable $e){$w[]='confirmed_profiles_unavailable';}
+                if($profiles)$org['sameAs']=$profiles;else $w[]='no_customer_confirmed_profiles';
                 return $this->done(json_encode($org, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $r['source'], $w);
 
             case 'hsts':
@@ -122,17 +120,9 @@ class FixValueBuilder
                 return $this->done('max-age=2592000', 'static', $w);
 
             case 'llms_txt':
-                $r = $this->titleAndDescription($ctx, $userId);
-                $name = $this->siteName($ctx);
-                $txt = '# ' . $name . "\n\n";
-                if ($r['description'] !== '') {
-                    $txt .= '> ' . $r['description'] . "\n\n";
-                }
-                $txt .= "## Main pages\n- [Home](" . $this->originOf($ctx) . "/)\n";
-                foreach (array_slice($ctx['links'] ?? [], 0, 8) as $l) {
-                    $txt .= '- [' . str_replace(['[', ']'], '', $l['title']) . '](' . $l['url'] . ")\n";
-                }
-                return $this->done($txt, $r['source'], $w);
+                try{$txt=(new GeoLlmsBuilder())->build($this->originOf($ctx).'/');return $this->done($txt,'published_page_evidence',['review_published_facts_before_approval','no_ranking_guarantee']);}
+                catch(Throwable $e){return $this->fail('published_pages_unavailable');}
+
         }
         return $this->fail('not_automatable');
     }

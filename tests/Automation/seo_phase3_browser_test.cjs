@@ -1,0 +1,56 @@
+// Offline browser smoke of actual customer script and actual admin settings forms/functions.
+const fs=require('node:fs');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
+(async()=>{
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+const page=await browser.newPage();const errors=[],posts=[],gets=[];page.on('pageerror',e=>errors.push(e.message));
+await page.addInitScript({content:fs.readFileSync(__dirname+'/../../public_html/assets/js/panel.js','utf8')});
+let measured=false;const evil='<img src=x onerror="window.geoUnsafe=true">';
+const providers=()=>Object.fromEntries(['openai','gemini','perplexity'].map(p=>[p,{state:measured?'measured_sample':'not_measured',share_of_voice:measured?.5:null,citation_rate:measured?0:null,questions:measured?2:0,citation_questions:measured?2:0,week_start:measured?'2026-10-12':null,partial:measured,top_competitors:measured?{[evil]:1}:{},trend:Array.from({length:8},(_,i)=>({week:'2026-10-'+String(i+1).padStart(2,'0'),share_of_voice:measured&&i===7?.5:null,questions:measured&&i===7?2:0}))}]));
+await page.route('http://tourfecto.test/**',async route=>{
+const req=route.request(),u=new URL(req.url());let data={};
+if(u.pathname==='/'){await route.fulfill({contentType:'text/html',body:'<!doctype html><meta charset="utf-8">'+fs.readFileSync(process.env.TF_GEO_UI_ARTIFACT||'/tmp/geo-ui.html','utf8')});return;}
+if(req.method()==='POST')posts.push([u.pathname,req.postDataJSON()]);else gets.push(u.pathname+u.search);
+if(u.pathname==='/api/websites')data={websites:[{id:1,main_url:'https://example.com'}]};
+else if(u.pathname.endsWith('/markets'))data={markets:[{id:2,label:'UK – English'},{id:3,label:'Germany – German'}]};
+else if(u.pathname.endsWith('/data'))data={state:measured?'measured_sample':'not_measured',setup_steps:['اربط المزود من الأدمن','راجع الأسئلة','شغّل المجدول'],providers:Object.fromEntries(['openai','gemini','perplexity'].map(p=>[p,{configured:measured,model:p}])),metrics:{providers:providers()},quota:{remaining:300},prompt_set:measured?{version:7,approved_at:'2026-10-17',questions:['Where can I book a Luxor day tour?']}:null,entities:null,answers:measured?[{provider:'openai',checked_at:'2026-10-17',question:evil,mentioned_brand:1,brand_position:2,cited_domain:null,competitors_mentioned:JSON.stringify([{name:evil}]),cited_urls:JSON.stringify(['javascript:alert(1)','https://nilestar.example/tours/luxor']),answer_excerpt:evil}]:[],tasks:measured?[{id:9,status:'needs_review',title:evil,instructions:evil,evidence_json:JSON.stringify({source_url:'https://nilestar.example/tour'})}]:[]};
+else if(u.pathname.endsWith('/generate'))data={questions:Array.from({length:10},(_,i)=>'What is included in Luxor itinerary number '+i+'?')};
+else if(u.pathname.endsWith('/llms'))data={draft:'# Published trips\n'+evil,publication:'مسودة للمراجعة'};
+else if(u.pathname.endsWith('/enqueue'))data={state:'queued'};
+await route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,data})});
+});
+let passed=0;const check=(c,m)=>{if(!c)throw Error(m);passed++;console.log('  ok  '+m);};
+await page.goto('http://tourfecto.test/');await page.locator('#geoStatus').filter({hasText:'not measured'}).waitFor();
+check((await page.locator('#geoSetup').innerText()).includes('الأدمن'),'no provider shows setup steps');
+check(!(await page.locator('#geoCards').innerText()).includes('0.0%'),'unmeasured is not a fabricated zero');
+check(await page.locator('#geoRun').isDisabled()&&!posts.length,'unconfigured page cannot enqueue paid calls');
+await page.locator('summary').filter({hasText:'الأسئلة والموافقة'}).click();await page.click('#geoGenerate');await page.waitForFunction(()=>document.querySelector('#geoQuestions').value.includes('number 9'));
+check(!(await page.locator('#geoApprove').isChecked()),'new questions require explicit approval');
+await page.check('#geoApprove');await page.click('#geoSave');await page.waitForTimeout(80);
+check(posts.some(([p,d])=>p.endsWith('/save')&&d.approved===true&&d.market_id===2&&d.version===0),'question approval sends selected market and version');
+measured=true;await page.click('#geoReload');await page.locator('#geoAnswers').filter({hasText:'nilestar.example'}).waitFor();
+check((await page.locator('#geoCards').innerText()).includes('50.0%')&&(await page.locator('#geoCards').innerText()).includes('0.0%'),'actual measured rates including true zero displayed');
+check((await page.locator('#geoAnswers').innerText()).includes('✓')&&(await page.locator('#geoAnswers').innerText()).includes('مش مقاس'),'answer table distinguishes mentions and unresolved citation');
+check(await page.locator('#geoAnswers a').count()===1&&(await page.locator('#geoAnswers a').getAttribute('href')).startsWith('https://'),'sources only allow HTTP or HTTPS links');
+check(await page.locator('#geoTrend svg').count()===3&&await page.locator('#geoTrend circle').count()===3,'8-week charts show points only for measured weeks');
+check(await page.locator('#geoPage img').count()===0&&!await page.evaluate(()=>window.geoUnsafe),'answers, competitors and tasks are escaped');
+await page.click('#geoTasks [data-task]');await page.waitForTimeout(80);check(posts.some(([p,d])=>p.endsWith('/approve-task')&&d.task_id===9),'task review is explicit scoped action');
+await page.click('#geoRun');await page.locator('#geoStatus').filter({hasText:'اتضاف للطابور'}).waitFor();check(posts.some(([p,d])=>p.endsWith('/enqueue')&&d.market_id===2),'paid check enqueues for chosen market');
+await page.selectOption('#geoMarket','3');await page.waitForTimeout(80);check(gets.some(p=>p.includes('/data?')&&p.includes('market_id=3')),'market selection loads scoped measurements');
+await page.locator('summary').filter({hasText:'مسودة llms.txt'}).click();await page.click('#geoLlms');await page.locator('#geoLlmsDraft').filter({hasText:'Published trips'}).waitFor();check(await page.locator('#geoLlmsDraft img').count()===0,'factual llms draft renders as plain text');
+const source=fs.readFileSync(__dirname+'/../../app/Controllers/AdminController.php','utf8');
+const start=source.indexOf('<h3>قياس ظهور AI</h3>'),end=source.indexOf('<h4 style="margin:18px 0 8px;font-size:13px;color:var(--panel-text-muted);">DataForSEO',start);
+const loadStart=source.indexOf('    async function loadSystemSettings()'),loadEnd=source.indexOf('    window.saveLegalContent',loadStart);
+const saveStart=source.indexOf('    window.saveSystemSettings = async function'),saveEnd=source.indexOf('    async function loadFaqList()',saveStart);
+const adminHtml=source.slice(start,end)+'<div id="sysSettingsAlert"></div><button id="saveGeo" onclick="saveSystemSettings()">حفظ</button><script>const {fetchJSON,toast}=window.Panel;const I18N={"common.updated":"saved"};'+source.slice(loadStart,loadEnd)+source.slice(saveStart,saveEnd)+'loadSystemSettings();</script>';
+const admin=await browser.newPage();admin.on('pageerror',e=>errors.push(e.message));await admin.addInitScript({content:fs.readFileSync(__dirname+'/../../public_html/assets/js/panel.js','utf8')});let saved=null;
+const keys={geo_enabled:'0',geo_monthly_budget_usd:'25',geo_openai_enabled:'0',geo_openai_api_key:'',geo_gemini_enabled:'0',geo_gemini_api_key:'',geo_perplexity_enabled:'0',geo_perplexity_api_key:''};
+await admin.route('http://tourfecto.test/**',async route=>{if(new URL(route.request().url()).pathname==='/admin-fixture'){await route.fulfill({contentType:'text/html',body:'<!doctype html><meta charset="utf-8">'+adminHtml});return;}if(route.request().method()==='PUT')saved=route.request().postDataJSON();await route.fulfill({contentType:'application/json',body:JSON.stringify({success:true,data:{settings:{geo:Object.entries(keys).map(([key,value])=>({key,value,is_secret:key.endsWith('_api_key'),is_set:true}))}}})});});
+await admin.goto('http://tourfecto.test/admin-fixture');await admin.waitForFunction(()=>document.querySelector('#ss_geo_monthly_budget_usd').value==='25');
+check(await admin.locator('input[type=password]').count()===3,'three provider keys use masked admin inputs');
+await admin.fill('#ss_geo_openai_api_key','offline-openai');await admin.fill('#ss_geo_gemini_api_key','offline-google');await admin.fill('#ss_geo_perplexity_api_key','offline-sonar');await admin.selectOption('#ss_geo_enabled','1');await admin.click('#saveGeo');await admin.waitForFunction(()=>document.querySelector('#ss_geo_openai_api_key').value==='');
+check(saved&&Object.keys(keys).every(k=>k in saved)&&saved.geo_enabled==='1'&&saved.geo_gemini_enabled==='0','admin persists all eight fields including disabled providers');
+check(saved.geo_openai_api_key==='offline-openai'&&saved.geo_perplexity_api_key==='offline-sonar'&&await admin.locator('#ss_geo_perplexity_api_key').inputValue()==='','keys submitted once and cleared after save');
+check(errors.length===0,'no browser JavaScript errors: '+errors.join('; '));
+await browser.close();console.log(`\n${passed}/${passed} passed`);
+})().catch(e=>{console.error(e);process.exit(1);});

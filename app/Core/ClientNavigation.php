@@ -11,6 +11,7 @@ class ClientNavigation
                 'automation'=>[$l('إعدادات الأتمتة','Automation settings'),'/automation']]],
             'search'=>[$l('الظهور في البحث','Search visibility'),'search',[
                 'seo_expert'=>[$l('الخطة والتنفيذ','Plan and execution'),'/seo-expert'],
+                'ai_visibility'=>[$l('ظهورك في الذكاء الصناعي','AI visibility'),'/ai-visibility'],
                 'seo_content'=>[$l('محتوى الموقع','Website content'),'/seo-content'],
                 'gbp_content'=>[$l('ملف Google Business','Google Business profile'),'/gbp-content'],
                 'auto_seo'=>['Auto SEO','/auto-seo'],

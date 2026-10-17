@@ -1,6 +1,7 @@
 <?php
 // Generated release map. Rebuild via tools/build_project_classmap.php after code changes.
 return [
+    'AiVisibilityController' => dirname(__DIR__,2).'/app/Controllers/AiVisibilityController.php',
     'AiVisibilityDetector' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityDetector.php',
     'AiVisibilityEvidence' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityEvidence.php',
     'AiVisibilityLedger' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityLedger.php',
@@ -13,6 +14,7 @@ return [
     'GeoLlmsBuilder' => dirname(__DIR__,2).'/app/Services/AiVisibility/GeoLlmsBuilder.php',
     'OpenAiVisibilityProvider' => dirname(__DIR__,2).'/app/Services/AiVisibility/OpenAiVisibilityProvider.php',
     'SonarVisibilityProvider' => dirname(__DIR__,2).'/app/Services/AiVisibility/SonarVisibilityProvider.php',
+    'AiVisibilityCheckJob' => dirname(__DIR__,2).'/app/Jobs/AiVisibilityCheckJob.php',
     'DataForSeoClient' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoClient.php',
     'DataForSeoResearchService' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoResearchService.php',
     'SeoDataLedger' => dirname(__DIR__,2).'/app/Services/Seo/SeoDataLedger.php',
