@@ -9,3 +9,5 @@ add_action('plugins_loaded', static function (): void {
         });
     }
 }, 20);
+
+require_once __DIR__.'/tourfecto-international.php';

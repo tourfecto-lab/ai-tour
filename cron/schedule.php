@@ -98,6 +98,7 @@ return [
         'title' => 'كتابة المقالات ونشرها', 'enabled' => true, 'max_minutes' => 30,
     ],
     'gbp_background_sync' => ['file'=>'gbp_enqueue_background_sync.php','when'=>'0 */6 * * *','group'=>'reputation','title'=>'GBP background sync','enabled'=>true,'max_minutes'=>5],
+    'seo_sitemap_sync' => ['file'=>'seo_sitemap_sync.php','when'=>'40 * * * *','group'=>'seo','title'=>'Opted-in Search Console sitemap sync','enabled'=>true,'max_minutes'=>15],
     'seo_auto_impact' => ['file'=>'seo_auto_impact.php','when'=>'*/10 * * * *','group'=>'seo','title'=>'Automatic SEO task impact monitors','enabled'=>true,'max_minutes'=>5],
     'seo_reports' => [
         'file' => 'seo_scheduled_reports.php', 'when' => '5 * * * *', 'group' => 'seo',

@@ -186,6 +186,12 @@ class GoogleSearchConsoleAPI
     }
 
     /** الـ sitemaps المتسجلة في Search Console للخاصية دي */
+    /** Requires the customer's explicitly granted webmasters scope. */
+    public function submitSitemap(string $property,string $sitemapUrl): array
+    {
+        return $this->makeRequest('PUT','/sites/'.rawurlencode($property).'/sitemaps/'.rawurlencode($sitemapUrl));
+    }
+
     public function listSitemaps(string $property): array
     {
         $r = $this->makeRequest('GET', '/sites/' . rawurlencode($property) . '/sitemaps');

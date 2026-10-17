@@ -1,0 +1,68 @@
+<?php
+/** Offline protocol contracts; real HTTP transports are never used. */
+$root=dirname(__DIR__,2);
+foreach(['International/HreflangService','International/BuilderLanguageService','International/SitemapSubmissionService','Indexing/IndexNowService','Seo/SeoPublicPageReader','SearchConsole/GoogleSearchConsoleAPI','AutoFix/EdgeRules','AutoFix/TourfectoPluginBundle'] as $f)require_once $root.'/app/Services/'.$f.'.php';
+$n=0;$fails=0;function check($c,$m){global $n,$fails;$n++;echo($c?'  ok  ':'  FAIL ').$m."\n";if(!$c)$fails++;}function denied($fn){try{$fn();return false;}catch(Throwable $e){return true;}}
+$map=HreflangService::map(['en'=>'https://travel.example/en','de'=>'https://travel.example/de'],'https://travel.example/');
+check(count($map)===3&&$map['x-default']==='https://travel.example/','explicit approved alternates include the known default landing page');
+check(HreflangService::map(['en'=>'https://travel.example/en'])===[],'one language does not invent translation alternates');
+check(HreflangService::map(['en'=>'https://travel.example/en','de'=>'javascript:alert(1)'])===[],'unsafe alternate URL rejected');
+check(HreflangService::map(['en'=>'https://travel.example/en','../../x'=>'https://travel.example/de'])===[],'invalid language code rejected');
+check(!HreflangService::url('https://user:pass@travel.example/de')&&!HreflangService::url('https://travel.example/de?preview=1'),'credentials and preview query URLs excluded');
+check(HreflangService::language('pt-br')&&HreflangService::language('zh-hant')&&!HreflangService::language('x-default'),'language variants accepted with x-default reserved');
+$source=['language'=>'en','business_name'=>'Confirmed Travel','hero_headline'=>'Visit Luxor','about_text'=>'Founded in 2024','contact'=>['phone'=>'+2012345','address'=>'10 Nile Street'],'tours'=>[['slug'=>'luxor-day','name'=>'Luxor trip','price'=>'150 USD','duration'=>'3 days','image'=>'https://travel.example/photo.jpg','short_description'=>'Visit 2 temples','itinerary'=>[['day'=>1,'title'=>'Day 1','description'=>'Nile view']],'highlights'=>['Temple walk']]]];
+$fields=BuilderLanguageService::fields($source);$translated=$fields;$translated['hero_headline']='Besuchen Sie Luxor';$translated['tours.0.name']='Luxor Reise';
+check(!isset($fields['tours.0.price'],$fields['contact.phone'],$fields['tours.0.slug']),'translation payload excludes prices, contact details and identifiers');
+check(isset($fields['tours.0.itinerary.0.title'],$fields['tours.0.highlights.0']),'confirmed itinerary and supporting text are translatable');
+$out=BuilderLanguageService::apply($source,$translated,'de');
+check(count(array_filter(array_keys($fields),fn($k)=>str_starts_with($k,'__interface.')))>100,'fixed navigation and form labels participate in reviewed translation');
+check($out['language']==='de'&&$out['hero_headline']==='Besuchen Sie Luxor','translation overlays reviewed text');
+check($out['tours'][0]['price']==='150 USD'&&$out['contact']===$source['contact']&&$out['tours'][0]['duration']==='3 days','prices, contact data and operational facts stay unchanged');
+check(denied(fn()=>BuilderLanguageService::validate($source,array_replace($translated,['about_text'=>'Founded in 2025']))),'changed year rejected before human publication');
+check(denied(fn()=>BuilderLanguageService::validate($source,array_replace($translated,['hero_headline'=>'Only 99 dollars']))),'new numeric price claim rejected');
+check(denied(fn()=>BuilderLanguageService::validate($source,array_replace($translated,['hero_headline'=>'<script>x</script>']))),'HTML injection in translation rejected');
+check(denied(fn()=>BuilderLanguageService::validate($source,$translated+['tours.0.price'=>'1 USD'])),'protected keys cannot be introduced');
+$missing=$translated;unset($missing['about_text']);check(denied(fn()=>BuilderLanguageService::validate($source,$missing)),'incomplete translation rejected');
+check(BuilderLanguageService::hash($source)!==BuilderLanguageService::hash(array_replace($source,['about_text'=>'Updated source'])),'source fingerprint invalidates old human approval');
+$alternates=BuilderLanguageService::alternates('https://travel.example','/tours/luxor-day',$source,[['language'=>'de'],['language'=>'ar']]);
+check($alternates['en']==='https://travel.example/en/tours/luxor-day'&&$alternates['ar']==='https://travel.example/ar/tours/luxor-day','per-page language map preserves confirmed product slugs');
+check($alternates['x-default']==='https://travel.example/tours/luxor-day'&&substr_count(HreflangService::html($alternates),'hreflang=')===4,'reciprocal map includes source language and default');
+$key=str_repeat('a',32);check(IndexNowService::keyResponse('/'.$key.'.txt',$key)===$key,'root key response exactly equals configured key');
+check(IndexNowService::keyResponse('/sub/'.$key.'.txt',$key)===null&&IndexNowService::keyResponse('/other.txt',$key)===null,'key response refuses guessed and non-root locations');
+check(IndexNowService::keyResponse('/bad.txt','bad')===null,'invalid key is never served');
+$calls=[];$gets=[];$reader=new SeoPublicPageReader(function($url)use(&$gets,$key){$gets[]=$url;return ['success'=>true,'http_status'=>200,'url'=>$url,'html'=>str_ends_with($url,'.txt')?$key:(str_ends_with($url,'/draft')?'<html><head><meta name="robots" content="noindex"></head></html>':'<html><head></head><body>Published</body></html>')];});
+$service=new IndexNowService($reader,function($request)use(&$calls){$calls[]=$request;return ['status'=>202];});
+$result=$service->submitUrls('travel.example',$key,['https://travel.example/live','https://travel.example/draft']);
+check($result['success']&&$result['submitted']===1&&count($result['skipped'])===1,'IndexNow submits only publicly live indexable pages');
+$body=json_decode($calls[0]['body'],true);check($body['keyLocation']==='https://travel.example/'.$key.'.txt'&&$body['urlList']===['https://travel.example/live'],'IndexNow carries verified customer-domain key location and actual live URLs');
+check($gets[0]===$body['keyLocation'],'key is fetched before URL verification and external submission');
+$before=count($calls);check(!$service->submitUrls('travel.example',$key,['https://attacker.example/page'])['success']&&count($calls)===$before,'offsite URLs never reach IndexNow');
+check(!$service->submitUrls('travel.example',$key,['http://travel.example/page'])['success'],'HTTP URLs rejected');
+check(!$service->submitUrls('travel.example',$key,['https://travel.example/live'],'https://platform.example/'.$key.'.txt')['success'],'platform-host key file cannot verify customer domain');
+$bad=new IndexNowService(new SeoPublicPageReader(fn($url)=>['success'=>true,'http_status'=>200,'html'=>'wrong-key']),function()use(&$calls){$calls[]='BAD';});
+check(!$bad->submitUrls('travel.example',$key,['https://travel.example/live'])['success']&&count($calls)===$before,'wrong customer key blocks transport');
+check(!$bad->submitToAllEngines('travel.example',$key,['https://travel.example/live'])['success']&&count($calls)===$before,'all-engines API cannot bypass key validation');
+foreach(['404','redirect','canonical','header-noindex'] as $mode){
+ $noLive=new IndexNowService(new SeoPublicPageReader(function($url)use($key,$mode){if(str_ends_with($url,'.txt'))return ['success'=>true,'http_status'=>200,'html'=>$key,'url'=>$url];return ['success'=>$mode!=='404','http_status'=>$mode==='404'?404:200,'url'=>$mode==='redirect'?'https://travel.example/login':$url,'robots'=>$mode==='header-noindex'?'noindex':'','html'=>$mode==='canonical'?'<html><link rel="canonical" href="https://travel.example/other"></html>':'<html>Live?</html>'];}),function(){throw new RuntimeException('Transport must not run');});
+ check(!$noLive->submitSingle('travel.example',$key,'https://travel.example/live')['success'],'IndexNow excludes '.$mode.' pages');
+}
+check(!SitemapSubmissionService::granted('https://www.googleapis.com/auth/webmasters.readonly')&&SitemapSubmissionService::granted('openid '.SitemapSubmissionService::SCOPE),'full exact scope required, readonly substring insufficient');
+check(SitemapSubmissionService::covers('sc-domain:travel.example','https://de.travel.example/sitemap.xml'),'domain property permits owned subdomain');
+check(!SitemapSubmissionService::covers('sc-domain:travel.example','https://travel.example.attacker.test/sitemap.xml'),'lookalike domain property rejected');
+check(SitemapSubmissionService::covers('https://travel.example/en/','https://travel.example/en/sitemap.xml')&&!SitemapSubmissionService::covers('https://travel.example/en/','https://travel.example/english/sitemap.xml'),'URL-prefix property respects path boundary');
+$requests=[];$api=new GoogleSearchConsoleAPI('offline-token',function($r)use(&$requests){$requests[]=$r;return ['http_code'=>200,'body'=>$r['method']==='PUT'?'':json_encode(['sitemap'=>[['path'=>'https://travel.example/sitemap.xml','errors'=>2,'warnings'=>1,'isPending'=>true]]])];});
+$xmlReader=new SeoPublicPageReader(fn($url)=>['success'=>true,'http_status'=>200,'url'=>$url,'html'=>'<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://travel.example/</loc></url></urlset>']);
+$r=SitemapSubmissionService::submit($api,'https://travel.example/','https://travel.example/sitemap.xml',SitemapSubmissionService::SCOPE,true,$xmlReader);
+check($r['success']&&$r['sitemaps'][0]['errors']===2&&$r['sitemaps'][0]['warnings']===1,'fake GSC submission preserves actual errors, warnings and pending state');
+check($requests[0]['method']==='PUT'&&str_contains($requests[0]['url'],rawurlencode('https://travel.example/sitemap.xml'))&&$requests[1]['method']==='GET','real GSC client URL-encodes sitemap path, then lists results');
+$before=count($requests);$r=SitemapSubmissionService::submit($api,'https://travel.example/','https://travel.example/sitemap.xml','readonly',true,$xmlReader);check(!$r['success']&&count($requests)===$before,'readonly token never attempts sitemap write');
+$r=SitemapSubmissionService::submit($api,'https://travel.example/','https://travel.example/sitemap.xml',SitemapSubmissionService::SCOPE,false,$xmlReader);check(!$r['success']&&count($requests)===$before,'full scope without customer opt-in never writes');
+$r=SitemapSubmissionService::submit($api,'https://other.example/','https://travel.example/sitemap.xml',SitemapSubmissionService::SCOPE,true,$xmlReader);check(!$r['success']&&count($requests)===$before,'wrong selected property blocks submit');
+$invalidXml=new SeoPublicPageReader(fn()=>['success'=>true,'http_status'=>200,'html'=>'<!DOCTYPE x [<!ENTITY leak SYSTEM "file:///etc/passwd">]><urlset>&leak;</urlset>']);
+$r=SitemapSubmissionService::submit($api,'https://travel.example/','https://travel.example/sitemap.xml',SitemapSubmissionService::SCOPE,true,$invalidXml);check(!$r['success']&&count($requests)===$before,'DTD and entity XML is refused before submission');
+$failure=new GoogleSearchConsoleAPI('offline',fn()=>['http_code'=>403,'body'=>'{"error":{"message":"Insufficient permission"}}']);
+$r=SitemapSubmissionService::submit($failure,'https://travel.example/','https://travel.example/sitemap.xml',SitemapSubmissionService::SCOPE,true,$xmlReader);check(!$r['success']&&str_contains($r['error'],'403')&&!$r['listing_ok'],'fake GSC permission error remains visible');
+$bundle=TourfectoPluginBundle::files(1,'https://platform.example','travel.example');
+check(isset($bundle['tourfecto-seo/modules/tourfecto-international.php'])&&str_contains($bundle['tourfecto-seo/tourfecto-seo.php'],'Version: 3.7.0'),'updated customer plugin contains multilingual and key routes');
+check(str_contains(file_get_contents($root.'/app/Controllers/SearchConsoleController.php'),"'allow_sitemap_submit'=>\$this->allowSitemapSubmit"),'write opt-in travels inside signed OAuth state');
+echo "\n".($n-$fails)."/$n passed\n";exit($fails?1:0);

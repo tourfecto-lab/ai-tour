@@ -819,4 +819,8 @@ return [
     'LocalSeoController' => dirname(__DIR__,2).'/app/Controllers/LocalSeoController.php',
     'SeoImpactService' => dirname(__DIR__,2).'/app/Services/SeoImpact/SeoImpactService.php',
     'SeoImpactCollectJob' => dirname(__DIR__,2).'/app/Jobs/SeoImpactCollectJob.php',
+    'HreflangService' => dirname(__DIR__,2).'/app/Services/International/HreflangService.php',
+    'BuilderLanguageService' => dirname(__DIR__,2).'/app/Services/International/BuilderLanguageService.php',
+    'SitemapSubmissionService' => dirname(__DIR__,2).'/app/Services/International/SitemapSubmissionService.php',
+    'InternationalSeoController' => dirname(__DIR__,2).'/app/Controllers/InternationalSeoController.php',
 ];

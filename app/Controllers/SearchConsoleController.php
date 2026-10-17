@@ -26,7 +26,7 @@ class SearchConsoleController extends Controller
         return $this->user['id'] ?? null;
     }
 
-    private function oauthClient(): GoogleOAuthClient
+    private function oauthClient(bool $allowSubmit=false): GoogleOAuthClient
     {
         // env() also reads $_ENV/$_SERVER when putenv() is disabled on hosting.
         $redirectUri = trim((string) (defined('GOOGLE_SEARCH_CONSOLE_REDIRECT_URI')
@@ -40,7 +40,7 @@ class SearchConsoleController extends Controller
 
         // An empty string deliberately fails configuration instead of falling
         // back to GoogleOAuthClient's default Business Profile callback.
-        return new GoogleOAuthClient(GoogleOAuthClient::SCOPE_SEARCH_CONSOLE, $redirectUri);
+        return new GoogleOAuthClient($allowSubmit?GoogleOAuthClient::SCOPE_SEARCH_CONSOLE_WRITE:GoogleOAuthClient::SCOPE_SEARCH_CONSOLE, $redirectUri);
     }
 
     private function renderOAuthError(string $message): void
@@ -58,12 +58,20 @@ class SearchConsoleController extends Controller
     // ============================================
     // GET /search-console/connect/{website_id} - يبدأ تدفّق OAuth
     // ============================================
-    private static function returnPath($path): string{return in_array($path,['/seo-expert','/business-hub','/websites'],true)?$path:'/websites';}
+    private static function returnPath($path): string{return in_array($path,['/seo-expert','/business-hub','/websites','/international-seo'],true)?$path:'/websites';}
     private static function propertyMatches(string $property,string $url): bool{
         if(!preg_match('#^https?://#i',$url))$url='https://'.$url;$host=strtolower((string)parse_url($url,PHP_URL_HOST));$host=preg_replace('/^www\./','',$host);if($host==='')return false;
         if(str_starts_with($property,'sc-domain:')){$domain=strtolower(substr($property,10));return $host===$domain||str_ends_with($host,'.'.$domain);}
         $p=parse_url($property);if(!$p||!in_array($p['scheme']??'', ['http','https'],true)||!empty($p['user'])||!empty($p['pass']))return false;
         return preg_replace('/^www\./','',strtolower($p['host']??''))===$host;
+    }
+    private bool $allowSitemapSubmit=false;
+    public function allowSitemapSubmit(array $params=[]): array {
+        if(!$this->isAuthenticated())return $this->error('Unauthorized',401);
+        if($e=$this->verifyCsrf())return $e;
+        if((string)$this->get('allow_sitemap_submit','')!=='1')return $this->error('Confirm Allow sitemap submit first',422);
+        if(!$this->db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_sitemap_permissions'"))return $this->error('Apply Phase 6 migration first',503);
+        $this->allowSitemapSubmit=true;return $this->connect($params);
     }
     public function connect(array $params = []): array
     {
@@ -79,7 +87,7 @@ class SearchConsoleController extends Controller
             exit;
         }
 
-        $oauth = $this->oauthClient();
+        $oauth = $this->oauthClient($this->allowSitemapSubmit);
         if (!$oauth->isConfigured()) {
             $this->renderOAuthError('ربط Search Console لسه مش مفعّل من إدارة النظام (بيانات OAuth ناقصة في إعدادات السيرفر - راجع GOOGLE_SEARCH_CONSOLE_REDIRECT_URI في .env).');
             exit;
@@ -88,7 +96,7 @@ class SearchConsoleController extends Controller
         $nonce = bin2hex(random_bytes(16));
         $_SESSION['gsc_oauth_nonce'] = $nonce;
 
-        $state = OAuthState::issue(['aud' => 'search_console', 'nonce' => $nonce, 'website_id' => $websiteId,'return_to'=>self::returnPath($this->get('return_to','/websites'))], (int) ($this->user['id'] ?? 0));
+        $state = OAuthState::issue(['aud' => 'search_console', 'allow_sitemap_submit'=>$this->allowSitemapSubmit, 'nonce' => $nonce, 'website_id' => $websiteId,'return_to'=>self::returnPath($this->get('return_to','/websites'))], (int) ($this->user['id'] ?? 0));
 
         header('Location: ' . $oauth->buildAuthUrl($state));
         exit;
@@ -126,7 +134,7 @@ class SearchConsoleController extends Controller
 
         $websiteId = (int) ($decodedState['website_id'] ?? 0);
 
-        $oauth = $this->oauthClient();
+        $oauth = $this->oauthClient(!empty($decodedState['allow_sitemap_submit']));
         $tokenResult = $oauth->exchangeCodeForTokens($code);
 
         if (!$tokenResult['success']) {
@@ -137,6 +145,8 @@ class SearchConsoleController extends Controller
         // بنخزن التوكنات مؤقتًا في الجلسة لحد ما العميل يختار الـ site بتاعه
         $_SESSION['gsc_oauth_temp'] = [
             'return_to'=>self::returnPath($decodedState['return_to']??'/websites'),
+            'allow_sitemap_submit'=>!empty($decodedState['allow_sitemap_submit']),
+            'granted_scope'=>(string)($tokenResult['scope']??''),
             'issued_at' => time(),
             'website_id' => $websiteId,
             'access_token' => $tokenResult['access_token'],
@@ -290,6 +300,12 @@ JS;
             if(empty($temp['refresh_token'])&&$oldRefresh)$connection->setAttribute('refresh_token',$oldRefresh);
             if(!$connection->save())throw new RuntimeException('Connection save failed');
 
+            if($this->db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_sitemap_permissions'")){
+            // Missing write consent or a reused readonly refresh token never enables submissions.
+            $allow=!empty($temp['allow_sitemap_submit'])&&SitemapSubmissionService::granted((string)($temp['granted_scope']??''))&&!empty($temp['refresh_token']);
+            $this->db->exec('INSERT INTO seo_sitemap_permissions(website_id,user_id,connection_id,granted_scope,enabled,updated_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE connection_id=VALUES(connection_id),granted_scope=VALUES(granted_scope),enabled=VALUES(enabled),result_json=NULL,checked_at=NULL,updated_at=UTC_TIMESTAMP()',[(int)$temp['website_id'],(int)$this->userId(),(int)$connection->getAttribute('id'),(string)($temp['granted_scope']??''),$allow?1:0]);
+            if($allow)try{(new SitemapSubmissionService($this->db))->run((int)$this->userId(),(int)$temp['website_id']);}catch(Throwable $e){Logger::warning('Initial sitemap submission pending',['website_id'=>$temp['website_id']]);}
+            }
             unset($_SESSION['gsc_oauth_temp']);
 
             $this->log('Google Search Console Connected', ['website_id' => $temp['website_id'], 'site_url' => $siteUrl]);
@@ -329,6 +345,8 @@ JS;
         $connections[0]->setAttribute('access_token', null);
         $connections[0]->setAttribute('refresh_token', null);
         $connections[0]->save();
+
+        if($this->db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_sitemap_permissions'"))$this->db->exec('UPDATE seo_sitemap_permissions SET enabled=0,updated_at=UTC_TIMESTAMP() WHERE website_id=? AND user_id=?',[$websiteId,(int)$this->userId()]);
 
         $this->log('Google Search Console Disconnected', ['website_id' => $websiteId]);
 

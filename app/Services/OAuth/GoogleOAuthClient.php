@@ -22,6 +22,7 @@ class GoogleOAuthClient
     /** الافتراضي (Google Business Profile) - محفوظ زي ما هو عشان الاستدعاءات القديمة متتكسرش */
     public const SCOPE_BUSINESS = 'https://www.googleapis.com/auth/business.manage';
     /** قراءة بيانات الأداء/الفهرسة من Search Console - readonly، مش محتاج تعديل */
+    public const SCOPE_SEARCH_CONSOLE_WRITE = 'https://www.googleapis.com/auth/webmasters';
     public const SCOPE_SEARCH_CONSOLE = 'https://www.googleapis.com/auth/webmasters.readonly';
     /** إدارة كاملة لحسابات/حملات Google Ads (سحب حملات، إنشاء، تعديل ميزانية...) */
     public const SCOPE_ADS = 'https://www.googleapis.com/auth/adwords';

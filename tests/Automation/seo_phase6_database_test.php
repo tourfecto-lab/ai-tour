@@ -1,0 +1,60 @@
+<?php
+/** Destructive fixture operations require geo_database's explicit disposable-database guard. */
+require __DIR__.'/fixtures/geo_database.php';
+define('APP_URL','https://platform.example');
+$n=0;$fails=0;function check($c,$m){global $n,$fails;$n++;echo($c?'  ok  ':'  FAIL ').$m."\n";if(!$c)$fails++;}function denied($fn){try{$fn();return false;}catch(Throwable $e){return true;}}
+$migration=file_get_contents($root.'/database/migrations/2026_10_17_000005_international_indexing.sql');$pdo->exec($migration);$pdo->exec($migration);
+foreach(['builder_language_versions','seo_sitemap_permissions'] as $table)$pdo->exec('DELETE FROM '.$table);
+// No customer database is accepted by the fixture guard above.
+$pdo->exec('DROP TABLE IF EXISTS generated_websites');$pdo->exec('CREATE TABLE generated_websites(id INT PRIMARY KEY,user_id INT,slug VARCHAR(100),status VARCHAR(20),content_json MEDIUMTEXT,custom_domain VARCHAR(255) NULL,updated_at DATETIME NULL)');
+$pdo->exec('DROP TABLE IF EXISTS platform_connections');$pdo->exec("CREATE TABLE platform_connections(id INT PRIMARY KEY,user_id INT,website_id INT,platform VARCHAR(100),status VARCHAR(20),external_location_id VARCHAR(255))");
+$source=['language'=>'en','business_name'=>'Confirmed Travel','hero_headline'=>'Visit Luxor','about_text'=>'Founded in 2024','tours'=>[['slug'=>'luxor','name'=>'Luxor trip','price'=>'150 USD','short_description'=>'Visit 2 temples']],'rooms'=>[['slug'=>'nile-room','name'=>'Nile room','price'=>'100 USD']]];
+$pdo->prepare("INSERT INTO generated_websites VALUES(1,1,'fixture','published',?,NULL,UTC_TIMESTAMP())")->execute([json_encode($source)]);
+$service=new BuilderLanguageService($db);$fields=BuilderLanguageService::fields($source);$fields['hero_headline']='Besuchen Sie Luxor';$labels=array_keys(BuilderLanguageService::interfaceLabels());$labelIndex=array_search('احجز الآن',$labels,true);$fields['__interface.'.$labelIndex]='Jetzt buchen';$hash=BuilderLanguageService::hash($source);
+check($service->approved(1,$source)===[],'no translation becomes public before explicit review');
+$service->save(1,1,$source,'de',$fields,$hash,false);check(count($service->versions(1,$source))===1&&$service->approved(1,$source)===[],'saved draft persists but is excluded from public languages');
+check(denied(fn()=>$service->save(1,2,$source,'ar',$fields,$hash,true)),'service denies publishing a foreign-owned builder site');
+check(denied(fn()=>$service->save(1,1,$source,'de',$fields,str_repeat('0',64),true)),'stale source hash cannot publish');
+$service->save(1,1,$source,'de',$fields,$hash,true);$approved=$service->approved(1,$source);
+check(count($approved)===1&&(int)$approved[0]['reviewed_by']===1&&!empty($approved[0]['confirmed_at']),'human source confirmation and review attribution persist');
+$service->save(1,1,$source,'de',$fields,$hash,true);check(count($service->approved(1,$source))===1,'repeat review updates one language version idempotently');
+// Invoke production overlay and output callback without controller constructor authentication side effects.
+$rc=new ReflectionClass(WebsiteBuilderController::class);$controller=$rc->newInstanceWithoutConstructor();$prop=new ReflectionProperty(Controller::class,'db');$prop->setValue($controller,$db);
+$website=new GeneratedWebsite(['id'=>1,'user_id'=>1,'slug'=>'fixture','status'=>'published','content_json'=>json_encode($source)]);
+$method=$rc->getMethod('internationalContent');
+$controller=$rc->newInstanceWithoutConstructor();$prop->setValue($controller,$db);ob_start();$content=$method->invoke($controller,$website,['slug'=>'fixture','language'=>'de','tourSlug'=>'luxor']);echo '<html><head><title>Existing theme</title></head><body><a href="/sites/fixture/tours/luxor">Trip</a><form action="/sites/fixture/tours/luxor/book"></form></body></html>';ob_end_flush();$html=ob_get_clean();
+check($rc->getMethod('siteUi')->invoke($controller,'احجز الآن')==='Jetzt buchen','actual navigation and booking labels use the reviewed language rather than the English fallback');
+check($content['hero_headline']==='Besuchen Sie Luxor'&&$content['tours'][0]['price']==='150 USD','production builder overlays only reviewed translation and keeps price');
+check(str_contains($html,'hreflang="de"')&&str_contains($html,'hreflang="x-default"')&&str_contains($html,'/en/tours/luxor'),'production public head contains reciprocal language and x-default map');
+check(str_contains($html,'href="/sites/fixture/de/tours/luxor"')&&str_contains($html,'action="/sites/fixture/tours/luxor/book"'),'translated navigation preserves existing booking action');
+$attrs=$rc->getMethod('siteLangAttrs')->invoke($controller,['language'=>'zh-hant']);check($attrs[0]==='zh-hant','builder HTML language preserves reviewed BCP47 script code');
+check(str_contains($html,'<title>Existing theme</title>')&&str_contains($html,'rel="canonical" href="https://platform.example/sites/fixture/de/tours/luxor"'),'translated route retains theme and supplies correct canonical');
+(new ReflectionProperty(WebsiteBuilderController::class,'reviewedInterface'))->setValue($controller,['احجز الآن'=>"Jetzt ' \" buchen"]);
+$label=$rc->getMethod('siteUi')->invoke($controller,'احجز الآن');$jsLabel=$rc->getMethod('siteJs')->invoke($controller,'احجز الآن');
+check(str_contains($label,'&#039;')&&!str_contains($jsLabel,"'")&&!str_contains($jsLabel,'"'),'reviewed interface quotes are escaped separately for HTML and inline JavaScript');
+$changed=array_replace($source,['about_text'=>'Changed in 2026']);$pdo->prepare('UPDATE generated_websites SET content_json=? WHERE id=1')->execute([json_encode($changed)]);
+check($service->approved(1,$changed)===[]&&!$service->versions(1,$changed)[0]['current'],'source edit invalidates old public translation');
+check(denied(fn()=>$service->save(1,1,$source,'de',$fields,$hash,true)),'old original snapshot cannot be used to approve after edit');
+$pdo->prepare('UPDATE generated_websites SET content_json=? WHERE id=1')->execute([json_encode($source)]);
+$service->save(1,1,$source,'de',$fields,$hash,false);check($service->approved(1,$source)===[],'editing published language back to draft clears approval');$service->save(1,1,$source,'de',$fields,$hash,true);
+$process=proc_open(['php',__DIR__.'/fixtures/phase6_sitemap.php'],[1=>['pipe','w'],2=>['pipe','w']],$pipes);$xml=stream_get_contents($pipes[1]);$error=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);$code=proc_close($process);
+$doc=new DOMDocument();$valid=@$doc->loadXML($xml,LIBXML_NONET|LIBXML_NOERROR|LIBXML_NOWARNING);
+check($code===0&&$valid,'production sitemap handler returns valid XML');
+check(str_contains($xml,'/sites/fixture/de/tours/luxor</loc>')&&str_contains($xml,'/sites/fixture/en/rooms/nile-room</loc>'),'production sitemap includes original and reviewed language URLs for all product pages');
+check(!str_contains($xml,'/ar/'),'sitemap never guesses an unreviewed language');
+if($code!==0||!$valid)echo 'Child sitemap: '.substr($xml,0,1000).$error.PHP_EOL;
+$pdo->exec("INSERT INTO platform_connections VALUES(101,1,1,'google_search_console','connected','https://example.com/')");
+$pdo->prepare('INSERT INTO seo_sitemap_permissions(website_id,user_id,connection_id,granted_scope,enabled,updated_at) VALUES(1,1,101,?,1,UTC_TIMESTAMP())')->execute([SitemapSubmissionService::SCOPE]);
+$calls=[];$api=new GoogleSearchConsoleAPI('offline',function($r)use(&$calls){$calls[]=$r;return ['http_code'=>200,'body'=>$r['method']==='PUT'?'':'{"sitemap":[{"path":"https://example.com/sitemap.xml","errors":3}]}'];});
+$reader=new SeoPublicPageReader(fn($url)=>['success'=>true,'http_status'=>200,'url'=>$url,'html'=>'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>']);
+$sync=new SitemapSubmissionService($db,fn()=>[$api,'https://example.com/'],$reader);
+$r=$sync->run(1,1);check($r['success']&&count($calls)===2,'granted connection automatically submits verified default sitemap');
+$stored=$pdo->query('SELECT * FROM seo_sitemap_permissions')->fetch(PDO::FETCH_ASSOC);check($stored['sitemap_url']==='https://example.com/sitemap.xml'&&json_decode($stored['result_json'],true)['sitemaps'][0]['errors']===3,'submission errors and exact customer sitemap persist for UI');
+$sync->run(1,1);check(count(array_filter($calls,fn($r)=>$r['method']==='PUT'))===1,'automatic repeat refresh lists errors without resubmitting same accepted sitemap');
+check($sync->daily()===0,'same-day scheduled sync is idempotent');
+check($sync->run(2,1)['state']==='permission_required','foreign user cannot use another customer sitemap grant');
+check(denied(fn()=>$sync->run(1,1,'https://attacker.example/sitemap.xml',true)),'custom sitemap must remain on exact customer domain');
+$pdo->exec('UPDATE seo_sitemap_permissions SET enabled=0');$before=count($calls);check($sync->run(1,1)['state']==='permission_required'&&count($calls)===$before,'disabling submission blocks all provider calls');
+$pdo->exec('UPDATE seo_sitemap_permissions SET enabled=1,connection_id=999');check($sync->run(1,1)['state']==='permission_required','grant does not transfer to a replacement connection');
+$pdo->exec('UPDATE seo_sitemap_permissions SET connection_id=101');$pdo->exec("UPDATE platform_connections SET status='disconnected'");check($sync->run(1,1)['state']==='permission_required','disconnected GSC never submits');
+echo "\n".($n-$fails)."/$n passed\n";exit($fails?1:0);

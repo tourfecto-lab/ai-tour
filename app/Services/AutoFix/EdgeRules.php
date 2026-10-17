@@ -189,6 +189,10 @@ class EdgeRules
             unset($fields,$value);
             if ($pageRules) $rules['page_rules']=$pageRules;
         }
+        $hasKey=$db->query("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='websites' AND column_name='indexnow_key'");
+        $keyRows=$hasKey?$db->query('SELECT indexnow_key,indexnow_enabled FROM websites WHERE id=?',[$websiteId]):[];
+        $key=(string)($keyRows[0]['indexnow_key']??'');
+        if(!empty($keyRows[0]['indexnow_enabled'])&&preg_match('/^[a-zA-Z0-9-]{8,128}$/D',$key))$rules['indexnow_key']=$key;
         ksort($rules);
         return $rules;
     }
@@ -775,6 +779,12 @@ function tf_edge_page($title, $description, $canonical, $main, $jsonld = '', $im
 
 function tf_edge_articles_route()
 {
+    $key=(string)(tf_edge_rules()['indexnow_key']??'');
+    if(preg_match('/^[a-zA-Z0-9-]{8,128}$/D',$key) && tf_edge_path()==='/'.$key.'.txt'){
+        if(!in_array($_SERVER['REQUEST_METHOD']??'GET',['GET','HEAD'],true)){http_response_code(405);exit;}
+        http_response_code(200);header('Content-Type: text/plain; charset=utf-8');header('X-Content-Type-Options: nosniff');header('Cache-Control: public, max-age=120');
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='HEAD')echo $key;exit;
+    }
     $articles = tf_edge_rules()['articles'] ?? [];
     if (!is_array($articles) || !$articles) {
         return;

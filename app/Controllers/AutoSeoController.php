@@ -515,8 +515,8 @@ class AutoSeoController extends Controller
             body: JSON.stringify({ website_id: currentWebsiteId, urls })
         });
         if (!res.success) { toast(res.error || 'فشل الإرسال', 'error'); return; }
-        document.getElementById('aseoSubmitResult').textContent = 'تم إرسال ' + urls.length + ' رابط (HTTP ' + res.data.status + ')';
-        toast('تم الإرسال للفهرسة الفورية', 'success');
+        document.getElementById('aseoSubmitResult').textContent = 'قُبل إرسال ' + res.data.submitted + ' رابط، واستُبعد ' + (res.data.skipped || []).length + ' رابط غير متحقق منه (HTTP ' + res.data.status + ')';
+        toast('قُبل الإشعار؛ الإرسال لا يضمن الفهرسة', 'success');
     };
 
     // ---------- SEO A/B ----------

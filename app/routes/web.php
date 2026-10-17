@@ -175,6 +175,8 @@ $router->get('/website-builder', 'WebsiteBuilderController', 'index', ['AuthMidd
 $router->get('/dashboard/sites/{id}', 'SiteDashboardController', 'index', ['AuthMiddleware']);
 $router->get('/sites/{slug}/sitemap.xml', 'WebsiteBuilderController', 'siteSitemap');
 $router->get('/sites/{slug}/robots.txt', 'WebsiteBuilderController', 'siteRobots');
+$router->get('/sites/{slug}/{language}/tours/{tourSlug}', 'WebsiteBuilderController', 'showTourDetail');
+$router->get('/sites/{slug}/{language}/rooms/{roomSlug}', 'WebsiteBuilderController', 'showRoomDetail');
 $router->get('/sites/{slug}', 'WebsiteBuilderController', 'showPublicSite');
 $router->get('/sites/{slug}/tours/{tourSlug}', 'WebsiteBuilderController', 'showTourDetail');
 $router->get('/sites/{slug}/rooms/{roomSlug}', 'WebsiteBuilderController', 'showRoomDetail');
@@ -416,3 +418,9 @@ $router->get('/business-hub','BusinessHubController','index',['AuthMiddleware'])
 $router->get('/admin/seo-markets', 'SeoDataController', 'index', ['AuthMiddleware','AdminMiddleware']);
 
 $router->get('/local-seo','LocalSeoController','index',['AuthMiddleware']);
+
+$router->get('/sites/{slug}/{language}', 'WebsiteBuilderController', 'showPublicSite');
+
+$router->post('/search-console/allow-sitemap-submit/{website_id}','SearchConsoleController','allowSitemapSubmit',['AuthMiddleware']);
+
+$router->get('/international-seo','InternationalSeoController','index',['AuthMiddleware']);

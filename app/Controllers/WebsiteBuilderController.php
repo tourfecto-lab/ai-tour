@@ -890,13 +890,60 @@ HTML;
     }
 
     /** لغة واتجاه الصفحة بناءً على اللغة اللي اختارها العميل وقت الإنشاء */
+    private string $translationLanguage='';
+    private function internationalContent(GeneratedWebsite $website,array $params): array
+    {
+        $source=$website->getContent();$service=new BuilderLanguageService($this->db);
+        $approved=$service->approved((int)$website->getAttribute('id'),$source);
+        $language=(string)($params['language']??'');
+        $base=$this->publicSiteUrl((string)$params['slug'],$website);
+        $suffix=isset($params['tourSlug'])?'/tours/'.rawurlencode($params['tourSlug']):(isset($params['roomSlug'])?'/rooms/'.rawurlencode($params['roomSlug']):'');
+        $content=$source;
+        if($language!==''){
+            $match=null;foreach($approved as $r)if($r['language']===$language)$match=$r;
+            if(!$match && $language!==BuilderLanguageService::sourceLanguage($source)){http_response_code(404);echo 'Reviewed language version unavailable';exit;}
+            $content=$match?BuilderLanguageService::apply($source,json_decode($match['fields_json'],true,64,JSON_THROW_ON_ERROR),$language):$source;
+            $this->translationLanguage=$language;
+        }
+        $this->reviewedInterface=$content['_reviewed_interface']??[];
+        $alternates=BuilderLanguageService::alternates($base,$suffix,$source,$approved);
+        $tags=HreflangService::html($alternates);
+        $switcher='';foreach($alternates as $code=>$url)if($code!=='x-default')$switcher.='<a href="'.htmlspecialchars($url,ENT_QUOTES,'UTF-8').'" lang="'.htmlspecialchars($code,ENT_QUOTES,'UTF-8').'" style="padding:8px">'.strtoupper(htmlspecialchars($code,ENT_QUOTES,'UTF-8')).'</a>';
+        if($switcher!=='')$switcher='<nav aria-label="Languages" style="display:flex;justify-content:center;gap:8px">'.$switcher.'</nav>';
+        $sitePath='/sites/'.rawurlencode((string)$params['slug']);
+        // Keep booking/action URLs unchanged. Localize navigation links only.
+        ob_start(static function(string $html)use($tags,$switcher,$language,$base,$sitePath,$suffix):string {
+            if($tags!=='')$html=preg_replace('~</head>~i',$tags.'</head>',$html,1);
+            if($switcher!=='')$html=preg_replace_callback('~<body\b[^>]*>~i',static fn($m)=>$m[0].$switcher,$html,1);
+            if($language!==''){
+                $html=preg_replace_callback('~(<a\b[^>]*\bhref=["\'])([^"\']+)(["\'])~i',static function($m)use($base,$language,$sitePath){
+                    $u=$m[2];foreach([$base,$sitePath] as $prefix)if($u===$prefix||str_starts_with($u,$prefix.'/')||str_starts_with($u,$prefix.'#')){
+                        $tail=substr($u,strlen($prefix));
+                        if($tail===''||str_starts_with($tail,'#')||preg_match('~^/(?:tours|rooms)/[^/?#]+(?:#[^?]*)?$~',$tail))return $m[1].$prefix.'/'.$language.$tail.$m[3];
+                    }return $m[0];
+                },$html);
+                // Room templates historically omit a canonical; supply the reviewed URL.
+                if(!preg_match('~<link\b[^>]*rel=["\']canonical["\']~i',$html))$html=str_ireplace('</head>','<link rel="canonical" href="'.htmlspecialchars(rtrim($base,'/').'/'.$language.$suffix,ENT_QUOTES,'UTF-8').'">'.'</head>',$html);
+            }return $html;
+        });
+        return $content;
+    }
     private string $publicSiteLanguage='en';
-    private function siteUi(string $text): string { return SiteInterfaceLanguage::text($text,$this->publicSiteLanguage); }
+    private array $reviewedInterface=[];
+    private function siteUi(string $text): string {
+        if($this->reviewedInterface){$safe=array_map(static fn($v)=>htmlspecialchars($v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'),$this->reviewedInterface);return $safe[$text]??strtr($text,$safe);}
+        return SiteInterfaceLanguage::text($text,$this->publicSiteLanguage);
+    }
+
+    private function siteJs(string $text): string {
+        $raw=$this->reviewedInterface?($this->reviewedInterface[$text]??strtr($text,$this->reviewedInterface)):SiteInterfaceLanguage::text($text,$this->publicSiteLanguage);
+        return substr(json_encode($raw,JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR),1,-1);
+    }
 
     private function siteLangAttrs(array $content): array
     {
         $lang = strtolower((string) ($content['language'] ?? 'en'));
-        if (!preg_match('/^[a-z]{2}(?:-[a-z]{2})?$/D', $lang)) $lang='en';
+        if (!HreflangService::language($lang)) $lang='en';
         $this->publicSiteLanguage=$lang;
         return [$lang, in_array(explode('-', $lang)[0], ['ar','he','fa','ur'], true) ? 'rtl' : 'ltr'];
     }
@@ -1010,7 +1057,7 @@ HTML;
             f.addEventListener('submit', function (e) {
                 e.preventDefault();
                 msg.className = 'ws-booking-msg';
-                msg.textContent = '{$this->siteUi('جاري إرسال التقييم')}...';
+                msg.textContent = '{$this->siteJs('جاري إرسال التقييم')}...';
                 var payload = {};
                 new FormData(f).forEach(function (value, key) { payload[key] = value; });
                 fetch(f.getAttribute('data-action'), {
@@ -1021,15 +1068,15 @@ HTML;
                 .then(function (res) {
                     if (res.success) {
                         msg.className = 'ws-booking-msg ws-ok';
-                        msg.textContent = '{$this->siteUi('شكرًا لتقييمك')}! {$this->siteUi('هيظهر بعد مراجعة صاحب الموقع')}';
+                        msg.textContent = '{$this->siteJs('شكرًا لتقييمك')}! {$this->siteJs('هيظهر بعد مراجعة صاحب الموقع')}';
                         f.querySelector('textarea[name="comment"]').value = '';
                     } else {
                         msg.className = 'ws-booking-msg ws-error';
-                        msg.textContent = res.error || '{$this->siteUi('حصل خطأ، جرب تاني')}';
+                        msg.textContent = res.error || '{$this->siteJs('حصل خطأ، جرب تاني')}';
                     }
                 }).catch(function () {
                     msg.className = 'ws-booking-msg ws-error';
-                    msg.textContent = '{$this->siteUi('حصل خطأ، جرب تاني')}';
+                    msg.textContent = '{$this->siteJs('حصل خطأ، جرب تاني')}';
                 });
             });
         })();
@@ -1066,14 +1113,14 @@ HTML;
         }
 
         WhatsAppStudioService::captureQuery((int)$website->getAttribute('id'),(int)$website->getAttribute('user_id'));
-        $c = $website->getContent();
+        $c = $this->internationalContent($website,$params);
         $industry = $c['industry'] ?? 'tours';
 
         // Phase 5 (Auto-Apply): بنمرر seo_title/seo_description الفعليين من
         // الموديل (اللي دلوقتي ممكن يتحدّثوا تلقائيًا من الـWebsite Optimizer)
         // بدل ما الـhead يعتمد بس على business_name/tagline زي الأول.
-        $seoTitle = htmlspecialchars((string) ($website->getAttribute('seo_title') ?? ''), ENT_QUOTES, 'UTF-8');
-        $seoDescription = htmlspecialchars((string) ($website->getAttribute('seo_description') ?? ''), ENT_QUOTES, 'UTF-8');
+        $seoTitle = htmlspecialchars((string) (($this->translationLanguage!=='' ? ($c['hero_headline']??$c['business_name']??'') : $website->getAttribute('seo_title')) ?? ''), ENT_QUOTES, 'UTF-8');
+        $seoDescription = htmlspecialchars((string) (($this->translationLanguage!=='' ? ($c['hero_subtext']??$c['tagline']??'') : $website->getAttribute('seo_description')) ?? ''), ENT_QUOTES, 'UTF-8');
         $canonicalUrl = $this->publicSiteUrl($slug, $website);
         $ogImage = (string) ($website->getAttribute('logo_url') ?? '');
 
@@ -1086,7 +1133,7 @@ HTML;
         } else {
             $page = $this->renderToursHome($slug, $c, $seoTitle, $seoDescription, $canonicalUrl, $ogImage, $design['theme'], $design['body_class'], (int) $website->getAttribute('id'));
         }
-        if (!empty($c['competitor_seo_content'])) $page=CompetitorSiteExecutionService::rewrite($page,$c['competitor_seo_content']);
+        if ($this->translationLanguage==='' && !empty($c['competitor_seo_content'])) $page=CompetitorSiteExecutionService::rewrite($page,$c['competitor_seo_content']);
         echo $page;
         exit;
     }
@@ -1106,12 +1153,12 @@ HTML;
                 $domain = preg_replace('/^www\./', '', $customDomain);
                 if ($host !== '' && $host === $domain && CustomDomainService::isVerified((int)$website->getAttribute('id'),$customDomain)) {
                     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                    return $scheme . '://' . $customDomain;
+                    return $scheme . '://' . $customDomain . ($this->translationLanguage!==''?'/'.$this->translationLanguage:'');
                 }
             }
         }
         $base = defined('APP_URL') ? rtrim(APP_URL, '/') : '';
-        return $base . '/sites/' . rawurlencode($slug);
+        return $base . '/sites/' . rawurlencode($slug) . ($this->translationLanguage!==''?'/'.$this->translationLanguage:'');
     }
 
     private function renderToursHome(string $slug, array $c, string $seoTitle = '', string $seoDescription = '', string $canonicalUrl = '', string $ogImage = '', string $themeKey = 'gold', string $bodyClass = '', int $websiteId = 0): string
@@ -1404,6 +1451,10 @@ HTML;
                 $urls[] = $base . '/rooms/' . rawurlencode((string) $t['slug']);
             }
         }
+        $approved=(new BuilderLanguageService($this->db))->approved((int)$website->getAttribute('id'),$c);
+        $baseUrls=$urls;
+        $languageEntries=array_merge([['language'=>BuilderLanguageService::sourceLanguage($c)]],$approved);
+        foreach($languageEntries as $version)foreach($baseUrls as $url)$urls[]=rtrim($base,'/').'/'.$version['language'].(substr($url,strlen($base))==='/'?'':substr($url,strlen($base)));
         header('Content-Type: application/xml; charset=utf-8');
         echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
         foreach (array_unique($urls) as $u) {
@@ -1442,7 +1493,7 @@ HTML;
         }
 
         WhatsAppStudioService::captureQuery((int)$website->getAttribute('id'),(int)$website->getAttribute('user_id'));
-        $c = $website->getContent();
+        $c = $this->internationalContent($website,$params);
         $esc = fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
         [$lang, $dir] = $this->siteLangAttrs($c);
 
@@ -1586,7 +1637,7 @@ HTML;
         }
 
         WhatsAppStudioService::captureQuery((int)$website->getAttribute('id'),(int)$website->getAttribute('user_id'));
-        $c = $website->getContent();
+        $c = $this->internationalContent($website,$params);
         $esc = fn ($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
         [$lang, $dir] = $this->siteLangAttrs($c);
 
@@ -2217,7 +2268,7 @@ HTML;
     form.addEventListener('submit', function (e) {
         e.preventDefault();
         msg.className = 'ws-booking-msg';
-        msg.textContent = '{$this->siteUi('جاري إرسال طلبك')}...';
+        msg.textContent = '{$this->siteJs('جاري إرسال طلبك')}...';
         var payload = {};
         new FormData(form).forEach(function (value, key) { payload[key] = value; });
         fetch(form.getAttribute('data-action'), {
@@ -2227,15 +2278,15 @@ HTML;
         }).then(function (res) { return res.json(); }).then(function (res) {
             if (res.success) {
                 msg.className = 'ws-booking-msg ws-ok';
-                msg.textContent = res.message || '{$this->siteUi('تم إرسال طلبك')}';
+                msg.textContent = res.message || '{$this->siteJs('تم إرسال طلبك')}';
                 form.reset();
             } else {
                 msg.className = 'ws-booking-msg ws-pending';
-                msg.textContent = res.error || '{$this->siteUi('حصل خطأ')} - {$this->siteUi('جرب تاني أو تواصل عبر واتساب')}';
+                msg.textContent = res.error || '{$this->siteJs('حصل خطأ')} - {$this->siteJs('جرب تاني أو تواصل عبر واتساب')}';
             }
         }).catch(function () {
             msg.className = 'ws-booking-msg ws-pending';
-            msg.textContent = '{$this->siteUi('حصل خطأ في الاتصال')} - {$this->siteUi('جرب تاني أو تواصل عبر واتساب')}';
+            msg.textContent = '{$this->siteJs('حصل خطأ في الاتصال')} - {$this->siteJs('جرب تاني أو تواصل عبر واتساب')}';
         });
     });
 })();
@@ -2292,7 +2343,7 @@ HTML;
     var bookingSubmitting=false;
     var quoteEl=document.getElementById('wsBookingQuote'), quote=null, quoteVersion=0, quoteTimer;
     function quoteParams(){var p=new URLSearchParams();['start_date','end_date','rooms_count','adults_count','children_count'].forEach(function(k){if(form.elements[k])p.set(k,form.elements[k].value);});new FormData(form).forEach(function(v,k){if(k==='extra_ids[]')p.append('extra_ids[]',v);});return p.toString();}
-    function updateQuote(requestToken){var version=++quoteVersion;quote=null;if(!form.elements.start_date.value)return Promise.resolve(false);quoteEl.textContent='{$this->siteUi('جاري حساب السعر…')}';var params=quoteParams();var requestParams=params+(typeof requestToken==='string'?'&request_token='+encodeURIComponent(requestToken):'');return fetch(form.getAttribute('data-action').replace(/\/book$/, '/quote')+'?'+requestParams,{headers:{Accept:'application/json'}}).then(function(r){return r.json();}).then(function(r){if(version!==quoteVersion)return false;if(!r.success||!r.data){quoteEl.textContent=r.error||'{$this->siteUi('تعذر حساب السعر')}';return false;}quote={params:params,total:r.data.total};quoteEl.textContent='{$this->siteUi('الإجمالي')}: '+r.data.total+' '+r.data.currency+' ({$this->siteUi('البالغ')} '+r.data.adult_price+'{$this->siteUi('، الطفل')} '+r.data.child_price+'{$this->siteUi('، مع الإضافات المختارة')})';return true;}).catch(function(){if(version===quoteVersion)quoteEl.textContent='{$this->siteUi('تعذر حساب السعر؛ حاول بعد التحقق من الاتصال')}.';return false;});}
+    function updateQuote(requestToken){var version=++quoteVersion;quote=null;if(!form.elements.start_date.value)return Promise.resolve(false);quoteEl.textContent='{$this->siteJs('جاري حساب السعر…')}';var params=quoteParams();var requestParams=params+(typeof requestToken==='string'?'&request_token='+encodeURIComponent(requestToken):'');return fetch(form.getAttribute('data-action').replace(/\/book$/, '/quote')+'?'+requestParams,{headers:{Accept:'application/json'}}).then(function(r){return r.json();}).then(function(r){if(version!==quoteVersion)return false;if(!r.success||!r.data){quoteEl.textContent=r.error||'{$this->siteJs('تعذر حساب السعر')}';return false;}quote={params:params,total:r.data.total};quoteEl.textContent='{$this->siteJs('الإجمالي')}: '+r.data.total+' '+r.data.currency+' ({$this->siteJs('البالغ')} '+r.data.adult_price+'{$this->siteJs('، الطفل')} '+r.data.child_price+'{$this->siteJs('، مع الإضافات المختارة')})';return true;}).catch(function(){if(version===quoteVersion)quoteEl.textContent='{$this->siteJs('تعذر حساب السعر؛ حاول بعد التحقق من الاتصال')}.';return false;});}
     form.addEventListener('input',function(e){if(['start_date','end_date','rooms_count','adults_count','children_count','extra_ids[]'].indexOf(e.target.name)<0)return;quote=null;++quoteVersion;clearTimeout(quoteTimer);quoteTimer=setTimeout(updateQuote,300);});
 
     var requestStorageKey='tfBookingRequest:'+form.getAttribute('data-action');
@@ -2308,11 +2359,11 @@ HTML;
         if(bookingSubmitting)return;bookingSubmitting=true;var submitButton=form.querySelector('button[type=submit]');submitButton.disabled=true;
         var payload = {};
         new FormData(form).forEach(function (value, key) { if(key==='extra_ids[]'){if(!payload.extra_ids)payload.extra_ids=[];payload.extra_ids.push(value);}else{payload[key]=value;} });
-        try{payload.request_token=await requestToken(payload);}catch(e){bookingSubmitting=false;submitButton.disabled=false;msg.textContent='{$this->siteUi('تعذر تجهيز الطلب بأمان؛ حدّث المتصفح ثم حاول')}.';return;}
-        if(!quote || quote.params!==quoteParams()){if(!await updateQuote(payload.request_token)){msg.textContent='{$this->siteUi('راجع السعر والتوفر قبل تأكيد الحجز')}.';bookingSubmitting=false;submitButton.disabled=false;return;}}
+        try{payload.request_token=await requestToken(payload);}catch(e){bookingSubmitting=false;submitButton.disabled=false;msg.textContent='{$this->siteJs('تعذر تجهيز الطلب بأمان؛ حدّث المتصفح ثم حاول')}.';return;}
+        if(!quote || quote.params!==quoteParams()){if(!await updateQuote(payload.request_token)){msg.textContent='{$this->siteJs('راجع السعر والتوفر قبل تأكيد الحجز')}.';bookingSubmitting=false;submitButton.disabled=false;return;}}
         if(!quote){bookingSubmitting=false;submitButton.disabled=false;return;}
         msg.className = 'ws-booking-msg';
-        msg.textContent = '{$this->siteUi('جاري تأكيد الحجز')}...';
+        msg.textContent = '{$this->siteJs('جاري تأكيد الحجز')}...';
         payload.quoted_total=quote.total;
         var waToken=new URLSearchParams(window.location.search).get('wa_token');if(waToken&&/^[a-f0-9]{64}$/.test(waToken))payload.wa_token=waToken;
         fetch(form.getAttribute('data-action'), {
@@ -2326,20 +2377,20 @@ HTML;
                 return;
             }
             if (res.success) {
-                var text = (res.message || '{$this->siteUi('تم استلام طلبك')}');
+                var text = (res.message || '{$this->siteJs('تم استلام طلبك')}');
                 if (res.data && res.data.booking_reference) {
-                    text += ' - {$this->siteUi('كود الحجز')}: ' + res.data.booking_reference;
+                    text += ' - {$this->siteJs('كود الحجز')}: ' + res.data.booking_reference;
                 }
                 msg.className = 'ws-booking-msg ws-ok';
                 msg.textContent = text;
             } else {
                 bookingSubmitting=false;submitButton.disabled=false;
                 msg.className = 'ws-booking-msg ws-pending';
-                msg.textContent = res.error || '{$this->siteUi('حصل خطأ')} - {$this->siteUi('جرب تاني أو تواصل عبر واتساب')}';
+                msg.textContent = res.error || '{$this->siteJs('حصل خطأ')} - {$this->siteJs('جرب تاني أو تواصل عبر واتساب')}';
             }
         }).catch(function () {
             msg.className = 'ws-booking-msg ws-pending';
-            msg.textContent = '{$this->siteUi('تعذر تأكيد نتيجة الطلب')}. {$this->siteUi('راجع الحجز مع الشركة قبل تكراره')}.';
+            msg.textContent = '{$this->siteJs('تعذر تأكيد نتيجة الطلب')}. {$this->siteJs('راجع الحجز مع الشركة قبل تكراره')}.';
         });
     });
 })();

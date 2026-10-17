@@ -1,0 +1,31 @@
+const fs=require('fs'),path=require('path');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
+(async()=>{
+const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});const page=await browser.newPage();let n=0,fails=0;function check(ok,label){n++;if(!ok)fails++;console.log((ok?'  ok  ':'  FAIL ')+label);}
+const root=path.resolve(__dirname,'../..'),source=fs.readFileSync(path.join(root,'app/Controllers/InternationalSeoController.php'),'utf8'),markup=source.match(/<<<'HTML'\n([\s\S]*?)\nHTML;/);if(!markup)throw Error('Production markup unavailable');
+await page.setContent('<meta name="csrf-token" content="offline-csrf">'+markup[1].replace(/<script[\s\S]*?<\/script>/,''));
+await page.evaluate(()=>{window.calls=[];window.Panel={fetchJSON:async(url,options={})=>{const op=url.split('/').pop().split('?')[0],body=options.body?JSON.parse(options.body):null;calls.push({op,body});
+if(op==='sites')return {success:true,data:{builders:[{id:11,slug:'real-builder',status:'published'}],sites:[{id:2,main_url:'https://customer.example'}]}};
+if(op==='data')return {success:true,data:{source:{hero_headline:'Confirmed 2024 <img src=x onerror=alert(1)>'},source_hash:'source-v1',fields:{hero_headline:'Confirmed 2024'},versions:[]}};
+if(op==='generate')return {success:true,data:{fields:{hero_headline:'Bestätigt 2024'}}};
+if(op==='draft'||op==='publish')return {success:true,data:{status:op==='publish'?'published':'draft'}};
+if(op==='sitemapData')return {success:true,data:{permission:{enabled:1,sitemap_url:'https://customer.example/sitemap.xml'},result:{sitemaps:[{errors:3,warnings:2}]}}};
+if(op==='submit'||op==='disable')return {success:true,data:{}};throw Error('Unexpected '+op);
+}};});
+await page.addScriptTag({path:path.join(root,'public_html/assets/js/international-seo.js')});await page.waitForFunction(()=>document.getElementById('intlSource').textContent.includes('Confirmed'));
+check(await page.locator('#intlSource img').count()===0,'confirmed source and translation evidence render as text without injection');
+check(await page.locator('#intlReconnect').getAttribute('action')==='/search-console/allow-sitemap-submit/2'&&await page.locator('#intlCsrf').inputValue()==='offline-csrf','optional write reconnect is a separate customer-scoped CSRF form');
+await page.locator('#intlGenerate').click();await page.waitForFunction(()=>document.getElementById('intlStatus').textContent.includes('أكّد'));
+check(await page.evaluate(()=>!calls.some(c=>c.op==='generate')),'paid generation is blocked until the displayed source is confirmed');
+await page.locator('#intlConfirmed').check();await page.locator('#intlGenerate').click();await page.waitForFunction(()=>document.getElementById('intlFields').value.includes('Bestätigt'));
+check(await page.evaluate(()=>calls.find(c=>c.op==='generate').body.source_hash==='source-v1'&&calls.find(c=>c.op==='generate').body.generated_website_id===11),'generation sends exact confirmed source fingerprint and owned builder ID');
+check(!await page.locator('#intlReviewed').isChecked()&&await page.evaluate(()=>!calls.some(c=>c.op==='publish')),'generated translation remains an unreviewed draft');
+await page.locator('#intlPublish').click();await page.waitForFunction(()=>document.getElementById('intlStatus').textContent.includes('المراجعة البشرية'));
+check(await page.evaluate(()=>!calls.some(c=>c.op==='publish')),'publication requires a separate explicit human review');
+await page.locator('#intlReviewed').check();await page.locator('#intlPublish').click();await page.waitForFunction(()=>document.getElementById('intlStatus').textContent.includes('نُشرت'));
+check(await page.evaluate(()=>calls.find(c=>c.op==='publish').body.reviewed===true&&calls.find(c=>c.op==='publish').body.fields.hero_headline==='Bestätigt 2024'),'human approval publishes the actual edited translation');
+check(!await page.locator('#intlConfirmed').isChecked()&&!await page.locator('#intlReviewed').isChecked(),'source and review confirmations reset after save');
+check((await page.locator('#intlSitemapResult').textContent()).includes('"errors": 3'),'customer sees measured Search Console sitemap errors');
+await page.locator('#intlDisable').click();await page.waitForFunction(()=>calls.some(c=>c.op==='disable'));check(await page.evaluate(()=>calls.find(c=>c.op==='disable').body.website_id===2),'customer can disable automatic sitemap submission');
+await browser.close();console.log(`\n${n-fails}/${n} passed`);process.exit(fails?1:0);
+})().catch(e=>{console.error(e);process.exit(1);});

@@ -1795,3 +1795,6 @@ $router->post('/api/ai-visibility/llms','AiVisibilityController','llms',['AuthMi
 
 foreach (['sites','data','report'] as $op) $router->get('/api/local-seo/'.$op,'LocalSeoController',$op,['AuthMiddleware']);
 foreach (['profile','run','nap','links'] as $op) $router->post('/api/local-seo/'.$op,'LocalSeoController',$op,['AuthMiddleware']);
+
+foreach(['sites','data','sitemapData'] as $op)$router->get('/api/international-seo/'.$op,'InternationalSeoController',$op,['AuthMiddleware']);
+foreach(['generate','draft','publish','submit','disable'] as $op)$router->post('/api/international-seo/'.$op,'InternationalSeoController',$op,['AuthMiddleware']);
