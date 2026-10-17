@@ -12,6 +12,18 @@ class SeoExpertPageContext extends PageContext
     private bool $publicationRead=false;
     private bool $sitemapRead=false;
     protected function textLimit(): int { return $this->publicationRead?60000:2500; }
+    /** HTML block boundaries remain word boundaries even when the markup is minified. */
+    protected function bodyText(DOMNode $body): string
+    {
+        if(!$this->publicationRead)return parent::bodyText($body);
+        $copy=$body->cloneNode(true);$doc=$copy->ownerDocument;$xp=new DOMXPath($doc);
+        $blocks=$xp->query('.//*[self::h1 or self::h2 or self::h3 or self::h4 or self::h5 or self::h6 or self::p or self::div or self::li or self::section or self::article or self::main or self::aside or self::header or self::ul or self::ol or self::dl or self::dt or self::dd or self::figure or self::figcaption or self::table or self::tr or self::td or self::th or self::blockquote or self::pre or self::address or self::br or self::hr]',$copy);
+        foreach(iterator_to_array($blocks) as $node){
+            $node->parentNode->insertBefore($doc->createTextNode(' '),$node);
+            $node->parentNode->insertBefore($doc->createTextNode(' '),$node->nextSibling);
+        }
+        return parent::bodyText($copy);
+    }
     /** Full public text for verification only; planning keeps its existing bounded excerpt. */
     public function freshPublication(string $url): array {
         $previous=$this->publicationRead;$this->publicationRead=true;

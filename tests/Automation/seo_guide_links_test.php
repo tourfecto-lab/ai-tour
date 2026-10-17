@@ -18,6 +18,18 @@ $ctx['publication_links']=[];$audit=SeoPublicationAudit::inspect($task,$ctx,[],[
 class GuideLinkReader extends SeoExpertPageContext{protected function isSafe(string $url):bool{return true;}}
 SafeHttp::$html='<html><head><title>Guide</title></head><body><header><a href="https://site.example/not-body">Navigation</a></header><main data-tourfecto-guide>'.$html.'</main></body></html>';
 $reader=new GuideLinkReader();$observed=$reader->freshPublication($article);check(($observed['publication_links']??[])===['https://site.example/tours/luxor?q=one&lang=en'],'publication reader takes article anchors, not header navigation');
+$blocks="## Choose your route\n\nRead [Luxor tours](https://site.example/tours/luxor) before booking.\n\n### Before booking\n\nConfirm pick-up and the final price.\n\n- Ask about availability\n- Confirm the route";
+SafeHttp::$html='<html><head><title>Luxor guide</title></head><body><main data-tourfecto-guide><article><h1>Luxor guide</h1>'.GuideContent::html($blocks).'</article></main></body></html>';
+$observed=$reader->freshPublication($article);
+$blockTask=['title'=>'Luxor guide','published_url'=>$article,'expected_value'=>$blocks];
+check(SeoPublicationAudit::inspect($blockTask,$observed,[],['state'=>'passed'])['checks']['approved_content']==='passed','publication verifies adjacent headings, paragraphs and list items without HTML whitespace');
+SafeHttp::$html='<html><head><title>Guide</title></head><body><main><h2>Inline formatting</h2><p>Con<strong>firm</strong> pick-up<br>before booking.</p></main></body></html>';
+$observed=$reader->freshPublication($article);
+check(str_contains(SeoVerificationState::content($observed['text']),'inline formatting confirm pick up before booking'),'block boundaries separate text while inline formatting preserves words');
+$planning=$reader->fresh($article);
+check(str_contains($planning['text'],'Inline formattingConfirm pick-upbefore booking.'),'ordinary planning text retains its existing extraction');
+SafeHttp::$html='<html><head><title>Guide</title></head><body><main data-tourfecto-guide>'.GuideContent::html(str_replace('Confirm pick-up and the final price.','',$blocks)).'</main></body></html>';
+check(SeoPublicationAudit::inspect($blockTask,$reader->freshPublication($article),[],['state'=>'passed'])['checks']['approved_content']==='missing','a genuinely omitted paragraph still fails publication verification');
 SafeHttp::$html='<html><head><title>Other</title></head><body><main data-tourfecto-guide>Other article.</main></body></html>';
 check($reader->freshPublication($article)['publication_links']===[],'links from the previous page do not leak into a later verification');
 echo "$n assertions passed\n";

@@ -145,7 +145,7 @@ class PageContext
             }
         }
         $body = $doc->getElementsByTagName('body')->item(0);
-        $text = $body ? preg_replace('/\s+/u', ' ', trim($body->textContent)) : '';
+        $text = $body ? $this->bodyText($body) : '';
         $out['body_text_length']=mb_strlen((string)$text);
         $out['text'] = mb_substr((string) $text, 0, $this->textLimit());
 
@@ -249,6 +249,11 @@ class PageContext
     // ------------------------------------------------------------------ مساعدات (protected للاختبار)
 
     protected function textLimit(): int { return 700; }
+
+    protected function bodyText(DOMNode $body): string
+    {
+        return (string) preg_replace('/\s+/u', ' ', trim($body->textContent));
+    }
 
     protected function isSafe(string $url): bool
     {
