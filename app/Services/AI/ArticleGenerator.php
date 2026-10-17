@@ -187,6 +187,25 @@ class ArticleGenerator
         $normalize=static fn($price)=>preg_replace('/\s+/u','',$price);
         $allowed=array_map($normalize,$confirmedPrices[0]);
         foreach ($prices[0] as $price) if (!in_array($normalize($price),$allowed,true)) return 'Generated price is not in confirmed customer facts. Confirm it before writing.';
+        // These high-risk assertions need literal customer evidence, not keyword/competitor text.
+        // This is a conservative guard for observed failure cases; editorial review is still required.
+        $normalizeClaim=static fn($value)=>trim(preg_replace('/[^\p{L}\p{N}]+/u',' ',mb_strtolower(strip_tags((string)$value))));
+        $confirmed=$brief['confirmed_facts']??[];
+        $claimFacts=$normalizeClaim(implode(' ',array_map(static fn($key)=>is_string($confirmed[$key]??null)?$confirmed[$key]:'',['business_facts','offers','services','destinations'])));
+        $parts=[(string)($data['title']??''),(string)($data['meta_description']??''),(string)($data['content']??'')];
+        foreach($data['faqs']??[] as $faq)if(is_array($faq))$parts[]=(string)($faq['answer']??'');
+        foreach($parts as $part)foreach(preg_split('/(?<=[.!?])\s+|\R/u',$part) as $sentence){
+            $sentence=trim($sentence);if($sentence===''||str_ends_with(rtrim($sentence,'*_ '),'?')||preg_match('/^(?:[#*\s-]*)(?:confirm|check|ask|verify|تأكد|اسأل|راجع)\b/iu',$sentence))continue;
+            $duration=preg_match('/\b[0-9]+(?:\s*(?:-|–|to|إلى)\s*[0-9]+)?[\s-]*(?:hours?|hrs?|days?|nights?|ساعات|ساعة|أيام|ليال)\b/iu',$sentence);
+            $family=preg_match('/\b(?:our|the|these)\s+tours?\b.{0,180}\b(?:families|all ages)\b|\b(?:suitable|safe|ideal|perfect)\s+for\s+(?:families|children)\b|مناسب.{0,30}(?:للعائلات|للأطفال)/iu',$sentence);
+            if(($duration||$family)&&!str_contains($claimFacts,$normalizeClaim($sentence)))return 'Confirm the exact duration or family-suitability statement in business facts before publishing.';
+        }
+        if(isset($brief['verified_internal_urls'])&&is_array($brief['verified_internal_urls'])){
+            $home=(string)($confirmed['source_site_url']??'');$host=strtolower((string)parse_url($home,PHP_URL_HOST));
+            $allowedUrls=array_map(static fn($url)=>rtrim(explode('#',(string)$url,2)[0],'/'),$brief['verified_internal_urls']);
+            preg_match_all('/\[[^\]\r\n]+\]\((https?:\/\/[^\s)]+)\)/u',implode(' ',$parts),$links);
+            foreach($links[1] as $url)if($host!==''&&strtolower((string)parse_url($url,PHP_URL_HOST))===$host&&!in_array(rtrim(explode('#',$url,2)[0],'/'),$allowedUrls,true))return 'Internal article link was not verified in the site evidence. Review the target before publishing.';
+        }
         return null;
     }
 

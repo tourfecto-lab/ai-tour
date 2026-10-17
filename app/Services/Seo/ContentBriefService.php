@@ -91,7 +91,12 @@ class ContentBriefService
             $db->exec('REPLACE INTO seo_research_cache(website_id,market_id,cache_key,result_json,fetched_at) VALUES(?,?,?,?,UTC_TIMESTAMP())',[$wid,$market['id'],$key,json_encode($items,JSON_THROW_ON_ERROR)]);
         }
         $brief=$this->build($rows[0],$items,$profile,$market);
-        $pillar=ContentQualityService::cluster($keyword,(new ContentQualityService($db))->knownPages($uid,$wid),(string)($profile['facts']['source_site_url']??''));
+        $knownPages=(new ContentQualityService($db))->knownPages($uid,$wid);
+        $siteUrl=(string)($profile['facts']['source_site_url']??'');$host=(string)parse_url($siteUrl,PHP_URL_HOST);
+        $brief['verified_internal_urls']=[$siteUrl];
+        foreach($knownPages as $page)if(ContentQualityService::pagePath((string)$page['url'],$host)!==null&&(!class_exists('SeoPagePolicy')||SeoPagePolicy::classify($page)['eligible']))$brief['verified_internal_urls'][]=$page['url'];
+        $brief['verified_internal_urls']=array_values(array_unique($brief['verified_internal_urls']));
+        $pillar=ContentQualityService::cluster($keyword,$knownPages,$siteUrl);
         $brief['internal_link_targets']=$pillar?[$pillar]:[];
         $brief['writing_rules'][]='Use ## headings and ### subheadings. Relevant internal links will be added from the known same-site targets; never invent URLs. Unknown opening hours, collections, availability and prices require confirmation before publication.';
         return $brief;

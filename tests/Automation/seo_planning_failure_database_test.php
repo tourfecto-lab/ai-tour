@@ -1,5 +1,6 @@
 <?php
 // Provider and billing transports are fakes; run/task/snapshot writes use a guarded disposable MariaDB.
+class ContentBriefService {public function __construct(...$args){}public function forKeyword(...$args){return ['keyword'=>'Luxor day tour','profile_version'=>1,'confirmed_facts'=>['business_name'=>'Example tours','business_facts'=>'Egypt Luxor tours']];}}
 class AiText {public static int $calls=0;public static array $response=['success'=>true,'data'=>'PRIVATE provider payload NOT JSON'];public static function generate(...$args){self::$calls++;return self::$response;}}
 class ServiceUsageReservation {public static array $states=[];public static function settle($token,$state){self::$states[$token]=$state;return true;}}
 require __DIR__.'/fixtures/geo_database.php';
@@ -39,4 +40,17 @@ $service->build(9001);$row=$pdo->query('SELECT * FROM seo_expert_runs WHERE id=9
 check($row['status']==='draft','valid plan persists tasks using the captured site context');
 check(ServiceUsageReservation::$states['fake-token']==='completed','successful plan settles once as completed');
 check((int)$pdo->query('SELECT COUNT(*) FROM seo_expert_tasks')->fetchColumn()>0,'deterministic review tasks survive valid planning');
+$pdo->exec(file_get_contents($root.'/database/migrations/2026_10_17_000003_content_quality.sql'));
+$pdo->exec('DELETE FROM seo_content_quality');
+$market=(new SeoMarketService($db))->resolve(1,1);
+$pdo->prepare("INSERT INTO seo_keyword_research(website_id,market_id,keyword,volume,difficulty,source,fetched_at) VALUES(1,?,'Luxor day tour',90,0,'dataforseo',UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE fetched_at=UTC_TIMESTAMP()")->execute([$market['id']]);
+$brief['shared_profile']['confirmed_at']=gmdate('c');
+$pdo->prepare('UPDATE seo_expert_sites SET brief_json=?')->execute([json_encode($brief)]);
+AiText::$response=['success'=>true,'data'=>json_encode(['summary'=>'Review the confirmed public destination content and verify customer-specific claims.','changes'=>[],'client_tasks'=>[],'content_drafts'=>[['title'=>'Planning a Luxor day tour','body'=>str_repeat('Visit the confirmed Luxor tours page to compare the listed routes. ',4).'Most tours last 6 to 8 hours.','category'=>'aeo','faqs'=>[],'meta_description'=>'Compare Luxor tours and confirm your chosen route.']]])];
+$pdo->exec('UPDATE seo_expert_sites SET cycles_used=1');
+$pdo->prepare("UPDATE seo_expert_runs SET status='scanned',snapshot_json=? WHERE id=9001")->execute([json_encode(['pages'=>[$page],'tech'=>[]])]);
+$service->build(9001);
+check($pdo->query('SELECT status FROM seo_expert_runs WHERE id=9001')->fetchColumn()==='draft','unconfirmed article does not block the safe remainder of the plan');
+check((int)$pdo->query("SELECT COUNT(*) FROM seo_expert_tasks WHERE kind='content'")->fetchColumn()===0,'unsupported duration never becomes a publishable content task');
+check((int)$pdo->query("SELECT COUNT(*) FROM seo_expert_tasks WHERE kind='manual' AND title='Confirm article facts before writing' AND status='needs_client'")->fetchColumn()===1,'rejected draft becomes an explicit client confirmation task');
 echo "$n assertions passed\n";

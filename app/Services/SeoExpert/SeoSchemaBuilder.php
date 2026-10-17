@@ -23,10 +23,14 @@ class SeoSchemaBuilder
         if ($path === '' || $path === '/') {
             return false;
         }
-        if (preg_match('#/(?:blog|news|guides?|category|tag|author|page/\d+)(?:/|$)#i', $path)) {
+        if (preg_match('#/(?:blog|news|guides?|category|tag|author|quiz|page/\d+)(?:/|$)#i', $path)) {
             return false;
         }
         $h1 = (string) ($page['h1'] ?? '');
+        // A destination collection is not a single bookable trip, even with only one card.
+        if (self::hasType($page['schema'] ?? [], ['ItemList', 'CollectionPage'])) return false;
+        if (preg_match('/\b(?:tours|trips|excursions|cruises|packages)\b|رحلات/u', mb_strtolower($h1))
+            && !preg_match('/\b(?:tour|trip|excursion|cruise|itinerary|day|days|night|nights)\b|جولة|رحلة|يوم|أيام/u', mb_strtolower($h1))) return false;
         $words = preg_match(self::TOUR_WORDS, $h1 . ' ' . ($page['title'] ?? '')) === 1;
         $urlLooks = preg_match(self::TOUR_URL, $path) === 1;
         // صفحة قسم فيها رحلات كتير (كروت بأسعار مختلفة) = قائمة مش رحلة واحدة
@@ -35,10 +39,18 @@ class SeoSchemaBuilder
         }
         // صفحة الرحلة الواحدة بيبقى رابطها أعمق من قسم الرحلات نفسه (/tours/xyz مش /tours)
         $segments = array_values(array_filter(explode('/', trim($path, '/'))));
-        if ($urlLooks && count($segments) < 2 && !$words) {
+        if ($urlLooks && count($segments) < 2) {
             return false;
         }
         return $h1 !== '' && ($urlLooks || $words) && ($urlLooks || self::price($page) !== null);
+    }
+
+    /** Recheck old unexecuted proposals against the current public page too. */
+    public static function taskCompatible(array $page,string $field,string $value): bool
+    {
+        if($field==='related_links')return self::isTourPage($page);
+        $schema=$field==='jsonld'?json_decode($value,true):null;
+        return !is_array($schema)||!self::hasType([$schema],['TouristTrip'])||self::isTourPage($page);
     }
 
     /** السعر المكتوب في الصفحة (أول سعر واضح) - ولو فيه أسعار مختلفة كتير ماناخدش ولا واحد */

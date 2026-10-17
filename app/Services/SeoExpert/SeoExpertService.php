@@ -319,7 +319,7 @@ class SeoExpertService
                 $this->relatedTasks($r,$pages,$site);
                 foreach($plan['content_drafts'] as $d) {
                     $contentBrief=$snapshot['content_brief']??null;if (!$contentBrief) continue;
-                    if (ArticleGenerator::validateBriefOutput(['title'=>$d['title'],'meta_description'=>$d['meta_description'],'content'=>$d['body'],'faqs'=>$d['faqs']],$contentBrief)!==null) continue;
+                    if (($contentError=ArticleGenerator::validateBriefOutput(['title'=>$d['title'],'meta_description'=>$d['meta_description'],'content'=>$d['body'],'faqs'=>$d['faqs']],$contentBrief))!==null) {$this->task($r,'manual',$d['category'],$anchor,'Confirm article facts before writing',$contentError.' Review the draft topic: '.$d['title'],null,null,'needs_client');continue;}
                     $faqs=[];foreach ($d['faqs'] as $faq) if (is_array($faq)&&is_string($faq['question']??null)&&is_string($faq['answer']??null)&&$faq['question']!==''&&$faq['answer']!=='') {
                         $faqs[]=['question'=>strip_tags($faq['question']),'answer'=>strip_tags($faq['answer'])];
                         if (!str_contains($d['body'],$faq['question']) || !str_contains($d['body'],$faq['answer'])) $d['body'].="\n\n".$faq['question']."\n".$faq['answer'];
@@ -513,6 +513,8 @@ class SeoExpertService
                     if($t['kind']!=='metadata')continue;$ctx=$contexts[$t['page_url']]??($contexts[$t['page_url']]=$reader->fresh($t['page_url']));
                     if(empty($ctx['ok'])||!empty($ctx['coming_soon'])){$this->needsClient($t,'Public page is unavailable. Resolve hosting/cache and recheck.');continue;}
                     $scopePage=$ctx;$scopePage['url']=$ctx['final_url']??$t['page_url'];if(!SeoPagePolicy::classify($scopePage)['eligible']){$this->needsClient($t,'The page is outside marketing scope or needs an indexing/canonical intent review. No rule was changed.');continue;}
+                    require_once __DIR__.'/SeoSchemaBuilder.php';
+                    if(!SeoSchemaBuilder::taskCompatible($scopePage,(string)$t['field_name'],(string)$t['expected_value'])){$this->needsClient($t,'This proposal describes a single trip, but the current page is a collection or another page type. Review the proposal; no rule was activated.');continue;}
                     $check=PageContext::verifyValue($t['field_name'],$t['expected_value'],$ctx);if($check['state']==='verified'){$this->q("UPDATE seo_expert_tasks SET status='verified',evidence_json=?,checked_at=UTC_TIMESTAMP() WHERE id=?",[json_encode($check,JSON_THROW_ON_ERROR),$t['id']]);continue;}
                     if(!empty($ctx['native_seo_owner'])&&in_array($t['field_name'],['title','description'],true)){$this->needsClient($t,'This page has directly reviewed Tourfecto SEO fields. Apply title/description changes through the unified editor; an overlay rule was not activated.');continue;}
                     if(($ctx['connector_version']??'')!=='4'){$this->needsClient($t,'Install or update the Tourfecto server-side connector, clear the public page cache, and recheck.');continue;}
