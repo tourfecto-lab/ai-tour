@@ -52,7 +52,7 @@ class KeywordResearchService
     public function enrichTrackedKeywords(Database $db, int $websiteId, int $userId): array
     {
         if ($this->source===null) {
-            $research=new DataForSeoResearchService(null,$db); $total=0; $enriched=0;
+            $research=new DataForSeoResearchService($db); $total=0; $enriched=0;
             if (!$research->configured()) return ['available'=>false,'reason'=>'not_measured','enriched'=>0,'total'=>0,'source'=>'dataforseo'];
             foreach ((new SeoMarketService($db))->markets($websiteId,$userId) as $market) {
                 $rows=$db->query('SELECT id,keyword FROM tracked_keywords WHERE website_id=? AND user_id=? AND market_id=? LIMIT 100',[$websiteId,$userId,$market['id']]);

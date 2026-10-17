@@ -17,6 +17,11 @@ class DataForSeoClient
     {
         return (string)($this->settings['enabled']??'')==='1' && trim((string)($this->settings['login']??''))!=='' && trim((string)($this->settings['password']??''))!=='';
     }
+    /** Items from a successful call envelope; missing/empty results have no items. */
+    public static function items(array $r): array
+    {
+        return $r['response']['tasks'][0]['result'][0]['items'] ?? [];
+    }
     public function endpointEnabled(string $endpoint): bool {
         if (!$this->isConfigured()) return false;
         return match($endpoint) {

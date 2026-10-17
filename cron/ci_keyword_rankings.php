@@ -25,7 +25,7 @@ try {
     $db = Database::getInstance();
 
     SeoDataSchema::ensureSchema($db);
-    $research = new DataForSeoResearchService(null, $db);
+    $research = new DataForSeoResearchService($db);
     if (!$research->configured()) { fwrite(STDOUT, "DataForSEO: not measured\n"); exit(0); }
     foreach ($db->query("SELECT DISTINCT website_id,user_id FROM competitors WHERE is_active=1 AND monitoring_paused=0 LIMIT 50") as $site) {
         try { $research->competitors((int)$site['website_id'], (int)$site['user_id']); }

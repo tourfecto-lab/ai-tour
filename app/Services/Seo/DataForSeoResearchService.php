@@ -2,9 +2,10 @@
 /** Real demand only. Cache keys include site, market, endpoint and input. */
 class DataForSeoResearchService
 {
+    private const CALL_CEILING = 0.10;
     private DataForSeoClient $client;
     private ?Database $db;
-    public function __construct(?DataForSeoClient $client=null,?Database $db=null) { $this->client=$client??new DataForSeoClient(); $this->db=$db; }
+    public function __construct(?Database $db=null,?DataForSeoClient $client=null) { $this->client=$client??new DataForSeoClient(); $this->db=$db; }
     public function configured(): bool { return $this->client->isConfigured(); }
     public static function parse(array $item): array
     {
@@ -37,28 +38,28 @@ class DataForSeoResearchService
         try {
         $cache=$db->query('SELECT result_json FROM seo_research_cache WHERE website_id=? AND market_id=? AND cache_key=? AND fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)',[$wid,$market['id'],$key]);
         if ($cache) return ['available'=>true,'from_cache'=>true,'source'=>'dataforseo','market'=>$market,'data'=>json_decode($cache[0]['result_json'],true,512,JSON_THROW_ON_ERROR)];
-        $r=$this->client->call('dataforseo_labs/google/'.$kind.'/live',[$task],$wid,$exact?count($seeds):100,1.0);
+        $r=$this->client->call('dataforseo_labs/google/'.$kind.'/live',[$task],$wid,$exact?max(1,min(100,count($seeds))):1,self::CALL_CEILING);
         if (!$r['available']) return $r+['data'=>[]];
         $result=$r['response']['tasks'][0]['result'][0]??[];
-        if (!array_key_exists('items',$result)) return ['available'=>false,'reason'=>'dataforseo_invalid_response','data'=>[]];
+        if (!array_key_exists('items',$result) || ($result['items']!==null && !is_array($result['items']))) return ['available'=>false,'reason'=>'dataforseo_invalid_response','data'=>[]];
         $data=[];
-        foreach ($result['items']??[] as $item) {
+        foreach (array_slice(DataForSeoClient::items($r),0,100) as $item) {
             if (!is_array($item)) continue;
             $row=self::parse($item);
             if ($row['keyword']!=='' && mb_strlen($row['keyword'])<=255) $data[]=$row;
         }
         if ($data) {
             $difficulty=$this->client->call('dataforseo_labs/google/bulk_keyword_difficulty/live',[[
-                'location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'keywords'=>array_column($data,'keyword')]],$wid,count($data),1.0);
+                'location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'keywords'=>array_column($data,'keyword')]],$wid,max(1,min(100,count($data))),self::CALL_CEILING);
             if (!$difficulty['available']) return $difficulty+['data'=>[]];
-            $by=[]; foreach ($difficulty['response']['tasks'][0]['result'][0]['items']??[] as $item)
+            $by=[]; foreach (DataForSeoClient::items($difficulty) as $item)
                 if (isset($item['keyword_difficulty'])) $by[mb_strtolower($item['keyword'])]=(float)$item['keyword_difficulty'];
             foreach ($data as &$row) $row['difficulty']=$by[mb_strtolower($row['keyword'])]??$row['difficulty']; unset($row);
         }
         $now=gmdate('Y-m-d H:i:s');
         $db->transaction(function () use ($db,$wid,$market,$data,$now,$key) {
             foreach ($data as $row) $db->exec("INSERT INTO seo_keyword_research (website_id,market_id,keyword,volume,difficulty,cpc,intent,source,fetched_at) VALUES (?,?,?,?,?,?,?,'dataforseo',?) ON DUPLICATE KEY UPDATE volume=VALUES(volume),difficulty=VALUES(difficulty),cpc=VALUES(cpc),intent=VALUES(intent),fetched_at=VALUES(fetched_at)",[$wid,$market['id'],$row['keyword'],$row['volume'],$row['difficulty'],$row['cpc'],$row['intent'],$now]);
-            $db->exec('REPLACE INTO seo_research_cache (website_id,market_id,cache_key,result_json,fetched_at) VALUES (?,?,?,?,?)',[$wid,$market['id'],$key,json_encode($data,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$now]);
+            $db->exec('REPLACE INTO seo_research_cache (website_id,market_id,cache_key,result_json,fetched_at) VALUES (?,?,?,?,UTC_TIMESTAMP())',[$wid,$market['id'],$key,json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR)]);
         });
         return ['available'=>true,'from_cache'=>false,'source'=>'dataforseo','fetched_at'=>$now,'market'=>$market,'data'=>$data];
         } finally { $s=$pdo->prepare('SELECT RELEASE_LOCK(?)'); $s->execute([$lock]); }
@@ -72,11 +73,11 @@ class DataForSeoResearchService
             if ($db->query("SELECT id FROM competitor_keywords WHERE competitor_id=? AND market_id=? AND source='dataforseo' AND fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY) LIMIT 1",[$c['id'],$market['id']])) continue;
             $host=DataForSeoRankingSource::normalizeHost($c['competitor_domain']); if ($host==='') continue;
             $r=$this->client->call('dataforseo_labs/google/ranked_keywords/live',[[
-                'target'=>$host,'location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'limit'=>max(1,min(100,$limit)),'order_by'=>['keyword_data.keyword_info.search_volume,desc']]],$wid,max(1,min(100,$limit)),1.0);
-            if (!$r['available']) return $r+['recorded'=>$count];
+                'target'=>$host,'location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'limit'=>max(1,min(100,$limit)),'order_by'=>['keyword_data.keyword_info.search_volume,desc']]],$wid,1,self::CALL_CEILING);
+            if (!$r['available']) return $r+['reason'=>'dataforseo_request_failed','recorded'=>$count];
             $result=$r['response']['tasks'][0]['result'][0]??[];
-            if (!array_key_exists('items',$result)) return ['available'=>false,'reason'=>'dataforseo_invalid_response','recorded'=>$count];
-            $items=$result['items']??[];
+            if (!array_key_exists('items',$result) || ($result['items']!==null && !is_array($result['items']))) return ['available'=>false,'reason'=>'dataforseo_invalid_response','recorded'=>$count];
+            $items=array_slice(DataForSeoClient::items($r),0,max(1,min(100,$limit)));
             $db->transaction(function () use ($db,$c,$market,$items,&$count) {
                 $db->exec("DELETE FROM competitor_keywords WHERE competitor_id=? AND market_id=? AND source='dataforseo'",[$c['id'],$market['id']]);
                 foreach ($items as $item) {
@@ -86,6 +87,6 @@ class DataForSeoResearchService
                 }
             });
         }
-        return ['available'=>true,'recorded'=>$count];
+        return ['available'=>true,'reason'=>null,'recorded'=>$count];
     }
 }

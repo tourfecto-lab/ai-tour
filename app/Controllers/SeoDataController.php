@@ -33,7 +33,7 @@ class SeoDataController extends Controller
         try {
             [$wid,$uid]=$this->context();
             $seeds=$this->get('seeds',[]); if (!is_array($seeds)) throw new InvalidArgumentException('الكلمات لازم تكون قائمة');
-            $r=(new DataForSeoResearchService(null,$this->db))->research($wid,$uid,(int)$this->get('market_id',0),$seeds);
+            $r=(new DataForSeoResearchService($this->db))->research($wid,$uid,(int)$this->get('market_id',0),$seeds);
             if (empty($r['available'])) return $this->success($r,'not measured');
             $words=array_column($r['data'],'keyword');
             return $this->success($r+['discovered_keywords'=>$words,'new_discoveries'=>$words]);

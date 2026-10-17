@@ -8,10 +8,10 @@ class SeoKeywordGapService
         foreach ($customer as $r) $index[$r['market_id'].'|'.mb_strtolower(trim($r['keyword']))]=$r;
         $out=[];
         foreach ($competitors as $r) {
-            $date=strtotime(($r['fetched_at']??'').' UTC');
+            $date=!empty($r['fetched_at'])?strtotime($r['fetched_at'].' UTC'):false;
             if (($r['source']??'')!=='dataforseo' || !$date || $date<time()-30*86400 || $date>time()+300 || !isset($r['position'],$r['search_volume']) || (int)$r['position']<1 || (int)$r['position']>10) continue;
             $own=$index[$r['market_id'].'|'.mb_strtolower(trim($r['keyword']))]??null;
-            $checked=$own?strtotime(($own['last_checked_at']??'').' UTC'):false;
+            $checked=$own&&!empty($own['last_checked_at'])?strtotime($own['last_checked_at'].' UTC'):false;
             // An untracked word is unknown, not proof of absence. The gap refresh measures it first.
             if (!$checked || $checked<time()-30*86400 || $checked>time()+300) continue;
             if ($own['current_position']!==null && (int)$own['current_position']<=20) continue;
@@ -26,10 +26,10 @@ class SeoKeywordGapService
         $own=$db->query('SELECT keyword,market_id,current_position,last_checked_at FROM tracked_keywords WHERE website_id=? AND user_id=?',[$wid,$uid]);
         return self::calculate($rows,$own);
     }
-    public static function refresh(Database $db,int $wid,int $uid): array
+    public static function refresh(Database $db,int $wid,int $uid,?DataForSeoResearchService $research=null,?RankTrackingService $rankTracking=null): array
     {
         $market=(new SeoMarketService($db))->resolve($wid,$uid);
-        $r=(new DataForSeoResearchService(null,$db))->competitors($wid,$uid);
+        $r=($research??new DataForSeoResearchService($db))->competitors($wid,$uid);
         if (empty($r['available'])) return $r;
         // Bounded and user initiated: measure candidates before claiming a gap.
         $candidates=[];
@@ -37,8 +37,8 @@ class SeoKeywordGapService
             $candidates[]=$k['keyword'];
             $db->exec('INSERT IGNORE INTO tracked_keywords (website_id,user_id,market_id,keyword) VALUES (?,?,?,?)',[$wid,$uid,$market['id'],$k['keyword']]);
         }
-        if (!$candidates) return ['available'=>true,'gaps'=>self::rows($db,$wid,$uid)];
-        $check=(new RankTrackingService())->checkWebsite($db,$wid,$uid,(int)$market['id'],$candidates);
+        if (!$candidates) return ['available'=>true,'reason'=>null,'gaps'=>self::rows($db,$wid,$uid)];
+        $check=($rankTracking??new RankTrackingService())->checkWebsite($db,$wid,$uid,(int)$market['id'],$candidates);
         return ['available'=>!empty($check['available']),'reason'=>$check['reason']??null,'gaps'=>self::rows($db,$wid,$uid)];
     }
 }
