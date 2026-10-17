@@ -81,7 +81,64 @@ class SeoExpertService
         $brief=SeoBusinessBriefBuilder::build($contexts,(string)($site['company_name']??''),$ar);
         return $brief+['sources'=>array_map(static fn($c)=>$c['final_url'],$contexts),'needs_review'=>true];
     }
+    private static function canRefreshBreadcrumbs(array $t): bool {
+        if(($t['kind']??'')!=='metadata'||($t['field_name']??'')!=='jsonld'||!in_array($t['status']??'',['pending','needs_client'],true)||!empty($t['is_active'])||!empty($t['previous_task_id'])||!empty($t['external_post_id'])||!empty($t['published_url']))return false;
+        $schema=json_decode((string)($t['expected_value']??''),true);if(!is_array($schema))return false;
+        $nodes=$schema['@graph']??[$schema];
+        if(!is_array($nodes)||count($nodes)!==1||($nodes[0]['@type']??null)!=='BreadcrumbList')return false;
+        $breadcrumbTypes=static function(array $node)use(&$breadcrumbTypes):bool{
+            if(array_diff((array)($node['@type']??[]),['BreadcrumbList','ListItem']))return false;
+            foreach($node as $value)if(is_array($value)&&!$breadcrumbTypes($value))return false;
+            return true;
+        };
+        return $breadcrumbTypes($schema);
+    }
+    private function refreshBreadcrumbs(int $uid,int $id,array $input): array {
+        $t=$this->q('SELECT * FROM seo_expert_tasks WHERE id=? AND user_id=?',[$id,$uid])->fetch(PDO::FETCH_ASSOC);if(!$t||!self::canRefreshBreadcrumbs($t))throw new InvalidArgumentException('Only an unpublished breadcrumb-only proposal can be refreshed');
+        $r=$this->run($uid,(int)$t['run_id']);$version=(int)($input['version']??0);
+        if(!in_array($r['status'],['draft','completed'],true)||(int)$r['version']!==$version)throw new InvalidArgumentException('Plan changed; reload before refreshing breadcrumbs');
+        $wid=(int)$t['website_id'];if(!ExternalExecution::lock('seo-expert-site:'.$wid))throw new RuntimeException('Site busy');
+        try{
+            $site=$this->site($uid,$wid);$snap=json_decode((string)$r['snapshot_json'],true)?:[];
+            (new BusinessHubService($this->db))->assertRevision($uid,$wid,$snap['brief']??[]);
+            if(!SeoPagePolicy::route((string)$t['page_url'])['eligible'])throw new InvalidArgumentException('This page is outside marketing scope');
+            self::path((string)$t['page_url']);$parts=parse_url($t['page_url']);$siteParts=parse_url($site['main_url']);
+            if(!WordPressConnector::hostsEqual((string)$parts['host'],(string)$siteParts['host'])||$parts['scheme']!==$siteParts['scheme']||($parts['port']??443)!==($siteParts['port']??443))throw new InvalidArgumentException('Page is outside the selected website');
+            $origin=$parts['scheme'].'://'.$parts['host'].(isset($parts['port'])?':'.$parts['port']:'');
+            $reader=$this->reader??new SeoExpertPageContext();$page=$reader->fresh($t['page_url']);
+            if(empty($page['ok'])||(int)($page['http_status']??0)!==200||!empty($page['coming_soon'])||($page['final_url']??'')!==$t['page_url'])throw new InvalidArgumentException('The exact public page must be live before refreshing breadcrumbs');
+            if(($page['schema']??[])!==(json_decode((string)$t['before_json'],true)?:[]))throw new InvalidArgumentException('Public structured data changed; review the page before replacing this proposal');
+            require_once __DIR__.'/SeoSchemaBuilder.php';
+            $parents=[];$prefixes=[];$path='';$segments=explode('/',trim((string)$parts['path'],'/'));array_pop($segments);
+            foreach($segments as $segment){$path.='/'.$segment;$prefixes[$path]=true;}
+            $deadline=microtime(true)+20;
+            foreach($snap['pages']??[] as $candidate){
+                $url=(string)($candidate['url']??'');$p=parse_url($url);
+                if(!$p||!isset($prefixes[rtrim($p['path']??'/','/')])||isset($p['query'])||isset($p['fragment'])||isset($p['user'])||isset($p['pass'])||strtolower($p['host']??'')!==strtolower($parts['host'])||($p['scheme']??'')!==$parts['scheme']||($p['port']??null)!==($parts['port']??null))continue;
+                if(count($parents)>=4||microtime(true)>=$deadline)break;
+                unset($prefixes[rtrim($p['path'],'/')]);$parents[]=$reader->fresh($url);
+            }
+            $page['url']=$t['page_url'];$page['page_path']=$parts['path'];
+            $business=(string)($snap['brief']['shared_profile']['facts']['business_name']??($snap['brief']['business_name']??''));
+            $built=SeoSchemaBuilder::forPage($page,['site_url'=>$origin,'business_name'=>$business,'verified_pages'=>$parents]);
+            if(!$built||$built['types']!==['BreadcrumbList'])throw new InvalidArgumentException('This page requires a separate structured-data review');
+            $value=EdgeRules::sanitize('jsonld',json_encode($built['graph'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),(string)$parts['host']);
+            if(!is_string($value))throw new InvalidArgumentException('Could not build a safe breadcrumb proposal');
+            return $this->db->transaction(function()use($uid,$id,$wid,$t,$r,$snap,$version,$value,$parents){
+                $current=$this->q('SELECT * FROM seo_expert_tasks WHERE id=? AND user_id=? FOR UPDATE',[$id,$uid])->fetch(PDO::FETCH_ASSOC);$run=$this->run($uid,(int)$r['id'],true);
+                if(!self::canRefreshBreadcrumbs($current?:[])||$current['expected_value']!==$t['expected_value']||$current['before_json']!==$t['before_json']||(int)$run['version']!==$version||!in_array($run['status'],['draft','completed'],true))throw new InvalidArgumentException('Task changed while reading public pages; reload and review it');
+                (new BusinessHubService($this->db))->assertRevision($uid,$wid,$snap['brief']??[]);
+                $evidence=json_decode((string)$current['evidence_json'],true)?:[];
+                $history=$evidence['breadcrumb_refresh_history']??[];$history[]=['previous_value'=>$current['expected_value'],'checked_at'=>gmdate('c'),'inspected_parents'=>array_column($parents,'final_url')];
+                $evidence['breadcrumb_refresh_history']=array_slice($history,-5);$evidence['reason']='Breadcrumb proposal rebuilt from current public pages. Review and approve before publishing.';
+                $this->q("UPDATE seo_expert_tasks SET expected_value=?,status='pending',evidence_json=?,checked_at=NULL,updated_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?",[$value,json_encode($evidence,JSON_THROW_ON_ERROR),$id,$uid]);
+                $this->q('UPDATE seo_expert_runs SET version=version+1,updated_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?',[$r['id'],$uid]);
+                return $this->detail($uid,(int)$r['id']);
+            });
+        }finally{ExternalExecution::unlock('seo-expert-site:'.$wid);}
+    }
     public function editTask(int $uid,int $id,array $input): array{
+        if(($input['refresh_breadcrumbs']??false)===true){$this->requireReady();return $this->refreshBreadcrumbs($uid,$id,$input);}
         $this->requireReady();return $this->db->transaction(function()use($uid,$id,$input){$t=$this->q('SELECT * FROM seo_expert_tasks WHERE id=? AND user_id=? FOR UPDATE',[$id,$uid])->fetch(PDO::FETCH_ASSOC);if(!$t)throw new InvalidArgumentException('Task unavailable');$r=$this->run($uid,(int)$t['run_id'],true);if(!in_array($r['status'],['draft','completed'],true)||(int)($input['version']??0)!==(int)$r['version']||$t['status']!=='pending'||!in_array($t['kind'],['metadata','content'],true))throw new InvalidArgumentException('Plan changed or task cannot be edited');$value=self::text($input['value']??'','task value',$t['kind']==='content'?9000:5000,5);$title=$t['title'];
             if($t['kind']==='metadata'){$host=(string)parse_url($this->site($uid,(int)$t['website_id'])['main_url'],PHP_URL_HOST);$clean=EdgeRules::sanitize($t['field_name'],$value,$host);if($t['field_name']==='canonical'&&$clean!==$t['page_url'])throw new InvalidArgumentException('Only the inspected page self-canonical is supported here.');if(!is_string($clean)||FixValueBuilder::looksLikePlaceholder($clean))throw new InvalidArgumentException('Invalid metadata');if($t['field_name']==='jsonld')throw new InvalidArgumentException('Business schema is derived from confirmed facts. Edit business facts and create a fresh plan.');$value=$clean;}
             else{$title=self::text($input['title']??$title,'content title',150,10);(new ContentQualityService($this->db))->editTaskDraft($uid,(int)$t['website_id'],array_replace($t,['title'=>$title,'expected_value'=>$value]),$input);}
@@ -359,7 +416,7 @@ class SeoExpertService
             return $this->detail($uid,$id)+['verification_queued'=>true];
         }finally{ExternalExecution::unlock('seo-expert-site:'.$wid);}
     }
-    public function detail(int $uid,int $id): array{$this->requireReady();$r=$this->run($uid,$id);$r['snapshot']=json_decode((string)$r['snapshot_json'],true);$r['plan']=null;if(is_array($r['snapshot'])){$r['snapshot']['pages']=array_map(static fn($p)=>array_intersect_key($p,array_flip(['url','title','description','lang','body_text_length'])),$r['snapshot']['pages']??[]);unset($r['snapshot']['scope_review']['archive']);unset($r['snapshot']['seen_paths'],$r['snapshot']['pending_urls'],$r['snapshot']['discovery']);}unset($r['snapshot_json'],$r['plan_json'],$r['usage_token'],$r['request_key']);$tasks=$this->q('SELECT * FROM seo_expert_tasks WHERE run_id=? AND user_id=? ORDER BY id',[$id,$uid])->fetchAll(PDO::FETCH_ASSOC);foreach($tasks as &$t){$t['verification']=SeoVerificationState::forTask($t);$t['before']=json_decode((string)$t['before_json'],true);$t['evidence']=json_decode((string)$t['evidence_json'],true);unset($t['before_json'],$t['evidence_json']);}unset($t);if(array_filter($tasks,static fn($task)=>$task['kind']==='content')&&(new ContentQualityService($this->db))->ready()){$qualityRows=$this->q('SELECT source_key,description,faqs_json FROM seo_content_quality WHERE website_id=? AND user_id=? AND task_id IS NOT NULL',[(int)$r['website_id'],$uid])->fetchAll(PDO::FETCH_ASSOC);$qualityByKey=array_column($qualityRows,null,'source_key');foreach($tasks as &$task)if($task['kind']==='content'&&isset($qualityByKey['task:'.$task['id']])){$quality=$qualityByKey['task:'.$task['id']];$task['content_review']=['meta_description'=>$quality['description']??'','faqs'=>json_decode($quality['faqs_json'],true)?:[]];}unset($task);}$identityValid=true;try{$identityConfig=$this->config($uid,(int)$r['website_id']);$identityBrief=in_array($r['status'],['queued','scanning','scanned'],true)?(json_decode($identityConfig['brief_json'],true)?:[]):($r['snapshot']['brief']??[]);(new BusinessHubService($this->db))->assertRevision($uid,(int)$r['website_id'],$identityBrief);}catch(InvalidArgumentException $e){$identityValid=false;}return ['run'=>$r,'tasks'=>$tasks,'identity_valid'=>$identityValid,'worker_ready'=>$identityValid&&self::worker(),'cycle_health'=>$this->cycleHealth($uid,$r,$identityValid,count($tasks))];}
+    public function detail(int $uid,int $id): array{$this->requireReady();$r=$this->run($uid,$id);$r['snapshot']=json_decode((string)$r['snapshot_json'],true);$r['plan']=null;if(is_array($r['snapshot'])){$r['snapshot']['pages']=array_map(static fn($p)=>array_intersect_key($p,array_flip(['url','title','description','lang','body_text_length'])),$r['snapshot']['pages']??[]);unset($r['snapshot']['scope_review']['archive']);unset($r['snapshot']['seen_paths'],$r['snapshot']['pending_urls'],$r['snapshot']['discovery']);}unset($r['snapshot_json'],$r['plan_json'],$r['usage_token'],$r['request_key']);$tasks=$this->q('SELECT * FROM seo_expert_tasks WHERE run_id=? AND user_id=? ORDER BY id',[$id,$uid])->fetchAll(PDO::FETCH_ASSOC);foreach($tasks as &$t){$t['verification']=SeoVerificationState::forTask($t);$t['breadcrumb_refreshable']=self::canRefreshBreadcrumbs($t);$t['before']=json_decode((string)$t['before_json'],true);$t['evidence']=json_decode((string)$t['evidence_json'],true);unset($t['before_json'],$t['evidence_json']);}unset($t);if(array_filter($tasks,static fn($task)=>$task['kind']==='content')&&(new ContentQualityService($this->db))->ready()){$qualityRows=$this->q('SELECT source_key,description,faqs_json FROM seo_content_quality WHERE website_id=? AND user_id=? AND task_id IS NOT NULL',[(int)$r['website_id'],$uid])->fetchAll(PDO::FETCH_ASSOC);$qualityByKey=array_column($qualityRows,null,'source_key');foreach($tasks as &$task)if($task['kind']==='content'&&isset($qualityByKey['task:'.$task['id']])){$quality=$qualityByKey['task:'.$task['id']];$task['content_review']=['meta_description'=>$quality['description']??'','faqs'=>json_decode($quality['faqs_json'],true)?:[]];}unset($task);}$identityValid=true;try{$identityConfig=$this->config($uid,(int)$r['website_id']);$identityBrief=in_array($r['status'],['queued','scanning','scanned'],true)?(json_decode($identityConfig['brief_json'],true)?:[]):($r['snapshot']['brief']??[]);(new BusinessHubService($this->db))->assertRevision($uid,(int)$r['website_id'],$identityBrief);}catch(InvalidArgumentException $e){$identityValid=false;}return ['run'=>$r,'tasks'=>$tasks,'identity_valid'=>$identityValid,'worker_ready'=>$identityValid&&self::worker(),'cycle_health'=>$this->cycleHealth($uid,$r,$identityValid,count($tasks))];}
     private function cycleHealth(int $uid,array $run,bool $identity,int $tasks): array {
         if(!in_array((string)($run['status']??''),['queued','scanning','scanned','planning','executing','monitoring','failed'],true))return SeoCycleHealth::evaluate($run,[],true,self::worker(),$identity,'unavailable',$tasks,time());
         $jobs=[];$available=true;$reservation='unavailable';

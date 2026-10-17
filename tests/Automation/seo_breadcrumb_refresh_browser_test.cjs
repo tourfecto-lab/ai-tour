@@ -1,0 +1,33 @@
+const path=require('node:path');const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
+(async()=>{let n=0;const check=(ok,label)=>{if(!ok)throw Error(label);n++;console.log('PASS '+label);};const b=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});try{
+const p=await b.newPage(),writes=[],errors=[];p.on('pageerror',e=>errors.push(e.message));let version=7;
+const old='{"@graph":[{"@type":"BreadcrumbList","itemListElement":[{"item":"https://site.example/page/"}]}]}';
+let tasks=[{id:99,kind:'content',category:'aeo',status:'pending',title:'Reviewed guide',page_url:'https://site.example/',expected_value:'Reviewed text before booking.',field_name:'content',content_review:{meta_description:'Reviewed description.',faqs:[]}},...[201,202,203,204].map(id=>({id,kind:'metadata',category:'geo',status:id===203?'verified':'needs_client',is_active:id===203?1:0,title:'Breadcrumb review',instructions:'Review the inspected breadcrumb.',page_url:'https://site.example/page/privacy',expected_value:old,field_name:'jsonld',breadcrumb_refreshable:id<203}))];
+const detail=()=>({identity_valid:true,worker_ready:true,run:{id:10,status:'completed',version,summary:'Review current proposals',snapshot:{pages:[],opportunities:{scope_version:2}}},tasks});
+await p.route('http://platform.test/**',async r=>{const req=r.request(),u=new URL(req.url()),route=u.searchParams.get('__tf_api')||u.pathname;if(!route.startsWith('/api/'))return r.fulfill({contentType:'text/html',body:'<!doctype html><html lang="en"><section id="seoExpertRoot" data-user-id="1"></section></html>'});if(req.method()!=='GET')writes.push({route,body:req.postDataJSON()});let data={};
+if(route.endsWith('/setup'))data={installed:true,worker_ready:true,csrf_token:'fixture',websites:[{id:32,domain:'site.example'}]};
+else if(route.endsWith('/sites/32'))data={site:{id:32,url:'https://site.example'},worker_ready:true,quote:{allowed:true,source:'plan'},config:{status:'draft',version:1,brief:{business_name:'Example',business_facts:'Confirmed facts',audience:'Travelers',goal:'Bookings',language:'en'},policy:{max_cycles:3,max_cycle_price:0,max_pages:100}},runs:[{id:10,status:'completed'}],connections:{}};
+else if(route.endsWith('/probe'))data={connector:{state:'publicly_observed'},metrics:{gsc:{state:'measured'},analytics:{state:'measured'}},publishing:{state:'authenticated'}};
+else if(route.endsWith('/runs/10'))data=detail();
+else if(route.endsWith('/tasks/201/edit')){tasks=tasks.map(t=>t.id===201?{...t,status:'pending',expected_value:'{"@graph":[{"@type":"BreadcrumbList","itemListElement":[{"item":"https://site.example/"},{"item":"https://site.example/page/privacy"}]}]}'}:t);version++;data=detail();}
+else if(route.endsWith('/tasks/202/edit'))return r.fulfill({contentType:'application/json',body:JSON.stringify({success:false,error:'Public structured data changed; review the page.'})});
+await r.fulfill({contentType:'application/json',body:JSON.stringify({success:true,data})});});
+await p.goto('http://platform.test/seo-expert?website_id=32&page=plan');await p.addScriptTag({path:path.resolve(__dirname,'../../public_html/assets/js/panel.js')});await p.addScriptTag({path:path.resolve(__dirname,'../../public_html/assets/js/seo-expert.js')});await p.locator('[data-run="10"]').click();
+await p.locator('[data-refresh-breadcrumbs="201"]').waitFor();
+check(await p.locator('[data-refresh-breadcrumbs]').count()===2,'only eligible unpublished breadcrumb tasks expose refresh');
+await p.locator('[data-task="99"] [data-meta-description]').fill('Unsaved edit');await p.locator('[data-refresh-breadcrumbs="201"]').click();await p.waitForFunction(()=>document.querySelector('#seMessage').textContent.includes('Save your edits'));
+check(!writes.some(w=>w.body.refresh_breadcrumbs),'unsaved draft edits block refresh before any request');
+await p.locator('[data-task="99"] [data-meta-description]').fill('Reviewed description.');await p.locator('[data-refresh-breadcrumbs="201"]').click();await p.waitForFunction(()=>document.querySelector('[data-task="201"]')?.dataset.status==='pending');
+const saved=writes.find(w=>w.route.endsWith('/tasks/201/edit'));
+check(saved.body.refresh_breadcrumbs===true&&saved.body.version===7,'refresh sends the dedicated action and current plan version');
+check(!('value' in saved.body),'browser never supplies replacement business schema');
+check((await p.locator('[data-task="201"] pre').innerText()).includes('/page/privacy')&&!(await p.locator('[data-task="201"] pre').innerText()).includes('example/page/"'),'corrected proposal is visible for review');
+check(await p.locator('[data-task="99"] [data-meta-description]').inputValue()==='Reviewed description.','unrelated article fields remain intact');
+check((await p.locator('#seMessage').innerText()).includes('Approve it before publishing'),'refresh explains that publication still requires approval');
+await p.locator('[data-refresh-breadcrumbs="202"]').click();await p.waitForFunction(()=>document.querySelector('#seMessage').textContent.includes('Public structured data changed'));
+check(writes.find(w=>w.route.endsWith('/tasks/202/edit')).body.version===8,'next request uses the updated plan version');
+await p.locator('[data-task="202"] details').evaluate(el=>el.open=true);
+check(await p.locator('[data-task="202"] pre').innerText()===old,'failed refresh leaves the old proposal visible');
+check(writes.every(w=>w.route.endsWith('/probe')||w.route.endsWith('/edit')),'review never starts a cycle or publishes changes');
+check(errors.length===0,'breadcrumb review has no browser JavaScript errors');
+}finally{await b.close();}console.log(n+' assertions passed');})().catch(e=>{console.error(e.message);process.exitCode=1;});
