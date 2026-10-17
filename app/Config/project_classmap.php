@@ -1,6 +1,18 @@
 <?php
 // Generated release map. Rebuild via tools/build_project_classmap.php after code changes.
 return [
+    'AiVisibilityDetector' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityDetector.php',
+    'AiVisibilityEvidence' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityEvidence.php',
+    'AiVisibilityLedger' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityLedger.php',
+    'AiVisibilityMetrics' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityMetrics.php',
+    'AiVisibilityProvider' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityProvider.php',
+    'AiVisibilityQuestions' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityQuestions.php',
+    'AiVisibilitySchema' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilitySchema.php',
+    'AiVisibilityService' => dirname(__DIR__,2).'/app/Services/AiVisibility/AiVisibilityService.php',
+    'GeminiVisibilityProvider' => dirname(__DIR__,2).'/app/Services/AiVisibility/GeminiVisibilityProvider.php',
+    'GeoLlmsBuilder' => dirname(__DIR__,2).'/app/Services/AiVisibility/GeoLlmsBuilder.php',
+    'OpenAiVisibilityProvider' => dirname(__DIR__,2).'/app/Services/AiVisibility/OpenAiVisibilityProvider.php',
+    'SonarVisibilityProvider' => dirname(__DIR__,2).'/app/Services/AiVisibility/SonarVisibilityProvider.php',
     'DataForSeoClient' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoClient.php',
     'DataForSeoResearchService' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoResearchService.php',
     'SeoDataLedger' => dirname(__DIR__,2).'/app/Services/Seo/SeoDataLedger.php',

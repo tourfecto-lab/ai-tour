@@ -16,6 +16,14 @@ class SystemSettingsService
 
     /** @var array السجل الكامل لكل إعدادات النظام المعروفة */
     private static array $registry = [
+        'geo_enabled' => ['category'=>'geo','label'=>'تفعيل قياس ظهور AI المدفوع','is_secret'=>false,'constant'=>''],
+        'geo_monthly_budget_usd' => ['category'=>'geo','label'=>'ميزانية قياس AI الشهرية بالدولار (0 يوقف الطلبات)','is_secret'=>false,'constant'=>''],
+        'geo_openai_enabled' => ['category'=>'geo','label'=>'تفعيل openai لقياس الظهور','is_secret'=>false,'constant'=>''],
+        'geo_openai_api_key' => ['category'=>'geo','label'=>'openai GEO API Key','is_secret'=>true,'constant'=>''],
+        'geo_gemini_enabled' => ['category'=>'geo','label'=>'تفعيل gemini لقياس الظهور','is_secret'=>false,'constant'=>''],
+        'geo_gemini_api_key' => ['category'=>'geo','label'=>'gemini GEO API Key','is_secret'=>true,'constant'=>''],
+        'geo_perplexity_enabled' => ['category'=>'geo','label'=>'تفعيل perplexity لقياس الظهور','is_secret'=>false,'constant'=>''],
+        'geo_perplexity_api_key' => ['category'=>'geo','label'=>'perplexity GEO API Key','is_secret'=>true,'constant'=>''],
         'serp_monthly_budget_usd' => ['category'=>'seo','label'=>'سقف DataForSEO الشهري بالدولار (0 يوقف الطلبات)','is_secret'=>false,'constant'=>''],
         'serp_enabled' => ['category'=>'seo','label'=>'تفعيل بيانات SEO المدفوعة: بحث وترتيب (1 فقط)','is_secret'=>false,'constant'=>''],
         'serp_login' => ['category'=>'seo','label'=>'DataForSEO API Login','is_secret'=>true,'constant'=>''],

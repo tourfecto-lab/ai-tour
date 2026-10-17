@@ -24,6 +24,7 @@ class PlanUsage
     /** feature key (نفس مفتاح تسعير المحفظة أو مفتاح فرعي) => مفتاح features_json */
     private const FEATURES = [
         'seo_data' => 'seo_data',
+        'ai_visibility' => 'ai_visibility',
         'ai_assistant_message' => 'ai_assistant_messages',
         'website_generation' => 'website_generations',
         'website_item' => 'website_items',
@@ -121,6 +122,12 @@ class PlanUsage
         if (self::consume($userId, $feature, $note)) {
             return 'plan';
         }
+        if($feature==='ai_visibility'){
+            // Paid measurement overage requires an active, positive USD price. No free unlimited fallback.
+            $pdo=Database::getInstance()->getConnection();$lock=$pdo->inTransaction()&&$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':'';
+            $stmt=$pdo->prepare('SELECT price,currency,is_active FROM pay_per_use_pricing WHERE feature_key=?'.$lock);$stmt->execute([$walletKey]);$price=$stmt->fetch(PDO::FETCH_ASSOC);
+            if(!$price||!(int)$price['is_active']||!is_finite((float)$price['price'])||(float)$price['price']<=0||$price['currency']!=='USD')return 'failed';
+        }
         return (new WalletService())->chargeForUsage($userId, $walletKey, $note) ? 'wallet' : 'failed';
     }
 
@@ -176,6 +183,7 @@ class PlanUsage
     /** أسماء الميزات للعرض */
     private const LABELS = [
         'seo_data' => ['قياس كلمة SEO', 'seo_data'],
+        'ai_visibility' => ['سؤال ومزوّد AI', 'ai_visibility'],
         'ai_assistant_message' => ['رسالة', 'ai_assistant_message'],
         'website_generation' => ['موقع', 'website_generation'],
         'website_item' => ['عنصر', 'website_generation'],
@@ -251,13 +259,13 @@ class PlanUsage
         }
         $features=BillingPlanCatalog::features($row);
         $limit=(int)($features[$jsonKey]??0);
-        return $jsonKey==='seo_data'?max(0,$limit):$limit;
+        return in_array($jsonKey,['seo_data','ai_visibility'],true)?max(0,$limit):$limit;
     }
 
     private static function used(int $subId, string $feature, string $since): int
     {
         try {
-            if ($feature==='seo_data') {
+            if (in_array($feature,['seo_data','ai_visibility'],true)) {
                 $s=Database::getInstance()->getConnection()->prepare('SELECT COUNT(*) FROM plan_usage_events WHERE subscription_id=? AND feature=? AND created_at>=?');
                 $s->execute([$subId,$feature,$since ?: '1970-01-01 00:00:00']);
                 return (int)$s->fetchColumn();
