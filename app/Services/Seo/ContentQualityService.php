@@ -18,6 +18,8 @@ class ContentQualityService
     public static function cluster(string $keyword,array $pages,string $siteUrl): ?array
     {
         $words=static function(string $s): array {preg_match_all('/[\p{L}\p{N}]{3,}/u',mb_strtolower($s),$m);return array_values(array_diff(array_unique($m[0]),['the','and','from','with','tour','tours','trip','trips','guide','best','رحلة','رحلات']));};
+        $transportPattern='/\b(?:transfers?|transport(?:ation)?|shuttles?|airports?)\b|انتقالات|انتقال|توصيل|نقل|مطار/iu';
+        $transportIntent=preg_match($transportPattern,$keyword)===1;
         $target=$words($keyword);$best=null;$score=0;$host=strtolower((string)parse_url($siteUrl,PHP_URL_HOST));
         foreach ($pages as $p) {
             if (preg_match('/\b(?:noindex|none)\b/i',(string)($p['robots']??''))) continue;
@@ -25,6 +27,9 @@ class ContentQualityService
             if (str_starts_with($url,'/') && !str_starts_with($url,'//')) $url=rtrim($siteUrl,'/').$url;
             if (class_exists('SeoPagePolicy') && !SeoPagePolicy::classify(array_replace($p,['url'=>$url]))['eligible']) continue;
             if (!self::pagePath($url,$host) || !preg_match('~/(?:tours?|trips?|destinations?|locations?|excursions?|packages?)/~i',(string)parse_url($url,PHP_URL_PATH))) continue;
+            // A transport category lists many cities and can falsely outscore a destination guide.
+            // Keep it available for explicit transfer/airport intent, not general sightseeing content.
+            if(!$transportIntent && preg_match($transportPattern,rawurldecode((string)parse_url($url,PHP_URL_PATH))))continue;
             $hits=count(array_intersect($target,$words(($p['title']??'').' '.rawurldecode((string)parse_url($url,PHP_URL_PATH)))));
             if ($hits>$score) {$score=$hits;$best=['url'=>$url,'title'=>mb_substr((string)($p['title']??$keyword),0,90)];}
         }

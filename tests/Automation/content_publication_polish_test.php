@@ -19,6 +19,12 @@ check(!str_contains($theme,'<h1>Home</h1>')&&str_contains($theme,'data-tourfecto
 check(str_contains($theme,'Confirmed company')&&!str_contains($theme,'FAQPage'),'home-only FAQ schema is removed while organization identity is retained');
 check(GuideContent::theme('<html><head></head><body><main>A</main><main>B</main></body></html>','X')===null,'ambiguous themes decline replacement for safe standalone fallback');
 check(GuideContent::theme('<html><head></head><body>No main</body></html>','X')===null,'missing main declines replacement');
+$clusterPages=[['url'=>'https://site.example/tours/transfers','title'=>'Private Transfers in Egypt: Airports, Luxor, Aswan, Hurghada and Marsa Alam'],['url'=>'https://site.example/tours/egypt-packages','title'=>'Egypt Tour Packages: Cairo, Nile Cruises, Red Sea and More']];
+$cluster=ContentQualityService::cluster("Explore Egypt: A Traveler's Guide to Luxor, Aswan, and Cairo",$clusterPages,'https://site.example');
+check($cluster['url']==='https://site.example/tours/egypt-packages','general Egypt guide chooses tour packages over a transfer page listing many cities');
+$cluster=ContentQualityService::cluster('Private airport transfers in Luxor',$clusterPages,'https://site.example');
+check($cluster['url']==='https://site.example/tours/transfers','explicit airport transfer content still links to the relevant transport service');
+check(ContentQualityService::cluster('Luxor sightseeing guide',[$clusterPages[0]],'https://site.example')===null,'no suitable sightseeing pillar means no forced transport link');
 $article='https://site.example/?tf_article=luxor-guide';
 check(ContentQualityService::publicationPath($article,'site.example')==='/?tf_article=luxor-guide','exact fallback article has an isolated rules key');
 foreach(['https://site.example/?tf_article[]=luxor-guide','https://site.example/?tf_article=luxor-guide&preview=1','https://site.example/?tf_article=luxor-guide&tf_article=other','https://evil.example/?tf_article=luxor-guide','https://site.example/tours?tf_article=luxor-guide','https://site.example/?tf_article=../admin'] as $bad)check(ContentQualityService::publicationPath($bad,'site.example')===null,'unsafe/ambiguous query cannot create article rules');
