@@ -42,29 +42,41 @@ class BacklinkMonitorService
         $url = (string) $backlink->getAttribute('link_url');
         $fetch = $this->fetchUrl($url);
 
-        $live = ($fetch['success'] ?? false)
-            && ($fetch['http_status'] ?? 0) >= 200
-            && ($fetch['http_status'] ?? 0) < 400;
+        $db=Database::getInstance();
+        $sites=$db->query('SELECT main_url FROM websites WHERE id=? AND user_id=?',[(int)$backlink->getAttribute('website_id'),(int)$backlink->getAttribute('user_id')]);
+        if (!$sites) return ['success'=>false,'status'=>null,'error'=>'website_unavailable'];
+        $evidence=self::detect((string)($fetch['html']??$fetch['body']??''),(string)($fetch['url']??$url),$sites[0]['main_url']);
+        $code=(int)($fetch['http_status']??0);
+        $state=!empty($fetch['success'])&&$code===200?($evidence['live']?'live':'lost'):(in_array($code,[404,410],true)?'lost':'unavailable');
+        $db->transaction(function()use($db,$backlinkId,$backlink,$fetch,$evidence,$code,$state){
+            $locked=$db->query('SELECT status,check_count FROM monitored_backlinks WHERE id=? FOR UPDATE',[$backlinkId])[0];$before=$locked['status'];
+            $backlink->setAttribute('status',$state==='unavailable'?$before:$state);
+            $backlink->setAttribute('last_checked_at',gmdate('Y-m-d H:i:s'));
+            $backlink->setAttribute('check_count',(int)$locked['check_count']+1);
+            $backlink->setAttribute('last_http_status',$code?:null);
+            $backlink->setAttribute('last_error',$state==='unavailable'?($fetch['error']??'verification_unavailable'):null);
+            if($state==='live')$backlink->setAttribute('last_seen_live_at',gmdate('Y-m-d H:i:s'));
+            $backlink->save();
+            $db->exec('REPLACE INTO seo_backlink_evidence(backlink_id,rel_json,anchor_text,target_url,state,checked_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP())',[$backlinkId,json_encode($evidence['rel']),$evidence['anchor'],$evidence['target_url'],$state]);
+            if($before==='live'&&$state==='lost')Notification::notify((int)$backlink->getAttribute('user_id'),'backlink_lost','اختفى رابط لموقعك','لم يعد الرابط موجودًا في الصفحة العامة: '.$backlink->getAttribute('link_url'),'/outreach');
+        });
+        return ['success'=>$state!=='unavailable','backlink'=>$backlink->toArray(),'status'=>$state,'http_status'=>$code?:null,'evidence'=>$evidence,'error'=>$fetch['error']??null];
+    }
 
-        $status = $live ? 'live' : 'lost';
-
-        $backlink->setAttribute('status', $status);
-        $backlink->setAttribute('last_checked_at', date('Y-m-d H:i:s'));
-        $backlink->setAttribute('check_count', (int) $backlink->getAttribute('check_count') + 1);
-        $backlink->setAttribute('last_http_status', $fetch['http_status'] ?? null);
-        $backlink->setAttribute('last_error', $fetch['error'] ?? null);
-        if ($live) {
-            $backlink->setAttribute('last_seen_live_at', date('Y-m-d H:i:s'));
-        }
-        $backlink->save();
-
-        return [
-            'success' => true,
-            'backlink' => $backlink->toArray(),
-            'status' => $status,
-            'http_status' => $fetch['http_status'] ?? null,
-            'error' => $fetch['error'] ?? null,
-        ];
+    /** HTTP 200 alone is not evidence: require a real anchor resolved to the owned host. */
+    public static function detect(string $html,string $sourceUrl,string $customerUrl): array
+    {
+        $empty=['live'=>false,'anchor'=>'','rel'=>[],'target_url'=>null];
+        $host=DataForSeoRankingSource::normalizeHost($customerUrl);if($host==='')return $empty;
+        $dom=new DOMDocument();$old=libxml_use_internal_errors(true);try{$dom->loadHTML('<?xml encoding="UTF-8">'.$html,LIBXML_NONET|LIBXML_NOERROR);}finally{libxml_clear_errors();libxml_use_internal_errors($old);}
+        foreach($dom->getElementsByTagName('a') as $a){
+            $href=trim(html_entity_decode($a->getAttribute('href'),ENT_QUOTES|ENT_HTML5,'UTF-8'));
+            if(str_starts_with($href,'//'))$href=(parse_url($sourceUrl,PHP_URL_SCHEME)?:'https').':'.$href;
+            elseif(str_starts_with($href,'/'))$href=(parse_url($sourceUrl,PHP_URL_SCHEME)?:'https').'://'.parse_url($sourceUrl,PHP_URL_HOST).$href;
+            if(!in_array(parse_url($href,PHP_URL_SCHEME),['http','https'],true)||parse_url($href,PHP_URL_USER)!==null||parse_url($href,PHP_URL_PASS)!==null||!DataForSeoRankingSource::matchesHost($href,$host))continue;
+            return ['live'=>true,'anchor'=>mb_substr(trim(preg_replace('/\s+/u',' ',$a->textContent)),0,1000),
+                'rel'=>array_values(array_intersect(['nofollow','sponsored','ugc'],preg_split('/\s+/',strtolower(trim($a->getAttribute('rel')))))),'target_url'=>$href];
+        }return $empty;
     }
 
     /**
@@ -74,9 +86,10 @@ class BacklinkMonitorService
     public function registerAcquiredLink(int $userId, int $websiteId, int $prospectId, string $linkUrl, string $domain = ''): MonitoredBacklink
     {
         $db = Database::getInstance();
+        if (!$db->query('SELECT id FROM websites WHERE id=? AND user_id=?',[$websiteId,$userId])) throw new InvalidArgumentException('Website unavailable');
         $existing = $db->query(
-            'SELECT * FROM monitored_backlinks WHERE prospect_id = ? AND link_url = ? LIMIT 1',
-            [$prospectId, $linkUrl]
+            'SELECT * FROM monitored_backlinks WHERE prospect_id = ? AND link_url = ? AND user_id=? AND website_id=? LIMIT 1',
+            [$prospectId, $linkUrl,$userId,$websiteId]
         );
         if (!empty($existing)) {
             return new MonitoredBacklink($existing[0]);
@@ -129,8 +142,10 @@ class BacklinkMonitorService
                 $res = $this->checkLink((int) $row['id']);
                 if ($res['status'] === 'live') {
                     $stats['live']++;
-                } else {
+                } elseif ($res['status']==='lost') {
                     $stats['lost']++;
+                } else {
+                    $stats['failed']++;
                 }
             } catch (Throwable $e) {
                 $stats['failed']++;
@@ -176,14 +191,6 @@ class BacklinkMonitorService
             return is_array($res) ? $res : ['success' => false, 'http_status' => null, 'error' => 'invalid_fetcher_result'];
         }
 
-        if (!class_exists('WebsiteSnapshotFetcher')) {
-            return ['success' => false, 'http_status' => null, 'error' => 'fetcher_unavailable'];
-        }
-        $res = (new WebsiteSnapshotFetcher())->fetch($url);
-        return [
-            'success' => (bool) ($res['success'] ?? false),
-            'http_status' => $res['http_status'] ?? null,
-            'error' => $res['error'] ?? null,
-        ];
+        return (new SeoPublicPageReader())->fetch($url);
     }
 }

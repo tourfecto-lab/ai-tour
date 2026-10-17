@@ -8,6 +8,35 @@ final class SeoImpactService {
     private function requireReady(): void {if(!$this->ready())throw new InvalidArgumentException('Run the Phase 4 SQL migration first.');}
     private function site(int $uid,int $wid): array {$r=$this->db->query('SELECT * FROM websites WHERE id=? AND user_id=?',[$wid,$uid]);$s=$r[0]??null;if(!$s)throw new InvalidArgumentException('Website unavailable.');$s['url']=(string)($s[Website::urlColumn()]??$s['main_url']??'');if(!preg_match('#^https?://#i',$s['url']))$s['url']='https://'.$s['url'];return $s;}
     private function monitor(int $uid,int $id): array {$r=$this->db->query('SELECT * FROM seo_impact_monitors WHERE id=? AND user_id=?',[$id,$uid]);if(!$r)throw new InvalidArgumentException('Monitor unavailable.');return $r[0];}
+    public static function automaticWindows(string $date,?string $today=null): array {
+        $out=[];foreach([7,14,28] as $days){$p=SeoImpactRules::periods($date,$days,$today);$out[]=['window_days'=>$days,'due_at'=>$p['due_at']];}return $out;
+    }
+    /** Every applied task has three durable mappings; same-page/day comparisons are shared, not falsely causal. */
+    public function recordAppliedTask(int $uid,int $wid,int $taskId): array {
+        if(!$this->ready()||!$this->db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_auto_impact_monitors'"))return [];
+        $site=$this->site($uid,$wid);
+        return $this->db->transaction(function()use($uid,$wid,$taskId,$site){
+            $this->db->query('SELECT id FROM websites WHERE id=? AND user_id=? FOR UPDATE',[$wid,$uid]);
+            $rows=$this->db->query("SELECT * FROM seo_expert_tasks WHERE id=? AND website_id=? AND user_id=? AND status IN ('active','verified')",[$taskId,$wid,$uid]);if(!$rows)return [];$task=$rows[0];
+            $url=$task['kind']==='content'?($task['published_url']??''):$task['page_url'];if($url==='')return [];$page=SeoImpactRules::page($url,$site['url']);
+            $date=substr((string)($task['checked_at']??$task['updated_at']??gmdate('Y-m-d')),0,10);SeoImpactRules::periods($date,7);
+            $key='seo_task_'.$taskId;
+            $this->db->query("INSERT IGNORE INTO seo_impact_changes(user_id,website_id,external_key,page_url,change_date,source,created_at) VALUES(?,?,?,?,?,'seo_expert_applied',UTC_TIMESTAMP())",[$uid,$wid,$key,$page['url'],$date]);
+            $change=$this->db->query('SELECT change_date FROM seo_impact_changes WHERE website_id=? AND user_id=? AND external_key=?',[$wid,$uid,$key]);$date=$change[0]['change_date'];$ids=[];
+            foreach(self::automaticWindows($date) as $window){$days=$window['window_days'];
+                $this->db->query("INSERT IGNORE INTO seo_impact_monitors(user_id,website_id,page_url,page_path,page_hash,change_date,anchor_source,window_days,goal_event,channel,status,next_due_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'seo_expert_applied',?,'','organic','queued',?,UTC_TIMESTAMP(),UTC_TIMESTAMP())",[$uid,$wid,$page['url'],$page['path'],$page['hash'],$date,$days,$window['due_at']]);
+                $m=$this->db->query("SELECT id FROM seo_impact_monitors WHERE website_id=? AND user_id=? AND page_hash=? AND change_date=? AND window_days=? AND goal_event='' AND channel='organic'",[$wid,$uid,$page['hash'],$date,$days]);$id=(int)$m[0]['id'];
+                $this->db->exec('INSERT IGNORE INTO seo_auto_impact_monitors(website_id,user_id,task_id,window_days,monitor_id) VALUES(?,?,?,?,?)',[$wid,$uid,$taskId,$days,$id]);
+                $this->enqueue($id,max(0,strtotime($window['due_at'].' UTC')-time()));$ids[]=$id;
+            }return $ids;
+        });
+    }
+    public function syncAutomatic(?int $runId=null,int $limit=100): int {
+        if(!$this->ready()||!$this->db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_auto_impact_monitors'"))return 0;
+        $sql="SELECT t.id,t.user_id,t.website_id FROM seo_expert_tasks t JOIN websites w ON w.id=t.website_id AND w.user_id=t.user_id WHERE t.status IN ('active','verified') AND t.updated_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 365 DAY) AND (SELECT COUNT(*) FROM seo_auto_impact_monitors a WHERE a.website_id=t.website_id AND a.task_id=t.id)<3";
+        $args=[];if($runId!==null){$sql.=' AND t.run_id=?';$args[]=$runId;}$sql.=' ORDER BY t.id LIMIT '.max(1,min(500,$limit));$count=0;
+        foreach($this->db->query($sql,$args) as $t){try{$count+=count($this->recordAppliedTask((int)$t['user_id'],(int)$t['website_id'],(int)$t['id']));}catch(Throwable $e){Logger::warning('Automatic impact monitor needs review',['task_id'=>$t['id']]);}}return $count;
+    }
     public function overview(int $uid,int $wid): array {
         $site=$this->site($uid,$wid);if(!$this->ready())return ['installed'=>false,'monitors'=>[],'changes'=>[],'ai'=>[]];
         $monitors=$this->db->query('SELECT * FROM seo_impact_monitors WHERE user_id=? AND website_id=? ORDER BY id DESC LIMIT 20',[$uid,$wid]);foreach($monitors as &$m){$m['result']=json_decode((string)$m['result_json'],true);unset($m['result_json']);}unset($m);
@@ -26,7 +55,7 @@ final class SeoImpactService {
         if(!ExternalExecution::lock('seo-impact-site:'.$wid))throw new InvalidArgumentException('Measurement setup busy.');
         try {
             $r=$this->db->query('SELECT id FROM seo_impact_monitors WHERE website_id=? AND user_id=? AND page_hash=? AND change_date=? AND window_days=? AND goal_event=? AND channel=?',[$wid,$uid,$page['hash'],$date,$days,$goal,$channel]);
-            if(!$r){$count=$this->db->query('SELECT COUNT(*) n FROM seo_impact_monitors WHERE website_id=? AND user_id=?',[$wid,$uid]);if((int)($count[0]['n']??0)>=20)throw new InvalidArgumentException('Maximum 20 monitored comparisons per website.');
+            if(!$r){$count=$this->db->query('SELECT COUNT(*) n FROM seo_impact_monitors WHERE website_id=? AND user_id=? AND anchor_source NOT IN (\'seo_expert_applied\',\'wordpress_auto_applied\')',[$wid,$uid]);if((int)($count[0]['n']??0)>=20)throw new InvalidArgumentException('Maximum 20 monitored comparisons per website.');
                 $id=(int)$this->db->query("INSERT INTO seo_impact_monitors(user_id,website_id,page_url,page_path,page_hash,change_date,anchor_source,window_days,goal_event,channel,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,'queued',UTC_TIMESTAMP(),UTC_TIMESTAMP())",[$uid,$wid,$page['url'],$page['path'],$page['hash'],$date,$anchorSource,$days,$goal,$channel]);
             }else $id=(int)$r[0]['id'];$this->enqueue($id);return $this->overview($uid,$wid);
         }finally{ExternalExecution::unlock('seo-impact-site:'.$wid);}
@@ -99,5 +128,11 @@ final class SeoImpactService {
         if(($result['state']??'')!=='saved'||empty($result['operation_id'])||!$this->ready())return;$site=$this->site($uid,$wid);$page=SeoImpactRules::page((string)($result['page']['url']??''),$site['url']);
         $key='wp_'.preg_replace('/[^a-zA-Z0-9_-]/','',(string)$result['operation_id']);if(strlen($key)>100)return;
         $this->db->query("INSERT IGNORE INTO seo_impact_changes(user_id,website_id,external_key,page_url,change_date,source,created_at) VALUES(?,?,?,?,UTC_DATE(),'wordpress_stored_verification',UTC_TIMESTAMP())",[$uid,$wid,$key,$page['url']]);
+        $date=$this->db->query('SELECT change_date FROM seo_impact_changes WHERE website_id=? AND user_id=? AND external_key=?',[$wid,$uid,$key])[0]['change_date'];
+        foreach(self::automaticWindows($date) as $window){
+            $this->db->query("INSERT IGNORE INTO seo_impact_monitors(user_id,website_id,page_url,page_path,page_hash,change_date,anchor_source,window_days,goal_event,channel,status,next_due_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'wordpress_auto_applied',?,'','organic','queued',?,UTC_TIMESTAMP(),UTC_TIMESTAMP())",[$uid,$wid,$page['url'],$page['path'],$page['hash'],$date,$window['window_days'],$window['due_at']]);
+            $m=$this->db->query("SELECT id FROM seo_impact_monitors WHERE website_id=? AND user_id=? AND page_hash=? AND change_date=? AND window_days=? AND goal_event='' AND channel='organic'",[$wid,$uid,$page['hash'],$date,$window['window_days']]);
+            $this->enqueue((int)$m[0]['id'],max(0,strtotime($window['due_at'].' UTC')-time()));
+        }
     }
 }

@@ -25,6 +25,8 @@ class SystemSettingsService
         'geo_perplexity_enabled' => ['category'=>'geo','label'=>'تفعيل perplexity لقياس الظهور','is_secret'=>false,'constant'=>''],
         'geo_perplexity_api_key' => ['category'=>'geo','label'=>'perplexity GEO API Key','is_secret'=>true,'constant'=>''],
         'serp_monthly_budget_usd' => ['category'=>'seo','label'=>'سقف DataForSEO الشهري بالدولار (0 يوقف الطلبات)','is_secret'=>false,'constant'=>''],
+        'serp_local_enabled' => ['category'=>'seo','label'=>'تفعيل قياسات Google Maps المدفوعة','is_secret'=>false,'constant'=>''],
+        'serp_backlinks_enabled' => ['category'=>'seo','label'=>'تفعيل بيانات Backlinks المدفوعة','is_secret'=>false,'constant'=>''],
         'serp_enabled' => ['category'=>'seo','label'=>'تفعيل بيانات SEO المدفوعة: بحث وترتيب (1 فقط)','is_secret'=>false,'constant'=>''],
         'serp_login' => ['category'=>'seo','label'=>'DataForSEO API Login','is_secret'=>true,'constant'=>''],
         'serp_password' => ['category'=>'seo','label'=>'DataForSEO API Password','is_secret'=>true,'constant'=>''],

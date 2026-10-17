@@ -5,11 +5,11 @@ $n=0;$fails=0;function check($c,$m){global $n,$fails;$n++;echo ($c?'  ok  ':'  F
 function denied(callable $fn):bool{try{$fn();return false;}catch(InvalidArgumentException|RuntimeException $e){return true;}}
 $pdo->beginTransaction();$blocked=denied(fn()=>AiVisibilitySchema::ensureSchema($db));$pdo->rollBack();check($blocked,'GEO runtime refuses DDL in an active transaction');
 $sql=file_get_contents($root.'/database/migrations/2026_10_17_000002_ai_visibility.sql');$pdo->exec($sql);$pdo->exec($sql);
-check((int)$pdo->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'seo_ai_%'")->fetchColumn()===6,'additive uploaded migration installs six GEO tables and repeats');
+check((int)$pdo->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('seo_ai_prompt_sets','seo_ai_entities','seo_ai_calls','seo_ai_answers','seo_ai_tasks','seo_ai_budget_alerts')")->fetchColumn()===6,'additive uploaded migration installs six GEO tables and repeats');
 $pdo->exec("UPDATE pay_per_use_pricing SET price=.19 WHERE feature_key='ai_visibility'");$pdo->exec($sql);check((float)$pdo->query("SELECT price FROM pay_per_use_pricing WHERE feature_key='ai_visibility'")->fetchColumn()===.19,'repeated migration preserves admin wallet price');
 foreach(['seo_ai_prompt_sets','seo_ai_entities','seo_ai_calls','seo_ai_answers','seo_ai_tasks','seo_ai_budget_alerts'] as $t)$pdo->exec('DROP TABLE '.$t);
 AiVisibilitySchema::ensureSchema($db);AiVisibilitySchema::ensureSchema($db);$pdo->exec("UPDATE pay_per_use_pricing SET price=.15 WHERE feature_key='ai_visibility'");
-check((int)$pdo->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME LIKE 'seo_ai_%'")->fetchColumn()===6,'runtime fallback installs same schema safely');
+check((int)$pdo->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('seo_ai_prompt_sets','seo_ai_entities','seo_ai_calls','seo_ai_answers','seo_ai_tasks','seo_ai_budget_alerts')")->fetchColumn()===6,'runtime fallback installs same schema safely');
 check(PlanUsage::charge(1,'ai_visibility','ai_visibility','first')==='plan','GEO first unit consumes plan allowance');
 check(PlanUsage::charge(1,'ai_visibility','ai_visibility','second')==='plan','GEO second unit consumes plan allowance');
 check(PlanUsage::charge(1,'ai_visibility','ai_visibility','third')==='wallet','GEO overage consumes wallet');

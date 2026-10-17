@@ -9,7 +9,7 @@ class DataForSeoClient
     {
         if ($settings===null) {
             $s=new SystemSettingsService(); $settings=[];
-            foreach (['enabled','login','password','monthly_budget_usd'] as $key) $settings[$key]=$s->get('serp_'.$key);
+            foreach (['enabled','login','password','monthly_budget_usd','local_enabled','backlinks_enabled'] as $key) $settings[$key]=$s->get('serp_'.$key);
         }
         $this->settings=$settings; $this->transport=$transport; $this->ledger=$ledger;
     }
@@ -17,11 +17,21 @@ class DataForSeoClient
     {
         return (string)($this->settings['enabled']??'')==='1' && trim((string)($this->settings['login']??''))!=='' && trim((string)($this->settings['password']??''))!=='';
     }
+    public function endpointEnabled(string $endpoint): bool {
+        if (!$this->isConfigured()) return false;
+        return match($endpoint) {
+            'serp/google/maps/live/advanced'=>($this->settings['local_enabled']??'0')==='1',
+            'backlinks/referring_domains/live'=>($this->settings['backlinks_enabled']??'0')==='1',
+            default=>true,
+        };
+    }
     public function call(string $endpoint, array $tasks, int $websiteId, int $units, float $ceiling): array
     {
         if (!$this->isConfigured()) return ['available'=>false,'reason'=>'not_measured','message'=>'اربط DataForSEO من الأدمن'];
-        $allowed=['serp/google/organic/live/advanced','dataforseo_labs/google/keyword_ideas/live','dataforseo_labs/google/keyword_overview/live','dataforseo_labs/google/keywords_for_site/live','dataforseo_labs/google/bulk_keyword_difficulty/live','dataforseo_labs/google/ranked_keywords/live'];
+        $allowed=['serp/google/maps/live/advanced','backlinks/referring_domains/live','serp/google/organic/live/advanced','dataforseo_labs/google/keyword_ideas/live','dataforseo_labs/google/keyword_overview/live','dataforseo_labs/google/keywords_for_site/live','dataforseo_labs/google/bulk_keyword_difficulty/live','dataforseo_labs/google/ranked_keywords/live'];
         if (!in_array($endpoint,$allowed,true) || !$tasks || $units<1 || $units>100 || !is_finite($ceiling) || $ceiling<=0) throw new InvalidArgumentException('Invalid SEO request');
+        if ($endpoint==='serp/google/maps/live/advanced' && ($this->settings['local_enabled']??'0')!=='1') return ['available'=>false,'reason'=>'local_maps_disabled'];
+        if (str_starts_with($endpoint,'backlinks/') && ($this->settings['backlinks_enabled']??'0')!=='1') return ['available'=>false,'reason'=>'backlinks_provider_disabled'];
         $ledger=$this->ledger ?? new SeoDataLedger();
         $id=null;
         try {

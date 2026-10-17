@@ -19,7 +19,7 @@ class SeoScheduledReportService
     /** @var Database */
     private $db;
 
-    public function __construct(Database $db)
+    public function __construct(Database $db, private $mailer = null)
     {
         $this->db = $db;
     }
@@ -41,6 +41,7 @@ class SeoScheduledReportService
      */
     public function saveSchedule(int $websiteId, int $userId, array $data, ?int $scheduleId = null): array
     {
+        if (!$this->db->query('SELECT id FROM websites WHERE id=? AND user_id=?',[$websiteId,$userId])) return ['success'=>false,'schedule'=>null,'error'=>'الموقع غير موجود'];
         $frequency = (string) ($data['frequency'] ?? '');
         if (!in_array($frequency, ['daily', 'weekly', 'monthly'], true)) {
             return ['success' => false, 'schedule' => null, 'error' => 'تردد غير صالح (daily/weekly/monthly)'];
@@ -114,7 +115,7 @@ class SeoScheduledReportService
             "SELECT s.id, s.website_id, s.user_id, s.frequency, s.weekday, s.hour,
                     s.recipient_email, s.last_sent_at, w.main_url
              FROM seo_report_schedules s
-             INNER JOIN websites w ON w.id = s.website_id
+             INNER JOIN websites w ON w.id = s.website_id AND w.user_id = s.user_id
              WHERE s.is_active = 1
                AND (
                    (s.frequency = 'daily'   AND (s.last_sent_at IS NULL OR DATE(s.last_sent_at) < CURDATE()))
@@ -136,7 +137,7 @@ class SeoScheduledReportService
     public function sendDue(int $limit = 50): array
     {
         $due = $this->dueSchedules($limit);
-        $mailer = new Mailer();
+        $mailer = $this->mailer ?? new Mailer();
         $attempted = 0;
         $sent = 0;
         $skipped = 0;
@@ -144,6 +145,10 @@ class SeoScheduledReportService
 
         foreach ($due as $s) {
             $attempted++;
+            if (!ExternalExecution::lock('seo-report:'.(int)$s['id'])) continue;
+            try {
+            $fresh=$this->db->query('SELECT last_sent_at FROM seo_report_schedules WHERE id=? AND user_id=? AND website_id=?',[$s['id'],$s['user_id'],$s['website_id']]);
+            if (!$fresh || $fresh[0]['last_sent_at']!==$s['last_sent_at']) continue;
             if (!$mailer->isConfigured()) {
                 $skipped++;
                 if (class_exists('Logger')) {
@@ -152,15 +157,20 @@ class SeoScheduledReportService
                 continue;
             }
 
-            $body = $this->buildReportHtml(
+            $body = $s['frequency']==='monthly' ? SeoMonthlyReportService::html((new SeoMonthlyReportService($this->db))->data((int)$s['user_id'],(int)$s['website_id']),(string)($s['main_url']??'')) : $this->buildReportHtml(
                 (int) $s['website_id'],
                 (int) $s['user_id'],
                 (string) ($s['main_url'] ?? '')
             );
+            if ($s['frequency']==='monthly') {
+                $claim=$this->db->getConnection()->prepare('INSERT IGNORE INTO seo_phase5_claims(claim_key,created_at) VALUES(?,UTC_TIMESTAMP())');
+                $claim->execute(['seo-monthly-mail:'.$s['id'].':'.gmdate('Y-m')]);
+                if (!$claim->rowCount()) continue;
+            }
             $result = $mailer->send(
                 (string) $s['recipient_email'],
                 '',
-                'تقرير SEO دوري — ' . ($s['main_url'] ?? 'موقعك'),
+                ($s['frequency']==='monthly'?'تقرير SEO الشهري — ':'تقرير SEO دوري — ') . ($s['main_url'] ?? 'موقعك'),
                 $body
             );
             if (!empty($result['success'])) {
@@ -169,6 +179,8 @@ class SeoScheduledReportService
             } else {
                 $errors[] = ['schedule_id' => $s['id'], 'error' => $result['error'] ?? 'send failed'];
             }
+            } catch (Throwable $reportError) {$errors[]=['schedule_id'=>$s['id'],'error'=>'report_preparation_or_delivery_unavailable'];}
+            finally {ExternalExecution::unlock('seo-report:'.(int)$s['id']);}
         }
 
         return ['attempted' => $attempted, 'sent' => $sent, 'skipped_no_mailer' => $skipped, 'errors' => $errors];

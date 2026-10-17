@@ -97,6 +97,8 @@ return [
         'file' => 'seo_content_engine.php', 'when' => '*/15 * * * *', 'group' => 'seo',
         'title' => 'كتابة المقالات ونشرها', 'enabled' => true, 'max_minutes' => 30,
     ],
+    'gbp_background_sync' => ['file'=>'gbp_enqueue_background_sync.php','when'=>'0 */6 * * *','group'=>'reputation','title'=>'GBP background sync','enabled'=>true,'max_minutes'=>5],
+    'seo_auto_impact' => ['file'=>'seo_auto_impact.php','when'=>'*/10 * * * *','group'=>'seo','title'=>'Automatic SEO task impact monitors','enabled'=>true,'max_minutes'=>5],
     'seo_reports' => [
         'file' => 'seo_scheduled_reports.php', 'when' => '5 * * * *', 'group' => 'seo',
         'title' => 'تقارير SEO على الإيميل', 'enabled' => true, 'max_minutes' => 30,

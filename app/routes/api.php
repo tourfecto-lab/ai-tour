@@ -1792,3 +1792,6 @@ $router->post('/api/ai-visibility/enqueue','AiVisibilityController','enqueue',['
 $router->post('/api/ai-visibility/tasks','AiVisibilityController','tasks',['AuthMiddleware']);
 $router->post('/api/ai-visibility/approve-task','AiVisibilityController','approveTask',['AuthMiddleware']);
 $router->post('/api/ai-visibility/llms','AiVisibilityController','llms',['AuthMiddleware']);
+
+foreach (['sites','data','report'] as $op) $router->get('/api/local-seo/'.$op,'LocalSeoController',$op,['AuthMiddleware']);
+foreach (['profile','run','nap','links'] as $op) $router->post('/api/local-seo/'.$op,'LocalSeoController',$op,['AuthMiddleware']);

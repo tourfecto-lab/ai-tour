@@ -105,6 +105,7 @@ class GbpLocalSeoAuditService
             'score' => $score,
             'sections' => $sections,
             'recommendations' => $this->buildRecommendations($profile, $visibility, $reputation),
+            'citation_consistency' => ['review_url'=>'/local-seo','note'=>'مقارنة اسم وهاتف وعنوان وموقع الشركة مع الموقع وأدلة العميل متاحة في فحص البحث المحلي؛ البيانات غير الظاهرة ليست تعارضًا مؤكدًا.'],
             'profile_completeness' => $profile,
             'visibility' => $visibility,
             'reputation' => $reputation,

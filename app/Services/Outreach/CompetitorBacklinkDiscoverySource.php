@@ -1,23 +1,8 @@
 <?php
 
-/**
- * Tourfecto - Competitor Backlink Discovery Source
- * مصدر المرشّحين الافتراضي للـ Outreach: بيجمع مواقع ذات صلة من
- * بيانات CompetitorIntelligence المتاحة محليًا (جدول competitors +
- * ci_snapshots). المرشّح المنطقي لأي outreach باك لينك هو موقع
- * منافس/نفس المجال بيذكر منافسين مشيين بنفس الجمهور المستهدف.
- *
- * ملاحظة صادقة (لا اختلاق): النظام لسه مش بيجمع بيانات
- * "referring domains / backlinks" فعلية من مزوّدي باك لينكس خارجيين،
- * فالمصدر بيشتق المرشّحين من المنافسين المُتتبَّعين (بيانات عامة
- * معلنة) وبيعلّم ذلك صراحةً في الإخراج. لو اتضافت بيانات باك لينك
- * حقيقية في CompetitorIntelligence مستقبلًا، يتم إضافة مصدر جديد
- * بنفس الواجهة دون المساس بالباقي.
- *
- * أمان صارم: بيلمس بيانات عامة معلنة فقط (دومين، نوع نشاط، صفحة
- * ذات صلة من اللقطات) — ممنوع استخراج أي بيانات تواصل شخصية.
- * @version 1.0.0
- */
+/** Real DataForSEO referring-domain gaps feed outreach. The separately named
+ * discoverTrackedCompetitorSites() retains legacy competitor-site discovery,
+ * and is never presented as measured backlink evidence. */
 class CompetitorBacklinkDiscoverySource implements ProspectDiscoverySourceInterface
 {
     /** أنواع الصفحات الأكثر صلة بذكر/ربط محتوى سياحي */
@@ -37,7 +22,16 @@ class CompetitorBacklinkDiscoverySource implements ProspectDiscoverySourceInterf
         }
 
         $db = Database::getInstance();
+        return (new DataForSeoLinkGapService($db))->discover($userId,$websiteId);
 
+
+    }
+
+    public function discoverTrackedCompetitorSites(array $context): array
+    {
+        $userId=(int)($context['user_id']??0);$websiteId=(int)($context['website_id']??0);
+        if(!$userId||!$websiteId)return ['available'=>false,'candidates'=>[]];
+        $db=Database::getInstance();
         $competitors = $db->query(
             "SELECT id, competitor_domain, competitor_name, competitor_score, my_score, last_analyzed_at
              FROM competitors

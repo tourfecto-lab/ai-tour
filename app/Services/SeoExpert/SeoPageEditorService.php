@@ -24,7 +24,7 @@ final class SeoPageEditorService {
                 }
                 $this->checkRules($wid,$op,$payload);$result=$this->request($target,$credentials,$op,$payload);
                 if($op==='apply'&&($result['state']??'')==='saved'&&($result['page']['status']??'publish')==='publish') {
-                    try{require_once __DIR__.'/../SeoImpact/SeoImpactService.php';(new SeoImpactService($this->db))->recordEditorChange($uid,$wid,$result);$result['measurement_note']='Stored verification event recorded when Phase 4 SQL is installed.';}
+                    try{require_once __DIR__.'/../SeoImpact/SeoImpactService.php';(new SeoImpactService($this->db))->recordEditorChange($uid,$wid,$result);$result['measurement_note']='Stored edit event and automatic 7/14/28-day impact monitors recorded when measurement SQL is installed.';}
                     catch(Throwable $e){$result['measurement_note']='Page saved; measurement-event recording is unavailable.';}
                 }
                 return $result;

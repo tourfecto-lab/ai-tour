@@ -242,6 +242,7 @@ class GoogleBusinessAPI
                     'is_published' => $data['metadata']['hasVoiceOfMerchant'] ?? null,
                     'can_delete' => $data['metadata']['canDelete'] ?? null,
                     'maps_uri' => $data['metadata']['mapsUri'] ?? null,
+                    'place_id' => $data['metadata']['placeId'] ?? null,
                     'new_review_uri' => $data['metadata']['newReviewUri'] ?? null,
                     'latitude' => $data['latlng']['latitude'] ?? null,
                     'longitude' => $data['latlng']['longitude'] ?? null,

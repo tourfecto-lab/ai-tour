@@ -621,7 +621,7 @@ class AdminController extends Controller
         try {
             $service = new SystemSettingsService();
             $allowedKeys = [
-                'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
+                'serp_local_enabled', 'serp_backlinks_enabled', 'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
                 'geo_enabled', 'geo_monthly_budget_usd', 'geo_openai_enabled', 'geo_openai_api_key', 'geo_gemini_enabled', 'geo_gemini_api_key', 'geo_perplexity_enabled', 'geo_perplexity_api_key',
                 'gemini_api_key', 'google_client_id', 'google_client_secret', 'google_maps_api_key',
                 'meta_app_id', 'meta_app_secret', 'support_whatsapp_number',
@@ -634,6 +634,7 @@ class AdminController extends Controller
             foreach(['geo_enabled','geo_openai_enabled','geo_gemini_enabled','geo_perplexity_enabled'] as $key)if($this->get($key)!==null&&!in_array((string)$this->get($key),['0','1'],true))return $this->error('قيمة تفعيل AI غير صالحة',422);
             $geoBudget=$this->get('geo_monthly_budget_usd');
             if($geoBudget!==null&&(!is_numeric($geoBudget)||!is_finite((float)$geoBudget)||(float)$geoBudget<0||(float)$geoBudget>1000000))return $this->error('ميزانية AI غير صالحة',422);
+            foreach(['serp_local_enabled','serp_backlinks_enabled'] as $switch) if($this->get($switch)!==null&&!in_array((string)$this->get($switch),['0','1'],true))return $this->error('اختار تفعيل أو إيقاف المصدر',422);
             if ($this->get('serp_enabled')!==null && !in_array((string)$this->get('serp_enabled'),['0','1'],true))
                 return $this->error('اختار تفعيل أو إيقاف DataForSEO',422);
             if ($this->get('serp_device')!==null && !in_array((string)$this->get('serp_device'),['desktop','mobile'],true))
@@ -2499,7 +2500,7 @@ class AdminController extends Controller
         alertBox.style.display = 'none';
 
         const keys = [
-            'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
+            'serp_local_enabled', 'serp_backlinks_enabled', 'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
             'geo_enabled', 'geo_monthly_budget_usd', 'geo_openai_enabled', 'geo_openai_api_key', 'geo_gemini_enabled', 'geo_gemini_api_key', 'geo_perplexity_enabled', 'geo_perplexity_api_key',
             'gemini_api_key', 'google_client_id', 'google_client_secret', 'google_maps_api_key',
             'meta_app_id', 'meta_app_secret', 'support_whatsapp_number',
@@ -4201,6 +4202,8 @@ HTML;
                         <div class="form-group"><label class="form-label" for="ss_serp_password">DataForSEO API Password</label><input type="password" id="ss_serp_password" class="form-control" autocomplete="new-password" dir="ltr"></div>
                         <div class="form-group"><label class="form-label" for="ss_serp_enabled">تفعيل الطلبات المدفوعة</label><select id="ss_serp_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
                         <div class="form-group"><label class="form-label" for="ss_serp_monthly_budget_usd">سقف الميزانية الشهري بالدولار</label><input type="number" id="ss_serp_monthly_budget_usd" class="form-control" min="0" max="1000000" step="0.01" value="0" dir="ltr"></div>
+                        <div class="form-group"><label class="form-label" for="ss_serp_local_enabled">قياسات Google Maps المدفوعة</label><select id="ss_serp_local_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
+                        <div class="form-group"><label class="form-label" for="ss_serp_backlinks_enabled">بيانات Backlinks المدفوعة (تحتاج اشتراك المزوّد)</label><select id="ss_serp_backlinks_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
                         <div class="form-group"><label class="form-label" for="ss_serp_device">جهاز البحث</label><select id="ss_serp_device" class="form-control"><option value="desktop">Desktop</option><option value="mobile">Mobile</option></select></div>
                     </div>
 

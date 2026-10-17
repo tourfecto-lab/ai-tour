@@ -414,3 +414,5 @@ require_once __DIR__.'/../Controllers/BusinessHubController.php';
 $router->get('/business-hub','BusinessHubController','index',['AuthMiddleware']);
 
 $router->get('/admin/seo-markets', 'SeoDataController', 'index', ['AuthMiddleware','AdminMiddleware']);
+
+$router->get('/local-seo','LocalSeoController','index',['AuthMiddleware']);

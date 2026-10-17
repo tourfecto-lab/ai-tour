@@ -6,7 +6,7 @@
  *
  * بيفحص:
  *   1) registerAcquiredLink: تسجيل رابط بعد link_acquired + idempotency.
- *   2) checkLink: فحص رابط بحقنة fetcher وهمية (live على 2xx، lost على 4xx/5xx/خطأ).
+ *   2) checkLink: فحص رابط بحقنة fetcher وهمية (live فقط مع رابط فعلي للعميل؛ 404/410 lost؛ خطأ الشبكة unknown).
  *   3) monitorDue: يرجع الروابط المستحقة بس (متفحصةش أو عدّى 7 أيام).
  *   4) summaryForWebsite: عدّ live/lost/pending لموقع معيّن.
  *   5) controller: updateProspectStatus(status=link_acquired) يسجّل الرابط
@@ -16,7 +16,7 @@
  *   7) OutreachPerformanceService: قمع المراحل + معدلات التحويل + حالة
  *      الباك لينكس + متوسط الوقت للرابط.
  *
- * محتاج الميجريشن: 2026_08_31_000001_create_monitored_backlinks.sql (idempotent).
+ * محتاج الميجريشن: 2026_08_31_000001_create_monitored_backlinks.sql + 2026_10_17_000004_local_links_reporting.sql (idempotent).
  * بيتخطى تلقائيًا لو DB غير متاحة.
  */
 
@@ -103,7 +103,7 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
                 return null;
             }
 
-            foreach (['monitored_backlinks', 'outreach_prospects', 'outreach_emails'] as $table) {
+            foreach (['monitored_backlinks', 'seo_backlink_evidence', 'outreach_prospects', 'outreach_emails'] as $table) {
                 $found = $conn->query("SHOW TABLES LIKE '{$table}'")->fetchAll();
                 if (empty($found)) {
                     self::$pdo = null;
@@ -126,7 +126,7 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
         }
 
         $_SERVER['auth_user'] = null;
-        unset($_SERVER['auth_user']);
+        unset($_SERVER['auth_user'],$_SERVER['HTTP_X_CSRF_TOKEN']);
         $_GET = [];
 
         $this->cleanup();
@@ -200,10 +200,10 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
         $this->assertSame('1', (string) $count);
     }
 
-    public function testCheckLinkMarksLiveOn2xx(): void
+    public function testCheckLinkMarksLiveOnlyWithOwnedAnchor(): void
     {
         $prospectId = $this->addProspect('live.example.com', 'link_acquired', 'https://live.example.com/page');
-        $service = $this->monitorService(fn () => ['success' => true, 'http_status' => 200, 'error' => null]);
+        $service = $this->monitorService(fn () => ['success' => true, 'http_status' => 200, 'html'=>'<a href="https://backlink-owntest.com/trips" rel="nofollow">Tour link</a>', 'error' => null]);
         $backlink = $service->registerAcquiredLink(self::USER_ID, self::WEBSITE_ID, $prospectId, 'https://live.example.com/page');
 
         $res = $service->checkLink((int) $backlink->getAttribute('id'));
@@ -215,7 +215,7 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
         $this->assertSame(1, (int) (new MonitoredBacklink())->find((int) $backlink->getAttribute('id'))->getAttribute('check_count'));
     }
 
-    public function testCheckLinkMarksLostOn404AndOnNetworkError(): void
+    public function testCheckLinkMarksLostOn404ButUnknownOnNetworkError(): void
     {
         $service404 = $this->monitorService(fn () => ['success' => false, 'http_status' => 404, 'error' => 'http_404']);
         $prospect404 = $this->addProspect('gone.example.com', 'link_acquired', 'https://gone.example.com/page');
@@ -228,7 +228,8 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
         $prospectErr = $this->addProspect('timeout.example.com', 'link_acquired', 'https://timeout.example.com/page');
         $bErr = $serviceErr->registerAcquiredLink(self::USER_ID, self::WEBSITE_ID, $prospectErr, 'https://timeout.example.com/page');
         $res = $serviceErr->checkLink((int) $bErr->getAttribute('id'));
-        $this->assertSame('lost', $res['status']);
+        $this->assertSame('unavailable', $res['status']);
+        $this->assertSame('pending',(new MonitoredBacklink())->find((int)$bErr->getAttribute('id'))->getAttribute('status'));
         $this->assertNull($res['http_status']);
         $this->assertStringContainsString('curl_error', (string) $res['error']);
     }
@@ -262,7 +263,7 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
         $p2 = $this->addProspect('s2.example.com', 'link_acquired', 'https://s2.example.com/y');
         $p3 = $this->addProspect('s3.example.com', 'link_acquired', 'https://s3.example.com/z');
 
-        $live = $this->monitorService(fn () => ['success' => true, 'http_status' => 200, 'error' => null]);
+        $live = $this->monitorService(fn () => ['success' => true, 'http_status' => 200, 'html'=>'<a href="https://backlink-owntest.com/trips" rel="nofollow">Tour link</a>', 'error' => null]);
         $b1 = $live->registerAcquiredLink(self::USER_ID, self::WEBSITE_ID, $p1, 'https://s1.example.com/x');
         $b2 = $live->registerAcquiredLink(self::USER_ID, self::WEBSITE_ID, $p2, 'https://s2.example.com/y');
         $lost = $this->monitorService(fn () => ['success' => false, 'http_status' => 410, 'error' => 'http_410']);
@@ -288,6 +289,7 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
             $this->markTestSkipped('مستخدم الاختبار مش موجود');
         }
         $_SERVER['auth_user'] = $user->toArray();
+        $_SERVER['HTTP_X_CSRF_TOKEN']=Csrf::token();
         $_GET = [];
 
         // بدون status => 422 (الكلاس بيقرأ $_GET في الـ constructor)
@@ -311,7 +313,7 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
         $this->assertSame('ctrl-linked.example.com', $row[0]['domain']);
 
         $_SERVER['auth_user'] = null;
-        unset($_SERVER['auth_user']);
+        unset($_SERVER['auth_user'],$_SERVER['HTTP_X_CSRF_TOKEN']);
     }
 
     public function testFollowUpDraftServiceGeneratesDraftsOnlyAfter7Days(): void
@@ -409,7 +411,7 @@ final class OutreachBacklinkMonitoringIntegrationTest extends TestCase
         ];
 
         // سجلّين باك لينكس: واحد live وواحد lost
-        $live = $this->monitorService(fn () => ['success' => true, 'http_status' => 200, 'error' => null]);
+        $live = $this->monitorService(fn () => ['success' => true, 'http_status' => 200, 'html'=>'<a href="https://backlink-owntest.com/trips" rel="nofollow">Tour link</a>', 'error' => null]);
         $lost = $this->monitorService(fn () => ['success' => false, 'http_status' => 410, 'error' => 'http_410']);
         $b1 = $live->registerAcquiredLink(self::USER_ID, self::WEBSITE_ID, $prospects['link_acquired'], 'https://perf1.example.com/x');
         $b2 = $live->registerAcquiredLink(self::USER_ID, self::WEBSITE_ID, $prospects['replied'], 'https://perf1.example.com/lost');
