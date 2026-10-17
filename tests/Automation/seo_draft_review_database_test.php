@@ -1,0 +1,47 @@
+<?php
+require __DIR__.'/fixtures/geo_database.php';
+require_once $root.'/app/Services/SeoExpert/SeoExpertService.php';
+$n=0;function check($ok,$name){global $n;if(!$ok)throw new RuntimeException($name);$n++;echo 'PASS '.$name.PHP_EOL;}
+function denied(callable $fn):bool{try{$fn();return false;}catch(InvalidArgumentException|RuntimeException $e){return true;}}
+$pdo->exec(file_get_contents($root.'/database/migrations/2026_10_12_000002_seo_expert.sql'));
+$pdo->exec(file_get_contents($root.'/database/migrations/2026_10_17_000003_content_quality.sql'));
+$pdo->exec('DELETE FROM seo_expert_tasks;DELETE FROM seo_expert_runs;DELETE FROM seo_expert_sites;DELETE FROM seo_content_quality');
+$pdo->exec('ALTER TABLE business_hub_profiles ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL');
+$facts=['business_name'=>'Example Travel','business_facts'=>'Guided Luxor tours','source_site_url'=>'https://example.com'];
+$pdo->prepare('INSERT INTO business_hub_profiles VALUES(1,1,1,?,UTC_TIMESTAMP(),UTC_TIMESTAMP())')->execute([json_encode($facts)]);
+$shared=(new BusinessHubService($db))->profile(1,1);$brief=['source_site_url'=>'https://example.com','shared_profile'=>$shared];
+$pdo->prepare("INSERT INTO seo_expert_sites(website_id,user_id,brief_json,policy_json,budget_month,created_at,updated_at) VALUES(1,1,?,'{}',DATE_FORMAT(UTC_TIMESTAMP(),'%Y-%m'),UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([json_encode($brief)]);
+$pdo->prepare("INSERT INTO seo_expert_runs(id,website_id,user_id,request_key,status,snapshot_json,created_at,updated_at) VALUES(9001,1,1,'draft-review-fixture','completed',?,UTC_TIMESTAMP(),UTC_TIMESTAMP())")->execute([json_encode(['brief'=>$brief,'pages'=>[]])]);
+$pdo->exec("INSERT INTO seo_expert_tasks(id,run_id,website_id,user_id,kind,category,page_url,page_path,title,instructions,field_name,expected_value,status,created_at,updated_at) VALUES(99,9001,1,1,'content','aeo','https://example.com/','/','Original Luxor guide','Review facts','content','Old unconfirmed draft.','pending',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
+$quality=new ContentQualityService($db);$quality->remember(1,1,'task:99',['profile_version'=>1,'confirmed_facts'=>$facts,'keyword'=>'Luxor guide'],['title'=>'Original Luxor guide','meta_description'=>'Old description','faqs'=>[['question'=>'How long?','answer'=>'Most tours last 6 to 8 hours.']]],null,99,[],'https://example.com');
+$service=new SeoExpertService($db);$r=$service->detail(1,9001);
+check($r['tasks'][0]['content_review']['faqs'][0]['question']==='How long?','owned draft exposes stored FAQ answers for human review');
+check(denied(fn()=>$service->editTask(2,99,['version'=>1,'value'=>'A different body.'])),'foreign customer cannot edit draft quality');
+$new=['version'=>1,'title'=>'Reviewed Luxor route guide','value'=>'Compare the listed Luxor routes. Is pickup confirmed? Confirm pickup for your chosen departure.','meta_description'=>'Compare confirmed Luxor routes and ask about your chosen departure.','faqs'=>[['question'=>'Is pickup confirmed?','answer'=>'Confirm pickup for your chosen departure.']]];
+$r=$service->editTask(1,99,$new);$row=$pdo->query('SELECT * FROM seo_content_quality')->fetch();
+check($r['run']['version']==2,'combined edit advances plan version once');
+check($r['tasks'][0]['expected_value']===$new['value'],'reviewed article body persists');
+check($row['description']===$new['meta_description']&&$row['title']===$new['title'],'title and description update atomically');
+check(json_decode($row['faqs_json'],true)===$new['faqs'],'new visible FAQs replace stale unconfirmed answers');
+check(!str_contains(json_encode($r),'Most tours last 6 to 8 hours'),'stale FAQ not returned after editing');
+check(denied(fn()=>$service->editTask(1,99,$new)),'stale plan version cannot overwrite newer review');
+$before=json_encode($pdo->query('SELECT * FROM seo_expert_tasks WHERE id=99')->fetch()).json_encode($row);
+$bad=array_replace($new,['version'=>2,'value'=>'Changed body.','faqs'=>[['question'=>'Hidden question?','answer'=>'Not in article.']]]);
+check(denied(fn()=>$service->editTask(1,99,$bad)),'invisible FAQ schema cannot be saved');
+$bad=array_replace($new,['version'=>2,'value'=>'Our tours last 6 hours.','faqs'=>[]]);
+check(denied(fn()=>$service->editTask(1,99,$bad)),'unconfirmed duration blocks edited copy before saving');
+$after=json_encode($pdo->query('SELECT * FROM seo_expert_tasks WHERE id=99')->fetch()).json_encode($pdo->query('SELECT * FROM seo_content_quality')->fetch());
+check($before===$after,'failed review rolls back both article and schema evidence');
+check((int)$pdo->query('SELECT version FROM seo_expert_runs WHERE id=9001')->fetchColumn()===2,'failed review does not advance version');
+check(denied(fn()=>$service->editTask(1,99,array_replace($new,['version'=>2,'meta_description'=>'<script>bad</script>']))),'description must be plain text');
+check(denied(fn()=>$service->editTask(1,99,array_replace($new,['version'=>2,'faqs'=>[['question'=>'<img src=x>','answer'=>'bad']]]))),'HTML in FAQ input rejected');
+$r=$service->editTask(1,99,array_replace($new,['version'=>2,'faqs'=>[]]));
+check($r['tasks'][0]['content_review']['faqs']===[],'explicit empty list removes all obsolete FAQs');
+$r=$service->editTask(1,99,['version'=>3,'value'=>$new['value'],'title'=>'Another reviewed Luxor guide']);
+check($r['tasks'][0]['content_review']['meta_description']===$new['meta_description'],'older title/body clients preserve optional review fields');
+$pdo->exec('UPDATE business_hub_profiles SET version=2 WHERE website_id=1');
+check(denied(fn()=>$service->editTask(1,99,array_replace($new,['version'=>4]))),'changed confirmed profile requires a new content review');
+$pdo->exec('UPDATE business_hub_profiles SET version=1 WHERE website_id=1');
+$pdo->exec("UPDATE seo_expert_tasks SET status='verified',is_active=1 WHERE id=99");
+check(denied(fn()=>$service->editTask(1,99,array_replace($new,['version'=>4]))),'already published task cannot be silently rewritten');
+echo "$n assertions passed\n";

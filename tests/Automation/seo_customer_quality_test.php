@@ -30,4 +30,5 @@ check($validate('[Luxor](https://example.com/tours/luxor)')===null,'known intern
 check($validate('[Luxor](https://example.com/tours/luxor#details)')===null,'fragment on known internal target accepted');
 check($validate('[Invented trip](https://example.com/tours/invented)')!==null,'unknown internal article link requires review');
 check($validate('[Other](https://elsewhere.test/info)')===null,'external citations remain separate from internal-link evidence');
+check(SeoSchemaBuilder::isTourPage(page('/tour/luxor-day-tour','Luxor Day Tour',['schema'=>[['@type'=>'TouristTrip','itinerary'=>['@type'=>'ItemList','itemListElement'=>[]]]]])),'single-trip itinerary ItemList is not a collection page');
 echo "$n assertions passed\n";

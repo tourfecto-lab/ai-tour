@@ -119,6 +119,30 @@ class ContentQualityService
         $error=ArticleGenerator::validateBriefOutput(['content'=>$article['content']??'','faqs'=>json_decode($article['faqs_json']??'[]',true)?:[]],$brief);
         if ($error!==null) throw new RuntimeException($error);
     }
+    /** Called inside the task-edit transaction; visible article and schema evidence change together. */
+    public function editTaskDraft(int $uid,int $wid,array $task,array $input): void
+    {
+        if(!$this->ready())return;
+        $rows=$this->db->query('SELECT * FROM seo_content_quality WHERE website_id=? AND user_id=? AND source_key=? FOR UPDATE',[$wid,$uid,'task:'.(int)$task['id']]);
+        if(!$rows)return;
+        $row=$rows[0];if(!empty($row['published_at']))throw new InvalidArgumentException('Published article evidence cannot be changed through a draft edit.');$brief=json_decode($row['brief_json'],true,512,JSON_THROW_ON_ERROR);
+        $profile=(new BusinessHubService($this->db))->profile($uid,$wid);
+        if(!$profile||empty($profile['confirmed_at'])||!empty($profile['needs_reconfirmation'])||(int)$profile['version']!==(int)$brief['profile_version'])throw new InvalidArgumentException('Customer facts changed. Review the content brief first.');
+        $description=array_key_exists('meta_description',$input)?$input['meta_description']:($row['description']??'');
+        if(!is_string($description)||mb_strlen($description)>500||preg_match('/[<>\x00-\x08\x0b\x0c\x0e-\x1f]/',$description))throw new InvalidArgumentException('Use a plain-text article description of at most 500 characters.');
+        $faqs=array_key_exists('faqs',$input)?$input['faqs']:json_decode($row['faqs_json'],true,512,JSON_THROW_ON_ERROR);
+        if(!is_array($faqs)||!array_is_list($faqs)||count($faqs)>8)throw new InvalidArgumentException('Use up to eight visible questions and answers.');
+        $clean=[];foreach($faqs as $faq){
+            if(!is_array($faq)||!is_string($faq['question']??null)||!is_string($faq['answer']??null))throw new InvalidArgumentException('Each FAQ needs a question and answer.');
+            $question=trim($faq['question']);$answer=trim($faq['answer']);
+            if($question===''||$answer===''||mb_strlen($question)>300||mb_strlen($answer)>2000||preg_match('/[<>\x00-\x08\x0b\x0c\x0e-\x1f]/',$question.$answer))throw new InvalidArgumentException('Use plain-text FAQ questions and answers within the field limits.');
+            $clean[]=['question'=>$question,'answer'=>$answer];
+        }
+        if(count(self::visibleFaqs($clean,(string)$task['expected_value']))!==count($clean))throw new InvalidArgumentException('Every FAQ question and answer must also appear in the visible article body.');
+        $error=ArticleGenerator::validateBriefOutput(['title'=>$task['title'],'meta_description'=>$description,'content'=>$task['expected_value'],'faqs'=>$clean],$brief);
+        if($error!==null)throw new InvalidArgumentException($error);
+        $this->db->exec('UPDATE seo_content_quality SET title=?,description=?,faqs_json=?,updated_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?',[$task['title'],trim($description),json_encode($clean,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),$row['id'],$uid]);
+    }
     public function assertTaskCurrent(int $uid,int $wid,array $task): void
     {
         require_once dirname(__DIR__).'/BusinessHub/BusinessHubService.php';

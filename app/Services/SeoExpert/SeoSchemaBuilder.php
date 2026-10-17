@@ -28,7 +28,7 @@ class SeoSchemaBuilder
         }
         $h1 = (string) ($page['h1'] ?? '');
         // A destination collection is not a single bookable trip, even with only one card.
-        if (self::hasType($page['schema'] ?? [], ['ItemList', 'CollectionPage'])) return false;
+        if (self::collectionSchema($page['schema'] ?? [])) return false;
         if (preg_match('/\b(?:tours|trips|excursions|cruises|packages)\b|رحلات/u', mb_strtolower($h1))
             && !preg_match('/\b(?:tour|trip|excursion|cruise|itinerary|day|days|night|nights)\b|جولة|رحلة|يوم|أيام/u', mb_strtolower($h1))) return false;
         $words = preg_match(self::TOUR_WORDS, $h1 . ' ' . ($page['title'] ?? '')) === 1;
@@ -43,6 +43,16 @@ class SeoSchemaBuilder
             return false;
         }
         return $h1 !== '' && ($urlLooks || $words) && ($urlLooks || self::price($page) !== null);
+    }
+
+    private static function collectionSchema(array $schema): bool
+    {
+        foreach($schema as $node){if(!is_array($node))continue;
+            if(array_intersect((array)($node['@type']??[]),['ItemList','CollectionPage']))return true;
+            if(isset($node['@graph'])&&is_array($node['@graph'])&&self::collectionSchema($node['@graph']))return true;
+        }
+        // An itinerary ItemList nested inside a TouristTrip is not a collection page.
+        return false;
     }
 
     /** Recheck old unexecuted proposals against the current public page too. */
