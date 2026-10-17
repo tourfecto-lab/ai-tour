@@ -25,7 +25,7 @@ class SeoInsightsController extends Controller
             return $this->error('الموقع غير موجود', 404);
         }
 
-        $overview = (new RankTrackingService())->trackingOverview($this->db, $websiteId, (int) $this->user['id']);
+        $overview = (new RankTrackingService())->trackingOverview($this->db, $websiteId, (int) $this->user['id'], (int)$this->get('market_id',0));
         return $this->success($overview);
     }
 
@@ -45,7 +45,7 @@ class SeoInsightsController extends Controller
             return $this->error('تم تجاوز حد الفحوصات - ارجع بعد ' . $limit['retry_after'] . ' ثانية', 429);
         }
 
-        $result = (new RankTrackingService())->checkWebsite($this->db, $websiteId, (int) $this->user['id']);
+        $result = (new RankTrackingService())->checkWebsite($this->db, $websiteId, (int) $this->user['id'], (int)$this->get('market_id',0));
         if (empty($result['available'])) {
             return $this->error($result['error'] ?? 'مصدر الترتيبات غير مهيأ', 422);
         }
@@ -67,7 +67,7 @@ class SeoInsightsController extends Controller
             return $this->error('keyword مطلوب', 422);
         }
 
-        $history = (new RankTrackingService())->history($this->db, $websiteId, (int) $this->user['id'], $keyword);
+        $history = (new RankTrackingService())->history($this->db, $websiteId, (int) $this->user['id'], $keyword,60,(int)$this->get('market_id',0));
         return $this->success($history);
     }
 

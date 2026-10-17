@@ -16,7 +16,8 @@ class SystemSettingsService
 
     /** @var array السجل الكامل لكل إعدادات النظام المعروفة */
     private static array $registry = [
-        'serp_enabled' => ['category'=>'seo','label'=>'تفعيل تتبع الترتيب المدفوع (1 فقط)','is_secret'=>false,'constant'=>''],
+        'serp_monthly_budget_usd' => ['category'=>'seo','label'=>'سقف DataForSEO الشهري بالدولار (0 يوقف الطلبات)','is_secret'=>false,'constant'=>''],
+        'serp_enabled' => ['category'=>'seo','label'=>'تفعيل بيانات SEO المدفوعة: بحث وترتيب (1 فقط)','is_secret'=>false,'constant'=>''],
         'serp_login' => ['category'=>'seo','label'=>'DataForSEO API Login','is_secret'=>true,'constant'=>''],
         'serp_password' => ['category'=>'seo','label'=>'DataForSEO API Password','is_secret'=>true,'constant'=>''],
         'serp_location_code' => ['category'=>'seo','label'=>'SERP Location Code','is_secret'=>false,'constant'=>''],

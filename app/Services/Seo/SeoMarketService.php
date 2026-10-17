@@ -1,0 +1,76 @@
+<?php
+/** All entry points verify site ownership; website-row locks serialize plan market limits. */
+class SeoMarketService
+{
+    private Database $db;
+    public function __construct(?Database $db=null) { $this->db=$db ?? Database::getInstance(); }
+    public function site(int $wid,int $uid): array
+    {
+        $r=$this->db->query('SELECT * FROM websites WHERE id=? AND user_id=?',[$wid,$uid]);
+        if (!$r) throw new InvalidArgumentException('الموقع غير موجود');
+        SeoDataSchema::ensureSchema($this->db);
+        return $r[0];
+    }
+    public function limit(int $uid): int
+    {
+        $owner=$this->db->query('SELECT owner_user_id FROM users WHERE id=?',[$uid])[0]['owner_user_id']??0;
+        $s=Subscription::activeSubscriptionRow((int)$owner ?: $uid);
+        if (!$s) return 1;
+        $tier=(string)($s['plan_name']??'starter');
+        $max=['starter'=>1,'professional'=>3,'enterprise'=>6][$tier]??1;
+        $features=json_decode((string)($s['plan_features_json']??$s['features_json']??'{}'),true) ?: [];
+        return max(1,min($max,(int)($features['seo_markets']??$max)));
+    }
+    public static function defaultMarket(string $language): array
+    {
+        $code=strtolower(explode('-',$language)[0]);
+        $defaults=['en'=>[2840,'US – English'],'ar'=>[2818,'Egypt – Arabic'],'de'=>[2276,'Germany – German'],'fr'=>[2250,'France – French'],'es'=>[2724,'Spain – Spanish'],'it'=>[2380,'Italy – Italian']];
+        if (!isset($defaults[$code])) throw new InvalidArgumentException('اختار السوق الأول يدويًا للغة الموقع');
+        return ['location_code'=>$defaults[$code][0],'language_code'=>$code,'label'=>$defaults[$code][1],'is_primary'=>true];
+    }
+    public function markets(int $wid,int $uid): array
+    {
+        $this->site($wid,$uid);
+        $rows=$this->db->query('SELECT * FROM seo_markets WHERE website_id=? ORDER BY is_primary DESC,id',[$wid]);
+        if (!$rows) {
+            $language=ContentLanguageService::forWebsite($wid,$uid);
+            $this->add($wid,$uid,self::defaultMarket($language));
+            $rows=$this->db->query('SELECT * FROM seo_markets WHERE website_id=? ORDER BY is_primary DESC,id',[$wid]);
+        }
+        return array_slice($rows,0,$this->limit($uid));
+    }
+    public function resolve(int $wid,int $uid,int $mid=0): array
+    {
+        foreach ($this->markets($wid,$uid) as $m) if (!$mid || (int)$m['id']===$mid) return $m;
+        throw new InvalidArgumentException('السوق مش تابع للموقع');
+    }
+    public function add(int $wid,int $uid,array $in): array
+    {
+        $this->site($wid,$uid);
+        $location=filter_var($in['location_code']??null,FILTER_VALIDATE_INT);
+        $language=(string)($in['language_code']??''); $label=trim((string)($in['label']??''));
+        if (!$location || $location<1 || !preg_match('/^[a-z]{2,3}(?:-[A-Z]{2})?$/D',$language) || mb_strlen($label)<2 || mb_strlen($label)>100) throw new InvalidArgumentException('راجع كود البلد واللغة واسم السوق');
+        $limit=$this->limit($uid);
+        return $this->db->transaction(function () use ($wid,$uid,$location,$language,$label,$in,$limit) {
+            $this->db->query('SELECT id FROM websites WHERE id=? AND user_id=? FOR UPDATE',[$wid,$uid]);
+            $rows=$this->db->query('SELECT * FROM seo_markets WHERE website_id=?',[$wid]);
+            foreach ($rows as $r) if ((int)$r['location_code']===$location && $r['language_code']===$language) return $r;
+            if (count($rows)>=$limit) throw new InvalidArgumentException('وصلت لعدد الأسواق المتاح في باقتك');
+            $primary=!$rows || !empty($in['is_primary']);
+            if ($primary) $this->db->exec('UPDATE seo_markets SET is_primary=0 WHERE website_id=?',[$wid]);
+            $this->db->exec('INSERT INTO seo_markets (website_id,location_code,language_code,label,is_primary) VALUES (?,?,?,?,?)',[$wid,$location,$language,$label,(int)$primary]);
+            $m=$this->db->query('SELECT * FROM seo_markets WHERE website_id=? AND location_code=? AND language_code=?',[$wid,$location,$language])[0];
+            // Legacy ranks have no geographical provenance. Keep their history unassigned.
+            $this->db->exec('UPDATE tracked_keywords SET market_id=?,current_position=NULL,last_checked_at=NULL WHERE website_id=? AND market_id IS NULL',[$m['id'],$wid]);
+            return $m;
+        });
+    }
+    public function primary(int $wid,int $uid,int $mid): void
+    {
+        $this->resolve($wid,$uid,$mid);
+        $this->db->transaction(function () use ($wid,$uid,$mid) {
+            $this->db->query('SELECT id FROM websites WHERE id=? AND user_id=? FOR UPDATE',[$wid,$uid]);
+            $this->db->exec('UPDATE seo_markets SET is_primary=(id=?) WHERE website_id=?',[$mid,$wid]);
+        });
+    }
+}

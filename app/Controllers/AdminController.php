@@ -621,6 +621,7 @@ class AdminController extends Controller
         try {
             $service = new SystemSettingsService();
             $allowedKeys = [
+                'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
                 'gemini_api_key', 'google_client_id', 'google_client_secret', 'google_maps_api_key',
                 'meta_app_id', 'meta_app_secret', 'support_whatsapp_number',
                 'meta_login_config_id', 'meta_signin_config_id', 'meta_wa_config_id', 'meta_oauth_scopes',
@@ -629,6 +630,13 @@ class AdminController extends Controller
                 'oauth_microsoft_client_id', 'oauth_microsoft_client_secret', 'oauth_microsoft_tenant',
                 'oauth_apple_client_id', 'oauth_apple_team_id', 'oauth_apple_key_id', 'oauth_apple_private_key',
             ];
+            if ($this->get('serp_enabled')!==null && !in_array((string)$this->get('serp_enabled'),['0','1'],true))
+                return $this->error('اختار تفعيل أو إيقاف DataForSEO',422);
+            if ($this->get('serp_device')!==null && !in_array((string)$this->get('serp_device'),['desktop','mobile'],true))
+                return $this->error('اختار desktop أو mobile',422);
+            $seoBudget=$this->get('serp_monthly_budget_usd');
+            if ($seoBudget!==null && (!is_numeric($seoBudget) || !is_finite((float)$seoBudget) || (float)$seoBudget<0 || (float)$seoBudget>1000000))
+                return $this->error('راجع سقف DataForSEO بالدولار: من 0 لمليون',422);
             foreach ($allowedKeys as $key) {
                 if ($this->get($key) !== null && $this->get($key) !== '') {
                     $service->set($key, (string) $this->get($key));
@@ -2406,7 +2414,7 @@ class AdminController extends Controller
                     if (item.key === 'refund_policy_content' && document.getElementById('legalRefundContent')) document.getElementById('legalRefundContent').value = item.value || '';
                 } else {
                     const el = document.getElementById('ss_' + item.key);
-                    if (el && !item.is_secret) el.value = item.value || '';
+                    if (el && !item.is_secret) el.value = item.value || (item.key === 'serp_enabled' ? '0' : (item.key === 'serp_device' ? 'desktop' : ''));
                     if (el && item.is_secret && item.is_set) el.placeholder = '•••• (مسجّل - اكتب قيمة جديدة عشان تغيّرها)';
                 }
             });
@@ -2487,6 +2495,7 @@ class AdminController extends Controller
         alertBox.style.display = 'none';
 
         const keys = [
+            'serp_login', 'serp_password', 'serp_enabled', 'serp_monthly_budget_usd', 'serp_device',
             'gemini_api_key', 'google_client_id', 'google_client_secret', 'google_maps_api_key',
             'meta_app_id', 'meta_app_secret', 'support_whatsapp_number',
             'meta_login_config_id', 'meta_signin_config_id', 'meta_wa_config_id', 'meta_oauth_scopes',
@@ -2509,7 +2518,7 @@ class AdminController extends Controller
         if (res.success) {
             toast(I18N['common.updated'], 'success');
             // نفضّي حقول القيم الحساسة اللي اتبعتت عشان محدش يشوفها معروضة تاني
-            ['gemini_api_key', 'google_client_secret', 'google_maps_api_key', 'meta_app_secret', 'mail_password', 'oauth_microsoft_client_secret', 'oauth_apple_private_key'].forEach(key => {
+            ['serp_login', 'serp_password', 'gemini_api_key', 'google_client_secret', 'google_maps_api_key', 'meta_app_secret', 'mail_password', 'oauth_microsoft_client_secret', 'oauth_apple_private_key'].forEach(key => {
                 const el = document.getElementById('ss_' + key);
                 if (el) el.value = '';
             });
@@ -4166,6 +4175,16 @@ HTML;
                     <h4 style="margin:14px 0 8px;font-size:13px;color:var(--panel-text-muted);">🤖 {$this->tr('admin.sys.cat.ai')}</h4>
                     <div class="p-grid cols-2">
                         <div class="form-group"><label class="form-label">Gemini API Key</label><input type="password" id="ss_gemini_api_key" class="form-control" placeholder="••••••••" dir="ltr"></div>
+                    </div>
+
+                    <h4 style="margin:18px 0 8px;font-size:13px;color:var(--panel-text-muted);">DataForSEO — بحث الكلمات والترتيب</h4>
+                    <p class="p-cell-muted">استخدم API Login وAPI Password من حساب DataForSEO. سقف الميزانية لكل المنصة بالدولار في الشهر؛ 0 بيوقف الطلبات المدفوعة. <a href="/admin/seo-markets">إدارة أسواق المواقع</a></p>
+                    <div class="p-grid cols-2">
+                        <div class="form-group"><label class="form-label" for="ss_serp_login">DataForSEO API Login</label><input type="password" id="ss_serp_login" class="form-control" autocomplete="new-password" dir="ltr"></div>
+                        <div class="form-group"><label class="form-label" for="ss_serp_password">DataForSEO API Password</label><input type="password" id="ss_serp_password" class="form-control" autocomplete="new-password" dir="ltr"></div>
+                        <div class="form-group"><label class="form-label" for="ss_serp_enabled">تفعيل الطلبات المدفوعة</label><select id="ss_serp_enabled" class="form-control"><option value="0">متوقف</option><option value="1">مفعّل</option></select></div>
+                        <div class="form-group"><label class="form-label" for="ss_serp_monthly_budget_usd">سقف الميزانية الشهري بالدولار</label><input type="number" id="ss_serp_monthly_budget_usd" class="form-control" min="0" max="1000000" step="0.01" value="0" dir="ltr"></div>
+                        <div class="form-group"><label class="form-label" for="ss_serp_device">جهاز البحث</label><select id="ss_serp_device" class="form-control"><option value="desktop">Desktop</option><option value="mobile">Mobile</option></select></div>
                     </div>
 
                     <h4 style="margin:18px 0 8px;font-size:13px;color:var(--panel-text-muted);">🔗 Google OAuth</h4>

@@ -3,9 +3,9 @@
 class BillingPlanCatalog
 {
     public const LEGACY_ALLOWANCES = [
-        'starter'=>['website_generations'=>3,'website_items'=>30,'articles'=>10,'marketing_tools'=>100,'media_images'=>20,'media_videos'=>0,'ai_tools'=>150],
-        'professional'=>['website_generations'=>10,'website_items'=>150,'articles'=>40,'marketing_tools'=>500,'media_images'=>100,'media_videos'=>5,'ai_tools'=>600],
-        'enterprise'=>['website_generations'=>30,'website_items'=>1000,'articles'=>150,'marketing_tools'=>2000,'media_images'=>400,'media_videos'=>20,'ai_tools'=>2000],
+        'starter'=>['seo_data'=>300,'seo_markets'=>1,'website_generations'=>3,'website_items'=>30,'articles'=>10,'marketing_tools'=>100,'media_images'=>20,'media_videos'=>0,'ai_tools'=>150],
+        'professional'=>['seo_data'=>4000,'seo_markets'=>3,'website_generations'=>10,'website_items'=>150,'articles'=>40,'marketing_tools'=>500,'media_images'=>100,'media_videos'=>5,'ai_tools'=>600],
+        'enterprise'=>['seo_data'=>20000,'seo_markets'=>6,'website_generations'=>30,'website_items'=>1000,'articles'=>150,'marketing_tools'=>2000,'media_images'=>400,'media_videos'=>20,'ai_tools'=>2000],
     ];
 
     public static function featureQuota($value): int

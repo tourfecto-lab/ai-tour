@@ -152,10 +152,7 @@ $router->post('/api/ai/article/{id}/schedule', 'AIController', 'scheduleArticle'
 $router->post('/api/ai/article/{id}/schedule/cancel', 'AIController', 'cancelScheduledArticle', ['AuthMiddleware']);
 
 // تحليلات إضافية
-$router->post('/api/ai/keywords', 'AIController', 'analyzeKeywords', [
-    'AuthMiddleware',
-    'SubscriptionMiddleware:require_ai_credits'
-]);
+$router->post('/api/ai/keywords', 'SeoDataController', 'discover', ['AuthMiddleware']);
 $router->post('/api/ai/competitors', 'AIController', 'analyzeCompetitors', [
     'AuthMiddleware',
     'SubscriptionMiddleware:require_competitor_analysis'
@@ -1025,13 +1022,13 @@ $router->get('/api/ai/competitors/{id}/analysis', 'AIController', 'competitorAna
 
 // الكلمات المفتاحية المتابَعة (يسدّ فجوة /ai/keywords القديمة الفاضية)
 // نفس الملاحظة: /api/ai/keywords [POST] محجوز لـ analyzeKeywords الأصلية
-$router->get('/api/ai/keywords', 'AIController', 'listKeywords', ['AuthMiddleware']);
-$router->post('/api/ai/keywords/add', 'AIController', 'createKeyword', ['AuthMiddleware']);
-$router->delete('/api/ai/keywords/{id}', 'AIController', 'deleteKeyword', ['AuthMiddleware']);
-$router->post('/api/ai/keywords/bulk-add', 'AIController', 'bulkAddKeywords', ['AuthMiddleware']);
+$router->get('/api/ai/keywords', 'SeoDataController', 'keywords', ['AuthMiddleware']);
+$router->post('/api/ai/keywords/add', 'SeoDataController', 'addKeyword', ['AuthMiddleware']);
+$router->delete('/api/ai/keywords/{id}', 'SeoDataController', 'deleteKeyword', ['AuthMiddleware']);
+$router->post('/api/ai/keywords/bulk-add', 'SeoDataController', 'bulkAddKeywords', ['AuthMiddleware']);
 // تحليل SEO/AEO/GEO حقيقي بنفس محرك /api/ai/analyze (يستهلك نفس الرصيد) +
 // اكتشاف كلمات جديدة، ومزامنة الترتيب الفعلي من Google Search Console
-$router->post('/api/ai/keywords/discover', 'AIController', 'discoverKeywords', ['AuthMiddleware']);
+$router->post('/api/ai/keywords/discover', 'SeoDataController', 'discover', ['AuthMiddleware']);
 $router->post('/api/ai/keywords/sync-gsc', 'AIController', 'syncSearchConsoleKeywords', ['AuthMiddleware']);
 
 // محتوى Google Business Profile وجدولته
@@ -1547,7 +1544,7 @@ $router->get('/api/action-center/actions/history', 'ActionCenterController', 'hi
 // Phase 9 (Google Business Agent) - درجة اكتمال بروفايل Google Business
 $router->get('/api/reputation/google/profile-completeness', 'ReputationController', 'getProfileCompleteness', ['AuthMiddleware']);
 // Phase 6 (Keyword Intelligence)
-$router->post('/api/ai/keywords/enrich', 'AIController', 'enrichKeywords', ['AuthMiddleware']);
+$router->post('/api/ai/keywords/enrich', 'SeoDataController', 'enrich', ['AuthMiddleware']);
 // Phase 8 (Content Agent)
 $router->post('/api/ai/tour-page/generate', 'AIController', 'generateTourPageDraft', ['AuthMiddleware']);
 $router->post('/api/ai/tour-page/apply', 'AIController', 'applyTourPage', ['AuthMiddleware']);
@@ -1775,3 +1772,13 @@ $router->post('/api/seo-impact/sites/{website_id}/bookings','SeoImpactController
 $router->post('/api/seo-impact/booking/{website_id}','SeoImpactController','ingest',[]);
 
 $router->post('/api/seo-expert/runs/{id}/review-scope','SeoExpertController','reviewScope',['AuthMiddleware']);
+
+// Phase 2 — real keyword demand, tenant-scoped markets and measured gaps.
+$router->get('/api/seo/data/markets','SeoDataController','markets',['AuthMiddleware']);
+$router->post('/api/seo/data/markets','SeoDataController','addMarket',['AuthMiddleware']);
+$router->get('/api/seo/data/keywords','SeoDataController','keywords',['AuthMiddleware']);
+$router->post('/api/seo/data/research','SeoDataController','discover',['AuthMiddleware']);
+$router->post('/api/seo/data/gaps/refresh','SeoDataController','gapRefresh',['AuthMiddleware']);
+$router->get('/api/admin/seo-data/sites','SeoDataController','adminSites',['AuthMiddleware','AdminMiddleware']);
+$router->get('/api/admin/seo-data/markets','SeoDataController','adminMarkets',['AuthMiddleware','AdminMiddleware']);
+$router->post('/api/admin/seo-data/markets','SeoDataController','adminAddMarket',['AuthMiddleware','AdminMiddleware']);

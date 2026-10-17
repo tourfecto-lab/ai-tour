@@ -23,6 +23,7 @@ class PlanUsage
 {
     /** feature key (نفس مفتاح تسعير المحفظة أو مفتاح فرعي) => مفتاح features_json */
     private const FEATURES = [
+        'seo_data' => 'seo_data',
         'ai_assistant_message' => 'ai_assistant_messages',
         'website_generation' => 'website_generations',
         'website_item' => 'website_items',
@@ -174,6 +175,7 @@ class PlanUsage
 
     /** أسماء الميزات للعرض */
     private const LABELS = [
+        'seo_data' => ['قياس كلمة SEO', 'seo_data'],
         'ai_assistant_message' => ['رسالة', 'ai_assistant_message'],
         'website_generation' => ['موقع', 'website_generation'],
         'website_item' => ['عنصر', 'website_generation'],
@@ -248,12 +250,18 @@ class PlanUsage
             if ($stored) $row=$stored;
         }
         $features=BillingPlanCatalog::features($row);
-        return (int)($features[$jsonKey]??0);
+        $limit=(int)($features[$jsonKey]??0);
+        return $jsonKey==='seo_data'?max(0,$limit):$limit;
     }
 
     private static function used(int $subId, string $feature, string $since): int
     {
         try {
+            if ($feature==='seo_data') {
+                $s=Database::getInstance()->getConnection()->prepare('SELECT COUNT(*) FROM plan_usage_events WHERE subscription_id=? AND feature=? AND created_at>=?');
+                $s->execute([$subId,$feature,$since ?: '1970-01-01 00:00:00']);
+                return (int)$s->fetchColumn();
+            }
             $r = Database::getInstance()->query(
                 'SELECT COUNT(*) AS c FROM plan_usage_events WHERE subscription_id = ? AND feature = ? AND created_at >= ?',
                 [$subId, $feature, $since ?: '1970-01-01 00:00:00']

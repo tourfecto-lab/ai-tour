@@ -10,9 +10,9 @@ final class SeoOpportunityService {
     public static function gather(Database $db,int $uid,int $wid): array {
         $out=['keywords'=>[],'competitors'=>[],'competitor_keywords'=>[],'states'=>[]];
         $queries=[
-            'keywords'=>"SELECT keyword,current_position,search_volume,difficulty,commercial_intent,target_page,last_checked_at,enriched_at FROM tracked_keywords WHERE website_id=? AND user_id=? ORDER BY opportunity_score DESC,id DESC LIMIT 200",
+            'keywords'=>"SELECT k.keyword,k.market_id,m.label market_label,k.current_position,r.volume search_volume,r.difficulty,r.intent,k.commercial_intent,k.target_page,k.last_checked_at,r.fetched_at enriched_at,r.source FROM tracked_keywords k JOIN seo_markets m ON m.id=k.market_id AND m.website_id=k.website_id LEFT JOIN seo_keyword_research r ON r.website_id=k.website_id AND r.market_id=k.market_id AND r.keyword COLLATE utf8mb4_unicode_ci=k.keyword COLLATE utf8mb4_unicode_ci AND r.source='dataforseo' AND r.fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY) WHERE k.website_id=? AND k.user_id=? ORDER BY k.opportunity_score DESC,k.id DESC LIMIT 200",
             'competitors'=>"SELECT competitor_domain,competitor_name,my_score,competitor_score,last_analyzed_at FROM competitors WHERE website_id=? AND user_id=? AND is_active=1 ORDER BY last_analyzed_at DESC LIMIT 5",
-            'competitor_keywords'=>"SELECT k.keyword,k.search_volume,k.difficulty,c.competitor_domain FROM competitor_keywords k JOIN competitors c ON c.id=k.competitor_id WHERE c.website_id=? AND c.user_id=? AND c.is_active=1 ORDER BY k.search_volume DESC LIMIT 50"
+            'competitor_keywords'=>"SELECT k.keyword,k.market_id,k.search_volume,k.difficulty,k.source,k.fetched_at,c.competitor_domain FROM competitor_keywords k JOIN competitors c ON c.id=k.competitor_id JOIN seo_markets m ON m.id=k.market_id AND m.website_id=c.website_id WHERE c.website_id=? AND c.user_id=? AND c.is_active=1 AND k.source='dataforseo' AND k.fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY) ORDER BY k.search_volume DESC LIMIT 50"
         ];
         foreach($queries as $kind=>$sql) {
             try {$rows=$db->query($sql,[$wid,$uid]);$out[$kind]=is_array($rows)?$rows:[];$out['states'][$kind]=$out[$kind]?'available':'no_records';}
@@ -25,6 +25,8 @@ final class SeoOpportunityService {
             $k['search_volume_state']=empty($k['enriched_at'])?'unverified':'recorded';if(empty($k['enriched_at']))$k['search_volume']=null;
         } unset($k);
         foreach($out['competitor_keywords'] as &$k)$k['evidence_state']='research_record_not_verified_ranking';unset($k);
+        try { $out['verified_keyword_gaps']=SeoKeywordGapService::rows($db,$wid,$uid); $out['states']['verified_keyword_gaps']='available'; }
+        catch(Throwable $e) { $out['verified_keyword_gaps']=[]; $out['states']['verified_keyword_gaps']='unavailable'; }
         return $out;
     }
     public static function rank(array $pages,array $metrics,array $research,string $home,int $selectedLimit=24): array {

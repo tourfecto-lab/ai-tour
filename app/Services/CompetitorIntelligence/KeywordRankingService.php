@@ -189,7 +189,15 @@ class KeywordRankingService
             ];
         }
 
-        $result = $this->source->check($domain, $keywords);
+        $source=$this->source;
+        if ($source instanceof DataForSeoRankingSource) {
+            $db=Database::getInstance();
+            $c=$db->query('SELECT website_id,user_id FROM competitors WHERE id=?',[$competitorId])[0]??null;
+            if (!$c) return ['available'=>false,'reason'=>'competitor_not_found','recorded'=>0,'results'=>[]];
+            $market=(new SeoMarketService($db))->resolve((int)$c['website_id'],(int)$c['user_id']);
+            $source=$source->forMarket($market,(int)$c['website_id']);
+        }
+        $result = RankTrackingService::batches($source, $domain, $keywords);
         if (!($result['available'] ?? false)) {
             return [
                 'available' => false,

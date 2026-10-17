@@ -24,11 +24,19 @@ $startedAt = microtime(true);
 try {
     $db = Database::getInstance();
 
+    SeoDataSchema::ensureSchema($db);
+    $research = new DataForSeoResearchService(null, $db);
+    if (!$research->configured()) { fwrite(STDOUT, "DataForSEO: not measured\n"); exit(0); }
+    foreach ($db->query("SELECT DISTINCT website_id,user_id FROM competitors WHERE is_active=1 AND monitoring_paused=0 LIMIT 50") as $site) {
+        try { $research->competitors((int)$site['website_id'], (int)$site['user_id']); }
+        catch (Throwable $e) { fwrite(STDERR, "Competitor research unavailable for site ".(int)$site['website_id']."\n"); }
+    }
     // المنافسون النشطون اللي عندهم كلمات مفتاحية مرصودة
     $rows = $db->query(
-        "SELECT DISTINCT c.id AS competitor_id, c.competitor_domain
+        "SELECT DISTINCT c.id AS competitor_id, c.competitor_domain,c.website_id,c.user_id
          FROM competitors c
          JOIN competitor_keywords k ON k.competitor_id = c.id
+         JOIN seo_markets m ON m.id=k.market_id AND m.website_id=c.website_id AND m.is_primary=1
          WHERE c.is_active = 1 AND c.monitoring_paused = 0
          LIMIT 200"
     );
@@ -46,9 +54,11 @@ try {
             continue;
         }
 
+        $market=(new SeoMarketService($db))->resolve((int)$row['website_id'],(int)$row['user_id']);
+        $service=new KeywordRankingService((new DataForSeoRankingSource())->forMarket($market,(int)$row['website_id']));
         $keywords = array_map(
             static fn ($k) => (string) $k['keyword'],
-            $db->query("SELECT keyword FROM competitor_keywords WHERE competitor_id = ? LIMIT 100", [$competitorId])
+            $db->query("SELECT keyword FROM competitor_keywords WHERE competitor_id = ? AND market_id = ? LIMIT 100", [$competitorId,$market['id']])
         );
         if (empty($keywords)) {
             $skipped++;

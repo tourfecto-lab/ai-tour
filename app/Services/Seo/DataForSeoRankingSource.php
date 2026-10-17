@@ -1,36 +1,65 @@
 <?php
-/** Google organic SERP adapter. Explicit paid-service opt-in; no generated/mocked ranks. */
+/** Market-specific organic ranks. Source batches cap at 20; Live accepts one task per HTTP request. */
 class DataForSeoRankingSource implements KeywordRankingSourceInterface
 {
-    private array $settings; private $transport;
-    public function __construct(?array $settings=null,?callable $transport=null){
-        if($settings===null){$s=new SystemSettingsService();$settings=[];foreach(['enabled','login','password','location_code','language_code','device'] as $k)$settings[$k]=$s->get('serp_'.$k);}
-        $this->settings=$settings;$this->transport=$transport;
+    private array $settings;
+    private DataForSeoClient $client;
+    private int $websiteId;
+    public function __construct(?array $settings=null,?callable $transport=null,?DataForSeoClient $client=null,int $websiteId=0)
+    {
+        if ($settings===null) {
+            $s=new SystemSettingsService(); $settings=[];
+            foreach (['enabled','login','password','location_code','language_code','device','monthly_budget_usd'] as $k) $settings[$k]=$s->get('serp_'.$k);
+        }
+        $this->settings=$settings; $this->websiteId=$websiteId;
+        $this->client=$client??new DataForSeoClient($settings,$transport);
     }
-    public function isConfigured(): bool{return ($this->settings['enabled']??'')==='1'&&trim($this->settings['login']??'')!==''&&trim($this->settings['password']??'')!==''&&(int)($this->settings['location_code']??0)>0&&preg_match('/^[a-z]{2,3}(?:-[A-Z]{2})?$/D',$this->settings['language_code']??'')===1;}
-    public function sourceName(): string{return 'dataforseo_google_organic';}
-    public function check(string $domain,array $keywords): array{
+    public function forMarket(array $market,int $websiteId): self
+    {
+        $settings=$this->settings; $settings['location_code']=$market['location_code']; $settings['language_code']=$market['language_code'];
+        return new self($settings,null,$this->client,$websiteId);
+    }
+    public function isConfigured(): bool { return $this->client->isConfigured(); }
+    public function sourceName(): string { return 'dataforseo_google_organic'; }
+    public static function normalizeHost(string $value): string
+    {
+        $host=parse_url(preg_match('#^https?://#i',$value)?$value:'https://'.$value,PHP_URL_HOST);
+        $host=preg_replace('/^www\./i','',strtolower(rtrim((string)$host,'.')));
+        return filter_var($host,FILTER_VALIDATE_DOMAIN,FILTER_FLAG_HOSTNAME)?$host:'';
+    }
+    public static function matchesHost(string $candidate,string $target): bool
+    {
+        $a=self::normalizeHost($candidate); $b=self::normalizeHost($target);
+        return $a!=='' && $b!=='' && ($a===$b || str_ends_with($a,'.'.$b));
+    }
+    public function check(string $domain,array $keywords): array
+    {
         $bad=fn($reason)=>['available'=>false,'reason'=>$reason,'rankings'=>[]];
-        if(!$this->isConfigured())return $bad('no_keyword_ranking_source_configured');
-        $domain=strtolower(rtrim($domain,'.'));if(!filter_var($domain,FILTER_VALIDATE_DOMAIN,FILTER_FLAG_HOSTNAME))return $bad('invalid_domain');
-        $keywords=array_values(array_unique(array_filter(array_map('trim',$keywords))));if(count($keywords)>20)return $bad('rank_batch_limit_20');
-        if(!$keywords)return ['available'=>true,'reason'=>null,'rankings'=>[]];
+        if (!$this->isConfigured()) return $bad('no_keyword_ranking_source_configured');
+        $domain=self::normalizeHost($domain); if (!$domain) return $bad('invalid_domain');
+        if ((int)($this->settings['location_code']??0)<1 || !preg_match('/^[a-z]{2,3}(?:-[A-Z]{2})?$/D',(string)($this->settings['language_code']??''))) return $bad('invalid_market');
+        $keywords=array_values(array_unique(array_filter(array_map('trim',$keywords))));
+        if (count($keywords)>20) return $bad('rank_batch_limit_20');
+        foreach ($keywords as $keyword) {
+            if (mb_strlen($keyword)>255) return $bad('invalid_keyword');
+            // Advanced operators multiply provider charges; rank tracking accepts plain keywords only.
+            if (preg_match('/\b(?:site|inurl|intitle|intext|filetype|link|define|id|info|inanchor|allinurl|allintitle|allintext|allinanchor):/i',$keyword))
+                return $bad('search_operators_not_supported');
+        }
         $rankings=[];
-        foreach($keywords as $keyword){
-            if(mb_strlen($keyword)>255)return $bad('invalid_keyword');
-            $task=['keyword'=>$keyword,'location_code'=>(int)$this->settings['location_code'],'language_code'=>$this->settings['language_code'],'device'=>($this->settings['device']??'desktop')==='mobile'?'mobile':'desktop','depth'=>100];
-            if($this->transport)$response=($this->transport)([$task]);else{
-                if(!function_exists('curl_init'))return $bad('curl_required');
-                $ch=curl_init('https://api.dataforseo.com/v3/serp/google/organic/live/advanced');
-                curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode([$task],JSON_THROW_ON_ERROR),CURLOPT_HTTPHEADER=>['Content-Type: application/json'],CURLOPT_HTTPAUTH=>CURLAUTH_BASIC,CURLOPT_USERPWD=>$this->settings['login'].':'.$this->settings['password'],CURLOPT_RETURNTRANSFER=>true,CURLOPT_CONNECTTIMEOUT=>10,CURLOPT_TIMEOUT=>120,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);
-                $body=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);
-                if($body===false||$http!==200)return $bad('rank_source_http_failure');$response=json_decode($body,true);
+        foreach ($keywords as $keyword) {
+            $r=$this->client->call('serp/google/organic/live/advanced',[[
+                'keyword'=>$keyword,'location_code'=>(int)$this->settings['location_code'],'language_code'=>$this->settings['language_code'],
+                'device'=>($this->settings['device']??'desktop')==='mobile'?'mobile':'desktop','depth'=>100]],$this->websiteId,1,0.10);
+            if (!$r['available']) return $bad($r['reason']??'rank_source_unavailable')+['partial_rankings'=>$rankings];
+            $result=$r['response']['tasks'][0]['result'][0]??[];
+            if (!array_key_exists('items',$result)) return $bad('rank_source_invalid_response');
+            $position=null; $url=null;
+            foreach ($result['items']??[] as $item) {
+                if (($item['type']??'')!=='organic' || !self::matchesHost((string)($item['url']??$item['domain']??''),$domain)) continue;
+                $p=(int)($item['rank_group']??0);
+                if ($p>=1 && $p<=100 && ($position===null || $p<$position)) { $position=$p; $url=$item['url']??null; }
             }
-            $t=$response['tasks'][0]??null;$r=$t['result'][0]??null;
-            if(($response['status_code']??0)!==20000||($t['status_code']??0)!==20000||!is_array($r)||!array_key_exists('items',$r))return $bad('rank_source_invalid_response');
-            $position=null;$url=null;
-            foreach(($r['items']??[]) as $item){if(($item['type']??'')!=='organic')continue;$host=strtolower(rtrim((string)($item['domain']??parse_url((string)($item['url']??''),PHP_URL_HOST)),'.'));
-                if($host!==$domain&&!str_ends_with($host,'.'.$domain))continue;$p=(int)($item['rank_group']??0);if($p>=1&&$p<=100&&($position===null||$p<$position)){$position=$p;$url=(string)($item['url']??'');}}
             $rankings[]=['keyword'=>$keyword,'position'=>$position,'url'=>$url];
         }
         return ['available'=>true,'reason'=>null,'rankings'=>$rankings];

@@ -1,237 +1,81 @@
 <?php
-
-/**
- * Tourfecto - SEO: Rank Tracking Service (G7)
- * @version 1.0.0
- *
- * يسد فجوة "تتبع ترتيب يومي للكلمات المفتاحية" (Ahrefs/SEMrush): يفحص
- * ترتيب `tracked_keywords` الخاص بالعميل عبر `KeywordRankingSourceInterface`
- * (نفس عقد M5 - قابل لإعادة الاستخدام)، يحفظ كل قياس في
- * `seo_rank_tracking_history` (بُعد زمني)، يحدّث `current_position` +
- * `last_checked_at` على الكلمة نفسها، ويسجّل `last_rank_tracked_at` على
- * الموقع. المصدر الافتراضي Null يفشل بأمان (لا اختلاق ترتيبات).
- *
- * المطلوب: ميجريشن 2026_08_29_000004 (seo_rank_tracking_history + عمود
- * websites.last_rank_tracked_at).
- */
+/** Daily ranks are isolated by market, with bounded source batches and append-only history. */
 class RankTrackingService
 {
-    private const INTERVAL_DAYS = 1;
-
-    /** @var KeywordRankingSourceInterface|null */
-    private $source;
-
-    public function __construct(?KeywordRankingSourceInterface $source = null)
+    private ?KeywordRankingSourceInterface $source;
+    public function __construct(?KeywordRankingSourceInterface $source=null) { $this->source=$source; }
+    public function dueWebsites(Database $db,int $limit=50): array
     {
-        $this->source = $source;
+        SeoDataSchema::ensureSchema($db);
+        return $db->query("SELECT w.id,w.user_id,w.main_url FROM websites w WHERE w.is_connected=1 AND EXISTS (SELECT 1 FROM tracked_keywords k WHERE k.website_id=w.id AND (k.last_checked_at IS NULL OR k.last_checked_at<=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 1 DAY))) ORDER BY w.last_rank_tracked_at ASC LIMIT ?",[max(1,min(200,$limit))]);
     }
-
-    private function resolveSource(): KeywordRankingSourceInterface
+    public static function batches(KeywordRankingSourceInterface $source,string $host,array $keywords): array
     {
-        return $this->source ?? new DataForSeoRankingSource();
+        $rankings=[];
+        foreach (array_chunk(array_values(array_unique($keywords)),20) as $chunk) {
+            $r=$source->check($host,$chunk);
+            if (empty($r['available'])) return ['available'=>false,'reason'=>$r['reason']??'source_unavailable','rankings'=>array_merge($rankings,$r['partial_rankings']??[])];
+            $rankings=array_merge($rankings,$r['rankings']??[]);
+        }
+        return ['available'=>true,'rankings'=>$rankings];
     }
-
-    /**
-     * المواقع المستحقة لفحص الترتيب (عندها كلمات متابعة + مرّ يوم منذ آخر
-     * فحص ناجح). الترتيب حسب الأقدمية.
-     */
-    public function dueWebsites(Database $db, int $limit = 50): array
+    public function checkWebsite(Database $db,int $websiteId,int $userId,int $marketId=0,array $onlyKeywords=[]): array
     {
-        return $db->query(
-            "SELECT w.id, w.user_id, w.main_url
-             FROM websites w
-             INNER JOIN tracked_keywords tk ON tk.website_id = w.id
-             WHERE w.is_connected = 1
-               AND (w.last_rank_tracked_at IS NULL
-                    OR w.last_rank_tracked_at <= DATE_SUB(NOW(), INTERVAL ? DAY))
-             GROUP BY w.id, w.user_id, w.main_url
-             ORDER BY w.last_rank_tracked_at ASC
-             LIMIT ?",
-            [self::INTERVAL_DAYS, $limit]
-        );
+        $pdo=$db->getConnection(); $key='seo-ranks:'.$websiteId;
+        $s=$pdo->prepare('SELECT GET_LOCK(?,0)'); $s->execute([$key]);
+        if ((int)$s->fetchColumn()!==1) return ['available'=>false,'reason'=>'rank_check_busy','checked'=>0,'recorded'=>0,'error'=>'الفحص شغال بالفعل'];
+        try { return $this->checkLockedWebsite($db,$websiteId,$userId,$marketId,$onlyKeywords); }
+        finally { $s=$pdo->prepare('SELECT RELEASE_LOCK(?)'); $s->execute([$key]); }
     }
-
-    /**
-     * فحص ترتيب كلمات موقع معيّن وتسجيل التاريخ.
-     *
-     * @param Database $db
-     * @param int      $websiteId
-     * @param int      $userId
-     * @return array{available:bool, reason:?string, checked:int, recorded:int, source:string, results:array, error:?string}
-     */
-    public function checkWebsite(Database $db, int $websiteId, int $userId): array
+    private function checkLockedWebsite(Database $db,int $websiteId,int $userId,int $marketId,array $onlyKeywords): array
     {
-        $source = $this->resolveSource();
-        if (!$source->isConfigured()) {
-            return [
-                'available' => false,
-                'reason' => 'no_keyword_ranking_source_configured',
-                'checked' => 0,
-                'recorded' => 0,
-                'source' => $source->sourceName(),
-                'results' => [],
-                'error' => 'مفيش مصدر ترتيبات SERP مهيأ (KeywordRankingSource)',
-            ];
-        }
-
-        $sites = $db->query(
-            "SELECT id, user_id, main_url FROM websites WHERE id = ? AND user_id = ? LIMIT 1",
-            [$websiteId, $userId]
-        );
-        if (empty($sites)) {
-            return ['available' => false, 'reason' => 'website_not_found', 'checked' => 0, 'recorded' => 0, 'source' => $source->sourceName(), 'results' => [], 'error' => 'الموقع غير موجود'];
-        }
-        $site = $sites[0];
-
-        $keywords = $db->query(
-            "SELECT id, keyword FROM tracked_keywords WHERE website_id = ? AND user_id = ? AND keyword <> '' ORDER BY last_checked_at ASC,id ASC LIMIT 20",
-            [$websiteId, $userId]
-        );
-        if (empty($keywords)) {
-            return ['available' => true, 'reason' => null, 'checked' => 0, 'recorded' => 0, 'source' => $source->sourceName(), 'results' => [], 'error' => null];
-        }
-
-        $host = strtolower((string) parse_url((string) $site['main_url'], PHP_URL_HOST));
-        if ($host === '') {
-            return ['available' => false, 'reason' => 'invalid_main_url', 'checked' => 0, 'recorded' => 0, 'source' => $source->sourceName(), 'results' => [], 'error' => 'main_url غير صالح'];
-        }
-
-        $keywordList = array_column($keywords, 'keyword');
-        $result = $source->check($host, $keywordList);
-        if (empty($result['available'])) {
-            return [
-                'available' => false,
-                'reason' => $result['reason'] ?? 'source_unavailable',
-                'checked' => 0,
-                'recorded' => 0,
-                'source' => $source->sourceName(),
-                'results' => [],
-                'error' => $result['reason'] ?? 'المصدر مش متاح',
-            ];
-        }
-
-        $checkedAt = date('Y-m-d H:i:s');
-        $sourceTag = 'integration:' . $source->sourceName();
-        $byKeyword = [];
-        foreach ($result['rankings'] as $r) {
-            $byKeyword[strtolower(trim((string) ($r['keyword'] ?? '')))] = $r;
-        }
-
-        $insertSql = "INSERT INTO seo_rank_tracking_history
-                (website_id, user_id, keyword, position, url, source, checked_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)";
-        $updateKeywordSql = "UPDATE tracked_keywords SET current_position = ?, last_checked_at = ? WHERE id = ? AND website_id = ? AND user_id = ?";
-
-        $recorded = 0;
-        $results = [];
-        foreach ($keywords as $kw) {
-            $meta = $byKeyword[strtolower(trim((string) $kw['keyword']))] ?? null;
-            // A missing provider row is not evidence that the site failed to rank.
-            if ($meta === null) { continue; }
-            $position = isset($meta['position']) ? (int) $meta['position'] : null;
-            $url = isset($meta['url']) ? (string) $meta['url'] : null;
-            if ($position !== null && ($position < 1 || $position > 100)) {
-                $position = null;
+        $source=$this->source??new DataForSeoRankingSource();
+        $out=['available'=>false,'reason'=>null,'checked'=>0,'recorded'=>0,'source'=>$source->sourceName(),'results'=>[],'error'=>null];
+        if (!$source->isConfigured()) return array_replace($out,['reason'=>'not_measured','error'=>'اربط DataForSEO من الأدمن — not measured']);
+        $markets=new SeoMarketService($db); $site=$markets->site($websiteId,$userId);
+        $host=DataForSeoRankingSource::normalizeHost((string)($site['main_url']??$site['domain']??''));
+        if (!$host) return array_replace($out,['reason'=>'invalid_main_url']);
+        $selected=$marketId?[$markets->resolve($websiteId,$userId,$marketId)]:$markets->markets($websiteId,$userId);
+        foreach ($selected as $market) {
+            $scoped=$source instanceof DataForSeoRankingSource?$source->forMarket($market,$websiteId):$source;
+            $filter=$onlyKeywords?' AND keyword IN ('.implode(',',array_fill(0,count($onlyKeywords),'?')).')':'';
+            $words=$db->query("SELECT id,keyword FROM tracked_keywords WHERE website_id=? AND user_id=? AND market_id=? AND keyword<>'' AND (last_checked_at IS NULL OR last_checked_at<=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 1 DAY))".$filter." ORDER BY last_checked_at,id LIMIT 500",array_merge([$websiteId,$userId,$market['id']],array_values($onlyKeywords)));
+            $result=self::batches($scoped,$host,array_column($words,'keyword'));
+            $by=[]; foreach ($words as $w) $by[mb_strtolower(trim($w['keyword']))]=$w;
+            $now=gmdate('Y-m-d H:i:s');
+            foreach ($result['rankings']??[] as $row) {
+                $word=$by[mb_strtolower(trim($row['keyword']??''))]??null; if (!$word) continue;
+                $position=$row['position']??null;
+                if ($position!==null && (!is_numeric($position) || (int)$position<1 || (int)$position>100)) continue;
+                $position=$position===null?null:(int)$position; $url=$row['url']??null;
+                $db->transaction(function () use ($db,$websiteId,$userId,$market,$word,$position,$url,$now,$source) {
+                    $db->exec('INSERT INTO seo_rank_tracking_history (website_id,user_id,market_id,keyword,position,url,source,checked_at) VALUES (?,?,?,?,?,?,?,?)',[$websiteId,$userId,$market['id'],$word['keyword'],$position,$url,'integration:'.$source->sourceName(),$now]);
+                    $db->exec('UPDATE tracked_keywords SET current_position=?,last_checked_at=? WHERE id=? AND website_id=? AND user_id=? AND market_id=?',[$position,$now,$word['id'],$websiteId,$userId,$market['id']]);
+                });
+                $out['recorded']++; $out['checked']++; $out['results'][]=$row+['market_id'=>$market['id']];
             }
-
-            $db->query($insertSql, [$websiteId, $userId, $kw['keyword'], $position, $url, $sourceTag, $checkedAt]);
-            $db->query($updateKeywordSql, [$position, $checkedAt, $kw['id'], $websiteId, $userId]);
-            $recorded++;
-            $results[] = [
-                'keyword' => $kw['keyword'],
-                'position' => $position,
-                'url' => $url,
-            ];
+            if (empty($result['available'])) return array_replace($out,['reason'=>$result['reason']??'source_unavailable','error'=>'تعذر استكمال القياس؛ النتائج الجزئية محفوظة']);
         }
-
-        $db->exec("UPDATE websites SET last_rank_tracked_at = NOW() WHERE id = ? AND user_id = ?", [$websiteId, $userId]);
-
-        return [
-            'available' => true,
-            'reason' => null,
-            'checked' => count($keywords),
-            'recorded' => $recorded,
-            'source' => $sourceTag,
-            'results' => $results,
-            'error' => null,
-        ];
+        $db->exec('UPDATE websites SET last_rank_tracked_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?',[$websiteId,$userId]);
+        return array_replace($out,['available'=>true]);
     }
-
-    /**
-     * نظرة عامة: أحدث ترتيب + أفضل ترتيب + اتجاه لكل كلمة متابعة.
-     *
-     * @param Database $db
-     * @param int      $websiteId
-     * @param int      $userId
-     * @return array{status:array, keywords:array}
-     */
-    public function trackingOverview(Database $db, int $websiteId, int $userId): array
+    public function trackingOverview(Database $db,int $websiteId,int $userId,int $marketId=0): array
     {
-        $source = $this->resolveSource();
-        $status = [
-            'available' => $source->isConfigured(),
-            'reason' => $source->isConfigured() ? null : 'no_keyword_ranking_source_configured',
-            'source' => $source->sourceName(),
-        ];
-
-        $keywords = $db->query(
-            "SELECT id, keyword, current_position, search_volume, difficulty, last_checked_at
-             FROM tracked_keywords WHERE website_id = ? AND user_id = ? ORDER BY id ASC",
-            [$websiteId, $userId]
-        );
-
-        $out = [];
-        foreach ($keywords as $kw) {
-            $history = $db->query(
-                "SELECT position, checked_at FROM seo_rank_tracking_history
-                 WHERE website_id = ? AND user_id = ? AND keyword = ?
-                 ORDER BY checked_at ASC",
-                [$websiteId, $userId, $kw['keyword']]
-            );
-            $positions = array_map(static fn ($h) => (int) $h['position'], array_filter($history, static fn ($h) => $h['position'] !== null));
-            $best = empty($positions) ? null : min($positions);
-            $latest = $kw['current_position'] !== null ? (int) $kw['current_position'] : null;
-            $trend = null;
-            if ($latest !== null && $best !== null && count($positions) >= 2) {
-                $trend = $positions[count($positions)-2] - $positions[count($positions)-1]; // موجب = تحسّن عن الأفضل
-            }
-
-            $out[] = [
-                'keyword' => $kw['keyword'],
-                'current_position' => $latest,
-                'best_position' => $best,
-                'distance_from_best' => $latest!==null&&$best!==null?$latest-$best:null,
-                'trend' => $trend,
-                'readings' => count($history),
-                'search_volume' => $kw['search_volume'] !== null ? (int) $kw['search_volume'] : null,
-                'difficulty' => $kw['difficulty'] !== null ? (int) $kw['difficulty'] : null,
-                'last_checked_at' => $kw['last_checked_at'],
-            ];
-        }
-
-        return ['status' => $status, 'keywords' => $out];
+        $markets=new SeoMarketService($db); $market=$markets->resolve($websiteId,$userId,$marketId);
+        $source=$this->source??new DataForSeoRankingSource(); $available=$source->isConfigured();
+        $rows=$db->query("SELECT k.id,k.keyword,k.market_id,k.current_position,k.last_checked_at,k.impressions,r.volume search_volume,r.difficulty,r.intent,r.cpc,r.fetched_at FROM tracked_keywords k LEFT JOIN seo_keyword_research r ON r.website_id=k.website_id AND r.market_id=k.market_id AND r.keyword COLLATE utf8mb4_unicode_ci=k.keyword COLLATE utf8mb4_unicode_ci AND r.source='dataforseo' AND r.fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY) WHERE k.website_id=? AND k.user_id=? AND k.market_id=? ORDER BY k.id",[$websiteId,$userId,$market['id']]);
+        foreach ($rows as &$row) {
+            $history=$db->query('SELECT position,checked_at FROM seo_rank_tracking_history WHERE website_id=? AND user_id=? AND market_id=? AND keyword=? AND checked_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY) ORDER BY checked_at,id',[$websiteId,$userId,$market['id'],$row['keyword']]);
+            $row['trend_30_days']=$history;
+            $first=$history[0]['position']??null; $last=$history?($history[count($history)-1]['position']??null):null;
+            $row['trend']=$first!==null && $last!==null && count($history)>1 ? (int)$first-(int)$last:null;
+            if (!$available) foreach (['current_position','search_volume','difficulty','intent','cpc'] as $key) $row[$key]=null;
+        } unset($row);
+        return ['status'=>['available'=>$available,'reason'=>$available?null:'not_measured','message'=>$available?'':'اربط DataForSEO من الأدمن — not measured','source'=>'dataforseo'],'market'=>$market,'keywords'=>$rows];
     }
-
-    /**
-     * السلسلة الزمنية لكلمة واحدة.
-     * @return array<string, mixed>
-     */
-    public function history(Database $db, int $websiteId, int $userId, string $keyword, int $limit = 60): array
+    public function history(Database $db,int $websiteId,int $userId,string $keyword,int $limit=60,int $marketId=0): array
     {
-        $rows = $db->query(
-            "SELECT position, url, source, checked_at FROM seo_rank_tracking_history
-             WHERE website_id = ? AND user_id = ? AND keyword = ?
-             ORDER BY checked_at DESC, id DESC LIMIT ?",
-            [$websiteId, $userId, $keyword, $limit]
-        );
-        return [
-            'keyword' => $keyword,
-            'points' => array_map(static fn ($r) => [
-                'position' => $r['position'] !== null ? (int) $r['position'] : null,
-                'url' => $r['url'],
-                'source' => $r['source'],
-                'checked_at' => $r['checked_at'],
-            ], array_reverse($rows)),
-        ];
+        $market=(new SeoMarketService($db))->resolve($websiteId,$userId,$marketId);
+        return ['keyword'=>$keyword,'market_id'=>$market['id'],'points'=>array_reverse($db->query('SELECT position,url,source,checked_at FROM seo_rank_tracking_history WHERE website_id=? AND user_id=? AND market_id=? AND keyword=? ORDER BY checked_at DESC,id DESC LIMIT ?',[$websiteId,$userId,$market['id'],$keyword,max(1,min(1000,$limit))]))];
     }
 }

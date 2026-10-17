@@ -1394,343 +1394,19 @@ JS;
     /** GET /ai/keywords */
     public function showKeywords(array $params = []): array
     {
-        $body = <<<'HTML'
-        <style>
-            .kw-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;}
-            @media (max-width:900px){.kw-stats{grid-template-columns:repeat(2,1fr);}}
-            .kw-stat{background:var(--panel-card-bg-2);border:1px solid var(--panel-border);border-radius:14px;padding:14px 16px;}
-            .kw-stat-label{font-size:11.5px;color:var(--panel-text-muted);font-weight:600;margin-bottom:4px;}
-            .kw-stat-value{font-size:20px;font-weight:800;}
-            .kw-stat-value.ok{color:var(--panel-success);}
-            .kw-stat-value.warn{color:var(--panel-warning);}
-            .kw-actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
-            .kw-actions-row .p-btn{flex:1;min-width:220px;}
-            .kw-comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;}
-            @media (max-width:900px){.kw-comp-grid{grid-template-columns:1fr;}}
-            .kw-pos{font-weight:800;}
-            .kw-pos.top{color:var(--panel-success);}
-            .kw-pos.mid{color:var(--panel-warning);}
-            .kw-pos.low{color:var(--panel-danger);}
-            .kw-chips{display:flex;flex-wrap:wrap;gap:7px;}
-            .kw-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:5px 6px 5px 11px;border-radius:20px;background:var(--panel-card-bg-2);border:1px solid var(--panel-border);}
-            .kw-chip button{background:var(--panel-accent);color:#1a1a1a;border:none;border-radius:14px;width:20px;height:20px;font-size:12px;font-weight:800;cursor:pointer;line-height:1;}
-            .kw-report-box{margin-top:14px;padding:14px;background:var(--panel-card-bg-2);border-radius:14px;display:none;}
-            .kw-score-circle{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;border:3px solid;flex-shrink:0;}
-            .kw-score-circle.good{border-color:var(--panel-success);color:var(--panel-success);background:var(--panel-success-light);}
-            .kw-score-circle.mid{border-color:var(--panel-warning);color:var(--panel-warning);background:var(--panel-warning-light);}
-            .kw-score-circle.low{border-color:var(--panel-danger);color:var(--panel-danger);background:var(--panel-danger-light);}
-            .kw-report-head{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
-            .kw-report-list{margin:0;padding-inline-start:18px;font-size:12.5px;line-height:1.8;color:var(--panel-text);}
-            .kw-badges{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
-        </style>
-
-        <div class="p-card">
-            <label class="form-label">🌐 الموقع</label>
-            <select id="kwWebsiteId" class="p-select" style="width:100%;max-width:420px;"></select>
-            <p class="p-cell-muted" style="margin-top:6px;">كل تحليل ومتابعة الكلمات هنا خاصة بالموقع اللي مختاره فوق.</p>
-        </div>
-
-        <div class="kw-stats">
-            <div class="kw-stat"><div class="kw-stat-label">🔑 كلمات متابَعة</div><div class="kw-stat-value" id="statTracked">-</div></div>
-            <div class="kw-stat"><div class="kw-stat-label">📊 متوسط الترتيب</div><div class="kw-stat-value" id="statAvgPos">-</div></div>
-            <div class="kw-stat"><div class="kw-stat-label">🔍 Search Console</div><div class="kw-stat-value" id="statGSC">-</div></div>
-            <div class="kw-stat"><div class="kw-stat-label">🤖 آخر نتيجة AI</div><div class="kw-stat-value" id="statScore">-</div></div>
-        </div>
-
-        <div class="p-card">
-            <div class="p-card-head"><h3>🏁 روابط المنافسين (اختياري)</h3><span class="p-card-sub">حط لحد 3 منافسين عشان الاقتراحات تبقى أدق</span></div>
-            <div class="kw-comp-grid">
-                <input type="url" id="c1" class="form-control" placeholder="https://competitor1.com">
-                <input type="url" id="c2" class="form-control" placeholder="https://competitor2.com">
-                <input type="url" id="c3" class="form-control" placeholder="https://competitor3.com">
-            </div>
-            <button class="p-btn outline xs" onclick="saveCompetitors()">💾 حفظ روابط المنافسين</button>
-        </div>
-
-        <div class="p-card">
-            <div class="kw-badges"><span class="kw-badge">SEO</span><span class="kw-badge">AEO</span><span class="kw-badge">GEO</span></div>
-            <div class="kw-actions-row">
-                <button class="p-btn primary" id="discoverBtn" onclick="runDiscover()">🔍 تحليل واكتشاف كلمات جديدة بالذكاء الاصطناعي</button>
-                <button class="p-btn outline" id="syncBtn" onclick="runSync()">🔄 مزامنة الترتيب الفعلي من Google Search Console</button>
-            </div>
-            <p class="p-cell-muted" style="font-size:12px;">التحليل بالذكاء الاصطناعي بيستهلك رصيد تحليلات حسابك (نفس رصيد صفحة "تحليل AI"). المزامنة من Search Console مجانية وبتجيب أرقام حقيقية 100% من جوجل - محتاجة تربط الموقع الأول من "الربط والتكاملات".</p>
-            <div id="reportBox" class="kw-report-box"></div>
-        </div>
-
-        <div class="p-card" id="discoveriesCard" style="display:none;">
-            <div class="p-card-head"><h3>✨ اكتشافات جديدة</h3><span class="p-card-sub">كلمات مش متابَعة لسه - دوس + عشان تتابعها</span></div>
-            <div class="kw-chips" id="discoveriesChips"></div>
-        </div>
-
-        <div class="p-card no-pad">
-            <div class="p-card-head" style="padding:18px 20px 0;">
-                <h3>📋 الكلمات المتابَعة</h3>
-                <button class="p-btn outline xs" onclick="document.getElementById('newKwModal').classList.add('open')">+ إضافة يدوي</button>
-            </div>
-            <div class="p-table-scroll"><table class="p-table" id="kwTable">
-                <thead><tr><th>الكلمة</th><th>الترتيب الحالي</th><th>حجم الظهور</th><th>آخر تحديث</th><th></th></tr></thead>
-                <tbody><tr class="p-loading-row"><td colspan="5">جاري التحميل...</td></tr></tbody>
-            </table></div>
-        </div>
-
-        <div class="p-modal-overlay" id="newKwModal">
-            <div class="p-modal">
-                <div class="p-modal-head"><h3>➕ كلمة جديدة</h3><button class="p-modal-close" onclick="document.getElementById('newKwModal').classList.remove('open')">×</button></div>
-                <div class="p-modal-body">
-                    <label class="form-label">الكلمة المفتاحية</label>
-                    <input type="text" id="kwKeyword" class="form-control" placeholder="مثال: رحلات سفاري شرم الشيخ">
-                </div>
-                <div class="p-modal-foot"><button class="p-btn primary" onclick="addKeyword()">إضافة</button></div>
-            </div>
-        </div>
-HTML;
-
-        $script = <<<'JS'
-(function () {
-    const P = window.Panel;
-    const esc = P.esc, fetchJSON = P.fetchJSON, toast = P.toast, formatDate = P.formatDate;
-    let websiteId = null;
-    let currentWebsite = null;
-
-    function posClass(pos) {
-        if (!pos) return '';
-        if (pos <= 10) return 'top';
-        if (pos <= 30) return 'mid';
-        return 'low';
-    }
-
-    async function loadWebsites() {
-        const res = await fetchJSON('/api/websites');
-        const sel = document.getElementById('kwWebsiteId');
-        if (res.success && res.data.websites && res.data.websites.length) {
-            sel.innerHTML = res.data.websites.map(w => `<option value="${w.id}">${esc(w.company_name || w.main_url)}</option>`).join('');
-            P.syncWebsiteSelect('kwWebsiteId');
-            websiteId = sel.value;
-        } else {
-            sel.innerHTML = '<option value="">لا يوجد مواقع - ضيف موقع الأول من صفحة المواقع</option>';
-        }
-    }
-    document.getElementById('kwWebsiteId').addEventListener('change', (e) => {
-        websiteId = e.target.value;
-        loadAll();
-    });
-
-    async function loadWebsiteDetails() {
-        if (!websiteId) return;
-        const res = await fetchJSON('/api/websites/' + websiteId);
-        if (res.success && res.data.website) {
-            currentWebsite = res.data.website;
-            document.getElementById('c1').value = currentWebsite.competitor_1_url || '';
-            document.getElementById('c2').value = currentWebsite.competitor_2_url || '';
-            document.getElementById('c3').value = currentWebsite.competitor_3_url || '';
-        }
-    }
-
-    window.saveCompetitors = async function () {
-        if (!websiteId) return;
-        const payload = {
-            competitor_1_url: document.getElementById('c1').value.trim(),
-            competitor_2_url: document.getElementById('c2').value.trim(),
-            competitor_3_url: document.getElementById('c3').value.trim(),
-        };
-        const res = await fetchJSON('/api/websites/' + websiteId + '/competitors', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-        });
-        if (res.success) toast('تم حفظ روابط المنافسين', 'success');
-        else toast(res.error || 'تعذر الحفظ', 'error');
-    };
-
-    async function loadKeywords() {
-        const tbody = document.querySelector('#kwTable tbody');
-        if (!websiteId) { tbody.innerHTML = ''; return; }
-        const res = await fetchJSON('/api/ai/keywords?website_id=' + websiteId);
-        const items = (res.success && res.data.keywords) ? res.data.keywords : [];
-
-        if (items.length) {
-            tbody.innerHTML = items.map(k => `
-                <tr>
-                    <td>${esc(k.keyword)}</td>
-                    <td><span class="kw-pos ${posClass(k.current_position)}">${k.current_position ? '#' + esc(k.current_position) : '—'}</span></td>
-                    <td>${esc(k.search_volume || '—')}</td>
-                    <td class="p-cell-muted">${k.last_checked_at ? formatDate(k.last_checked_at) : 'لسه ما اتفحصتش'}</td>
-                    <td><button class="p-btn outline xs" onclick="deleteKeyword(${k.id})">🗑</button></td>
-                </tr>
-            `).join('');
-        } else {
-            tbody.innerHTML = '<tr><td colspan="5" class="p-empty">لا يوجد كلمات متابَعة بعد - حلل بالذكاء الاصطناعي أو ضيف يدويًا</td></tr>';
-        }
-
-        const tracked = items.filter(k => k.current_position);
-        document.getElementById('statTracked').textContent = items.length;
-        document.getElementById('statAvgPos').textContent = tracked.length
-            ? '#' + Math.round(tracked.reduce((s, k) => s + Number(k.current_position), 0) / tracked.length)
-            : '—';
-    }
-
-    async function loadGscStatus() {
-        const el = document.getElementById('statGSC');
-        if (!websiteId) { el.textContent = '—'; return; }
-        const res = await fetchJSON('/api/search-console/stats/' + websiteId);
-        if (res.success) { el.textContent = '✔ متصل'; el.className = 'kw-stat-value ok'; }
-        else { el.innerHTML = '<a href="/integrations" style="font-size:14px;">غير متصل - اربطه</a>'; el.className = 'kw-stat-value warn'; }
-    }
-
-    window.addKeyword = async function () {
-        const keyword = document.getElementById('kwKeyword').value.trim();
-        if (!websiteId || !keyword) return;
-        const res = await fetchJSON('/api/ai/keywords/add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ website_id: websiteId, keyword }) });
-        document.getElementById('newKwModal').classList.remove('open');
-        document.getElementById('kwKeyword').value = '';
-        if (res.success) { toast('تمت الإضافة', 'success'); loadKeywords(); }
-        else toast(res.error || 'تعذر الإضافة', 'error');
-    };
-
-    window.deleteKeyword = async function (id) {
-        if (!confirm('متأكد من حذف الكلمة؟')) return;
-        const res = await fetchJSON('/api/ai/keywords/' + id, { method: 'DELETE' });
-        if (res.success) { toast('تم الحذف', 'success'); loadKeywords(); }
-        else toast(res.error || 'تعذر الحذف', 'error');
-    };
-
-    function scoreClass(score) {
-        if (score >= 75) return 'good';
-        if (score >= 50) return 'mid';
-        return 'low';
-    }
-
-    function listBlock(title, icon, items, max) {
-        if (!items || !items.length) return '';
-        const shown = items.slice(0, max);
-        return `<h4 style="font-size:12.5px;margin:10px 0 4px;">${icon} ${esc(title)}</h4><ul class="kw-report-list">${shown.map(i => `<li>${esc(typeof i === 'string' ? i : JSON.stringify(i))}</li>`).join('')}</ul>`;
-    }
-
-    function renderDiscoveries(newDiscoveries) {
-        const card = document.getElementById('discoveriesCard');
-        const box = document.getElementById('discoveriesChips');
-        if (!newDiscoveries || !newDiscoveries.length) { card.style.display = 'none'; return; }
-        box.innerHTML = newDiscoveries.map(k => `<span class="kw-chip">${esc(k)}<button onclick="addDiscovery(this, '${esc(k).replace(/'/g, "\\'")}')">+</button></span>`).join('');
-        card.style.display = 'block';
-    }
-
-    window.addDiscovery = async function (btnEl, keyword) {
-        const res = await fetchJSON('/api/ai/keywords/bulk-add', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ website_id: websiteId, keywords: [keyword] }) });
-        if (res.success) {
-            toast('اتضافت للمتابعة', 'success');
-            btnEl.closest('.kw-chip').remove();
-            loadKeywords();
-        } else toast(res.error || 'تعذر الإضافة', 'error');
-    };
-
-    window.runDiscover = async function () {
-        if (!websiteId) return;
-        const btn = document.getElementById('discoverBtn');
-        btn.disabled = true;
-        btn.textContent = '⏳ جاري التحليل... ممكن ياخد لحظات';
-        const res = await fetchJSON('/api/ai/keywords/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ website_id: websiteId }) });
-        btn.disabled = false;
-        btn.textContent = '🔍 تحليل واكتشاف كلمات جديدة بالذكاء الاصطناعي';
-
-        if (!res.success) { toast(res.error || 'تعذر التحليل', 'error'); return; }
-
-        const d = res.data;
-        const box = document.getElementById('reportBox');
-        const score = d.score != null ? Math.round(d.score) : null;
-        box.innerHTML = `
-            <div class="kw-report-head">
-                ${score != null ? `<div class="kw-score-circle ${scoreClass(score)}">${score}</div>` : ''}
-                <div>
-                    <div style="font-weight:700;">${d.from_cache ? '📦 نتيجة من تحليل سابق مخزّن' : '✨ تحليل جديد الآن'}</div>
-                    ${d.report_id ? `<a href="/ai/report/${d.report_id}" style="font-size:12.5px;">عرض التقرير الكامل ←</a>` : ''}
-                </div>
-            </div>
-            ${listBlock('اقتراحات العناوين', '📝', d.seo && d.seo.title_suggestions, 3)}
-            ${listBlock('فجوات المحتوى', '🕳️', d.seo && d.seo.content_gaps, 3)}
-            ${listBlock('إشارات الثقة (AEO)', '🛡️', d.aeo && d.aeo.trust_signals, 3)}
-            ${d.geo && d.geo.improvement_suggestions ? listBlock('تحسينات GEO', '🗺️', [d.geo.improvement_suggestions], 1) : ''}
-        `;
-        box.style.display = 'block';
-
-        document.getElementById('statScore').textContent = score != null ? score + '/100' : '—';
-
-        renderDiscoveries(d.new_discoveries);
-        loadKeywords();
-    };
-
-    window.runSync = async function () {
-        if (!websiteId) return;
-        const btn = document.getElementById('syncBtn');
-        btn.disabled = true;
-        btn.textContent = '⏳ جاري المزامنة...';
-        const res = await fetchJSON('/api/ai/keywords/sync-gsc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ website_id: websiteId }) });
-        btn.disabled = false;
-        btn.textContent = '🔄 مزامنة الترتيب الفعلي من Google Search Console';
-
-        if (!res.success) { toast(res.error || 'تعذر المزامنة', 'error'); return; }
-
-        toast(res.message || 'تمت المزامنة', 'success');
-        if (res.data.opportunities && res.data.opportunities.length) {
-            renderDiscoveries(res.data.opportunities.map(o => o.keyword));
-        }
-        loadKeywords();
-        loadGscStatus();
-    };
-
-    async function loadAll() {
-        await loadWebsiteDetails();
-        loadKeywords();
-        loadGscStatus();
-        document.getElementById('reportBox').style.display = 'none';
-        document.getElementById('discoveriesCard').style.display = 'none';
-    }
-
-    loadWebsites().then(loadAll);
-})();
-JS;
-
-        header('Content-Type: text/html; charset=utf-8');
-        echo $this->renderPanelPage('ai_analyze', 'الكلمات المفتاحية', 'تحليل وتتبع كلماتك المفتاحية بالذكاء الاصطناعي (SEO/AEO/GEO) وترتيب حقيقي من Google', $body, $script);
-        exit;
+        return (new SeoDataController())->index($params);
     }
 
     /** GET /api/ai/keywords?website_id= */
     public function listKeywords(array $params = []): array
     {
-        if (!$this->isAuthenticated()) {
-            return $this->error('Unauthorized', 401);
-        }
-
-        $conditions = ['user_id' => $this->user['id']];
-        $websiteId = (int) $this->get('website_id', 0);
-        if ($websiteId) {
-            $conditions['website_id'] = $websiteId;
-        }
-
-        $items = (new TrackedKeyword())->where($conditions, ['current_position' => 'ASC']);
-        return $this->success(['keywords' => array_map(fn ($k) => $k->toArray(), $items)]);
+        return (new SeoDataController())->keywords($params);
     }
 
     /** POST /api/ai/keywords */
     public function createKeyword(array $params = []): array
     {
-        if (!$this->isAuthenticated()) {
-            return $this->error('Unauthorized', 401);
-        }
-        if (!$this->validate(['website_id' => 'required', 'keyword' => 'required'])) {
-            return $this->error('بيانات ناقصة', 422);
-        }
-
-        try {
-            $keyword = new TrackedKeyword([
-                'user_id' => $this->user['id'],
-                'website_id' => (int) $this->get('website_id'),
-                'keyword' => trim((string) $this->get('keyword')),
-            ]);
-            $keyword->save();
-            return $this->success(['keyword' => $keyword->toArray()], 'تم الإضافة', 201);
-        } catch (Exception $e) {
-            Logger::error('createKeyword Error', ['message' => $e->getMessage()]);
-            return $this->error('تعذر الإضافة (ربما هذه الكلمة مضافة بالفعل لهذا الموقع)', 500);
-        }
+        return (new SeoDataController())->addKeyword($params);
     }
 
     /** DELETE /api/ai/keywords/{id} */
@@ -1756,50 +1432,7 @@ JS;
     /** POST /api/ai/keywords/bulk-add  { website_id, keywords: ["k1","k2",...] } */
     public function bulkAddKeywords(array $params = []): array
     {
-        if (!$this->isAuthenticated()) {
-            return $this->error('Unauthorized', 401);
-        }
-
-        $websiteId = (int) $this->get('website_id');
-        $keywords = $this->get('keywords', []);
-        if (!$websiteId || !is_array($keywords) || empty($keywords)) {
-            return $this->error('بيانات ناقصة', 422);
-        }
-
-        $website = (new Website())->find($websiteId);
-        if (!$website || (int) $website->getAttribute('user_id') !== (int) $this->user['id']) {
-            return $this->error('الموقع غير موجود', 404);
-        }
-
-        $existing = (new TrackedKeyword())->where(['user_id' => $this->user['id'], 'website_id' => $websiteId]);
-        $existingNorm = array_map(fn ($k) => $this->normalizeKeywordText((string) $k->getAttribute('keyword')), $existing);
-
-        $added = 0;
-        $skipped = 0;
-        foreach ($keywords as $raw) {
-            $text = trim((string) $raw);
-            if ($text === '') {
-                continue;
-            }
-            if (in_array($this->normalizeKeywordText($text), $existingNorm, true)) {
-                $skipped++;
-                continue;
-            }
-            try {
-                $keyword = new TrackedKeyword([
-                    'user_id' => $this->user['id'],
-                    'website_id' => $websiteId,
-                    'keyword' => $text,
-                ]);
-                $keyword->save();
-                $existingNorm[] = $this->normalizeKeywordText($text);
-                $added++;
-            } catch (Exception $e) {
-                $skipped++;
-            }
-        }
-
-        return $this->success(['added' => $added, 'skipped' => $skipped], "تم إضافة {$added} كلمة" . ($skipped ? " (اتجاهل {$skipped} مكررة)" : ''));
+        return (new SeoDataController())->bulkAddKeywords($params);
     }
 
     private function normalizeKeywordText(string $text): string
@@ -1807,174 +1440,10 @@ JS;
         return mb_strtolower(trim($text));
     }
 
-    /**
-     * POST /api/ai/keywords/enrich  { website_id, keyword_ids?: [int] }
-     * Phase 6 - Keyword Intelligence: بيحسب لكل كلمة متابَعة نية البحث
-     * (intent)، النية التجارية، درجة الصعوبة، درجة الفرصة، والصفحة
-     * المستهدفة المقترحة - عن طريق GeminiClient مباشرة (task
-     * 'keyword_classification' - Gemini أولًا حسب استراتيجية توزيع الـAI
-     * من Phase 3، لأنها بالظبط نوع المهمة دي: تصنيف بيانات بكمية كبيرة).
-     * من غير keyword_ids: بياخد أول 20 كلمة لسه ماتعملهاش Enrichment لنفس
-     * الموقع (batch محدود عشان الـprompt يفضل معقول وسريع).
-     */
+    /** Compatibility endpoint: research is measured by DataForSEO, never inferred by AI. */
     public function enrichKeywords(array $params = []): array
     {
-        $billingUncertain = false;
-        $billingScope = isset($this->subscription) ? $this->subscription->beginUsageScope() : [];
-        try {
-        if (!$this->isAuthenticated()) {
-            return $this->error('Unauthorized', 401);
-        }
-
-        if ($rateError = $this->rateLimitGuard('user', 'ai', 20, 60)) {
-            return $rateError;
-        }
-
-        $websiteId = (int) $this->get('website_id');
-        if (!$websiteId) {
-            return $this->error('اختر الموقع الأول', 422);
-        }
-
-        $website = (new Website())->find($websiteId);
-        if (!$website || (int) $website->getAttribute('user_id') !== (int) $this->user['id']) {
-            return $this->error('الموقع غير موجود', 404);
-        }
-
-        $creditsCheck = $this->subscription->reserveAICredits((int) $this->user['id'], 1);
-        if (!$creditsCheck['available']) {
-            return $this->error($creditsCheck['message'] ?? 'رصيد الذكاء الاصطناعي غير كافٍ', 403);
-        }
-
-        $keywordIds = $this->get('keyword_ids', []);
-        if (is_array($keywordIds) && !empty($keywordIds)) {
-            $keywordIds = array_map('intval', $keywordIds);
-            $placeholders = implode(',', array_fill(0, count($keywordIds), '?'));
-            $rows = $this->db->query(
-                "SELECT id, keyword FROM tracked_keywords WHERE website_id = ? AND user_id = ? AND id IN ($placeholders) LIMIT 20",
-                array_merge([$websiteId, $this->user['id']], $keywordIds)
-            );
-        } else {
-            $rows = $this->db->query(
-                "SELECT id, keyword FROM tracked_keywords WHERE website_id = ? AND user_id = ? AND enriched_at IS NULL ORDER BY id ASC LIMIT 20",
-                [$websiteId, $this->user['id']]
-            );
-        }
-
-        if (empty($rows)) {
-            return $this->error('مفيش كلمات محتاجة تحليل حاليًا', 422);
-        }
-
-        $businessType = (string) ($website->getAttribute('industry') ?: 'tourism business');
-        $country = (string) ($website->getAttribute('target_country') ?: '');
-        $keywordList = array_map(fn ($r) => $r['keyword'], $rows);
-
-        $prompt = $this->buildKeywordIntelligencePrompt($keywordList, $businessType, $country);
-
-        // تصحيح (2026-08-25): الكود القديم كان بيكلم كلاس AIOrchestrator
-        // المش موجود في المشروع أصلًا - فالـ enrichKeywords كان بيرجع 500
-        // دايمًا. استبدلناه بـ GeminiClient الفعلي (المستخدم في كل حتة تانية
-        // في AIController و TourfectoAIEngine) بنفس طريقة الاستدعاء.
-        if (!class_exists('GeminiClient')) {
-            return $this->error('خدمة الذكاء الاصطناعي غير متاحة حاليًا', 500);
-        }
-        $orchestrator = new GeminiClient();
-        $aiResponse = $orchestrator->generateContent($prompt, ['task'=>'seo_keywords', 
-            'temperature' => 0.3,
-            'maxOutputTokens' => 4096,
-        ]);
-
-        if (!$aiResponse['success']) {
-            return $this->error($aiResponse['error'] ?? 'تعذر تحليل الكلمات المفتاحية', 502);
-        }
-
-        $parsed = $this->parseKeywordIntelligenceResponse((string) $aiResponse['data']);
-        if (empty($parsed)) {
-            return $this->error('رد الذكاء الاصطناعي مش بالشكل المتوقع - جرب تاني', 502);
-        }
-
-        // مطابقة نتيجة الـAI بالـid الصحيح حسب نص الكلمة (case-insensitive) -
-        // مش بنعتمد على ترتيب الرد لأن الـAI ممكن يرجّعه بترتيب مختلف.
-        $byNormalizedText = [];
-        foreach ($rows as $r) {
-            $byNormalizedText[$this->normalizeKeywordText($r['keyword'])] = $r['id'];
-        }
-
-        $updated = 0;
-        foreach ($parsed as $item) {
-            $norm = $this->normalizeKeywordText((string) ($item['keyword'] ?? ''));
-            $id = $byNormalizedText[$norm] ?? null;
-            if (!$id) {
-                continue;
-            }
-
-            $this->db->exec(
-                "UPDATE tracked_keywords SET search_intent = ?, commercial_intent = ?, difficulty = ?, opportunity_score = ?, target_page = ?, priority = ?, enriched_at = NOW() WHERE id = ?",
-                [
-                    $this->sanitizeEnum($item['intent'] ?? null, ['informational', 'navigational', 'commercial', 'transactional']),
-                    $this->sanitizeEnum($item['commercial_intent'] ?? null, ['low', 'medium', 'high']),
-                    is_numeric($item['difficulty'] ?? null) ? max(0, min(100, (int) $item['difficulty'])) : null,
-                    is_numeric($item['opportunity_score'] ?? null) ? max(0, min(100, (int) $item['opportunity_score'])) : null,
-                    isset($item['target_page']) ? mb_substr(trim((string) $item['target_page']), 0, 255) : null,
-                    $this->sanitizeEnum($item['priority'] ?? null, ['high', 'medium', 'low']),
-                    $id,
-                ]
-            );
-            $updated++;
-        }
-
-        if (!$this->subscription->consumeAICredits((int) $this->user['id'], 1, $creditsCheck['source'] === 'wallet')) throw new RuntimeException('تعذر تأكيد محاسبة الاستخدام');
-        $this->log('AI Keyword Intelligence Enrichment', ['website_id' => $websiteId, 'keywords_updated' => $updated]);
-
-        return $this->success(['updated' => $updated, 'requested' => count($rows)], "اتحلل {$updated} كلمة");
-    
-        } catch (Throwable $billingFailure) {
-            $billingUncertain = true; throw $billingFailure;
-        } finally {
-            if (isset($this->subscription)) $this->subscription->releasePendingReservations($billingUncertain,$billingScope);
-        }
-    }
-
-    private function sanitizeEnum($value, array $allowed): ?string
-    {
-        $value = is_string($value) ? mb_strtolower(trim($value)) : null;
-        return in_array($value, $allowed, true) ? $value : null;
-    }
-
-    private function buildKeywordIntelligencePrompt(array $keywords, string $businessType, string $country): string
-    {
-        $list = implode("\n", array_map(fn ($k) => "- {$k}", $keywords));
-        $countryLine = $country !== '' ? "السوق المستهدف: {$country}.\n" : '';
-        return <<<PROMPT
-أنت خبير SEO متخصص في قطاع السياحة. النشاط: {$businessType}.
-{$countryLine}حلل قائمة الكلمات المفتاحية دي وارجعلي JSON array بس (من غير أي نص قبله أو بعده)، كل عنصر فيه بالظبط المفاتيح دي:
-keyword (نفس النص الأصلي بالظبط)، intent (واحدة من: informational, navigational, commercial, transactional)،
-commercial_intent (واحدة من: low, medium, high)، difficulty (رقم صحيح 0-100 تقدير صعوبة الترتيب)،
-opportunity_score (رقم صحيح 0-100 - فرصة حقيقية تاخد ترتيب كويس بمجهود معقول)،
-target_page (اقتراح مسار صفحة تستهدف الكلمة دي، أو "صفحة جديدة: [اسم مقترح]" لو مفيش صفحة مناسبة)،
-priority (واحدة من: high, medium, low - أولوية العمل عليها).
-
-الكلمات:
-{$list}
-PROMPT;
-    }
-
-    /**
-     * الـAI ممكن يرجّع الـJSON ملفوف في ```json fences رغم التعليمات - بنشيلها
-     * دفاعيًا قبل الـdecode، ونتحقق إن الناتج array فعلًا.
-     */
-    private function parseKeywordIntelligenceResponse(string $raw): array
-    {
-        $clean = trim($raw);
-        $clean = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', $clean);
-        $decoded = json_decode($clean, true);
-        if (!is_array($decoded)) {
-            return [];
-        }
-        // لو الـAI لف الـarray جوه object زي {"keywords": [...]}
-        if (isset($decoded['keywords']) && is_array($decoded['keywords'])) {
-            $decoded = $decoded['keywords'];
-        }
-        return array_values(array_filter($decoded, 'is_array'));
+        return (new SeoDataController())->enrich($params);
     }
 
     /**
@@ -2091,98 +1560,10 @@ PROMPT;
         return $this->success(['slug' => $tour['slug']], 'تمت إضافة صفحة الرحلة للموقع');
     }
 
-    /**
-     * POST /api/ai/keywords/discover  { website_id }
-     * تحليل حقيقي بالذكاء الاصطناعي (نفس محرك SEO/AEO/GEO المستخدم في
-     * /ai/analyze بالظبط - TourfectoAIEngine::analyzeWebsite) باستخدام
-     * رابط الموقع وروابط الـ 3 منافسين المحفوظين على سجل الموقع نفسه
-     * (competitor_1_url/2/3). بيستهلك نفس رصيد تحليلات الذكاء الاصطناعي
-     * المستخدم في صفحة "تحليل AI" - مفيش تحليل مجاني منفصل.
-     */
+    /** Discover real demand for the selected market; AI credits are not used. */
     public function discoverKeywords(array $params = []): array
     {
-        if (!$this->isAuthenticated()) {
-            return $this->error('يجب تسجيل الدخول أولاً', 401);
-        }
-
-        if ($rateError = $this->rateLimitGuard('user', 'ai', 20, 60)) {
-            return $rateError;
-        }
-
-        $websiteId = (int) $this->get('website_id');
-        if (!$websiteId) {
-            return $this->error('اختر الموقع الأول', 422);
-        }
-
-        $website = (new Website())->find($websiteId);
-        if (!$website || (int) $website->getAttribute('user_id') !== (int) $this->user['id']) {
-            return $this->error('الموقع غير موجود', 404);
-        }
-
-        $targetUrl = $this->normalizeUrlForAnalysis((string) $website->getAttribute('main_url'));
-        $competitorUrls = array_filter(array_map(
-            fn ($f) => $this->normalizeUrlForAnalysis((string) $website->getAttribute($f)),
-            ['competitor_1_url', 'competitor_2_url', 'competitor_3_url']
-        ));
-
-        if (!$targetUrl) {
-            return $this->error('رابط الموقع نفسه غير صحيح، راجعه من صفحة إدارة المواقع', 422);
-        }
-        // المنافسين اختياريين (زي التحليل التفصيلي): كانت بتطلب 3 بالظبط فالعميل اللي عنده
-        // منافس أو اتنين كان بيتوقف. أي عدد بيشتغل، وكل ما زادوا الاقتراحات أدق.
-
-        $targetLanguage = ContentLanguageService::forWebsite((int)$website->getAttribute('id'), (int)$this->user['id']);
-
-        $result = $this->aiEngine->analyzeWebsite(
-            (int) $this->user['id'],
-            $websiteId,
-            $targetUrl,
-            array_values($competitorUrls),
-            $targetLanguage
-        );
-
-        if (!$result['success']) {
-            return $this->error($result['error'] ?? 'تعذر التحليل', $result['code'] ?? 500);
-        }
-
-        $seo = $result['data']['seo'] ?? [];
-        $rawKeywords = is_array($seo['keywords'] ?? null) ? $seo['keywords'] : [];
-
-        // عناصر seo.keywords ممكن تيجي نص خام أو object فيه keyword/term -
-        // بنطلعها كلها كنصوص نظيفة أيًا كان الشكل اللي رجّعه الذكاء الاصطناعي.
-        $discoveredKeywords = [];
-        foreach ($rawKeywords as $item) {
-            if (is_string($item)) {
-                $text = trim($item);
-            } elseif (is_array($item)) {
-                $text = trim((string) ($item['keyword'] ?? $item['term'] ?? $item['text'] ?? reset($item) ?: ''));
-            } else {
-                $text = '';
-            }
-            if ($text !== '') {
-                $discoveredKeywords[] = $text;
-            }
-        }
-        $discoveredKeywords = array_values(array_unique($discoveredKeywords));
-
-        // نستثني الكلمات المتابَعة أصلاً عشان قسم "اكتشافات جديدة" في
-        // الواجهة يعرض بس الجديد الفعلي، مش تكرار لحاجة العميل شايفها بالفعل.
-        $existing = (new TrackedKeyword())->where(['user_id' => $this->user['id'], 'website_id' => $websiteId]);
-        $existingNorm = array_map(fn ($k) => $this->normalizeKeywordText((string) $k->getAttribute('keyword')), $existing);
-        $newDiscoveries = array_values(array_filter($discoveredKeywords, fn ($k) => !in_array($this->normalizeKeywordText($k), $existingNorm, true)));
-
-        $this->log('AI Keyword Discovery', ['website_id' => $websiteId, 'discovered' => count($discoveredKeywords)]);
-
-        return $this->success([
-            'report_id' => $result['report_id'] ?? null,
-            'from_cache' => $result['from_cache'] ?? false,
-            'score' => $result['data']['score'] ?? null,
-            'seo' => $seo,
-            'aeo' => $result['data']['aeo'] ?? [],
-            'geo' => $result['data']['geo'] ?? [],
-            'discovered_keywords' => $discoveredKeywords,
-            'new_discoveries' => $newDiscoveries,
-        ], 'تم التحليل بنجاح');
+        return (new SeoDataController())->discover($params);
     }
 
     private function normalizeUrlForAnalysis(string $url): ?string
@@ -2220,6 +1601,8 @@ PROMPT;
         if (!$website || (int) $website->getAttribute('user_id') !== (int) $this->user['id']) {
             return $this->error('الموقع غير موجود', 404);
         }
+
+        SeoDataSchema::ensureSchema($this->db);
 
         $connections = (new PlatformConnection())->where([
             'website_id' => $websiteId,
@@ -2266,7 +1649,7 @@ PROMPT;
             $tracked = (new TrackedKeyword())->where(['user_id' => $this->user['id'], 'website_id' => $websiteId]);
             $trackedByNorm = [];
             foreach ($tracked as $k) {
-                $trackedByNorm[$this->normalizeKeywordText((string) $k->getAttribute('keyword'))] = $k;
+                $trackedByNorm[$this->normalizeKeywordText((string) $k->getAttribute('keyword'))][] = $k;
             }
 
             $updated = 0;
@@ -2279,12 +1662,13 @@ PROMPT;
                 $norm = $this->normalizeKeywordText($query);
 
                 if (isset($trackedByNorm[$norm])) {
-                    $k = $trackedByNorm[$norm];
-                    $k->setAttribute('current_position', (int) round($row['position']));
-                    $k->setAttribute('search_volume', $row['impressions']);
-                    $k->setAttribute('last_checked_at', date('Y-m-d H:i:s'));
-                    $k->save();
-                    $updated++;
+                    foreach ($trackedByNorm[$norm] as $k) {
+                        $k->setAttribute('gsc_position', (float) $row['position']);
+                        $k->setAttribute('impressions', (int) $row['impressions']);
+                        $k->setAttribute('gsc_checked_at', gmdate('Y-m-d H:i:s'));
+                        $k->save();
+                        $updated++;
+                    }
                 } else {
                     $opportunities[] = [
                         'keyword' => $query,
@@ -2308,7 +1692,7 @@ PROMPT;
                 'updated_count' => $updated,
                 'opportunities' => $opportunities,
                 'site_url' => $siteUrl,
-            ], "اتحدّث ترتيب {$updated} كلمة من بيانات Google الفعلية");
+            ], "اتحدّث ظهور ومتوسط ترتيب GSC لـ {$updated} كلمة؛ ده مش حجم البحث الشهري");
         } catch (Exception $e) {
             Logger::error('Sync Search Console Keywords Error', ['website_id' => $websiteId, 'message' => $e->getMessage()]);
             return $this->error('تعذر المزامنة', 500);
@@ -2340,7 +1724,7 @@ PROMPT;
      */
     public function analyzeKeywords(array $params = []): array
     {
-        return $this->error('تحليل الكلمات المفتاحية غير مفعّل بعد في هذه النسخة', 501);
+        return (new SeoDataController())->discover($params);
     }
 
     public function analyzeCompetitors(array $params = []): array

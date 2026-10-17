@@ -224,6 +224,7 @@ class AdminAccess
                 '#^/admin/logs$#' => 'system.view',
                 '#^/admin/errors$#' => 'system.view',
                 '#^/admin/jobs$#' => 'system.view',
+                '#^/admin/seo-markets$#' => 'settings.manage',
                 '#^/admin/settings$#' => 'settings.manage',
                 '#^/admin/integrations$#' => 'settings.manage',
                 '#^/admin/export/users$#' => 'users.export',
@@ -257,6 +258,7 @@ class AdminAccess
             return null;
         }
         $rel = substr($path, strlen('/api/admin'));
+        if (preg_match('#^/seo-data/(sites|markets)$#D', $rel)) return 'settings.manage';
 
         // ---- لوحة الأدمن الاحترافية (AdminInsightsController)
         if (strpos($rel, '/insights/') === 0) {

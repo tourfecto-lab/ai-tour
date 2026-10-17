@@ -1,6 +1,14 @@
 <?php
 // Generated release map. Rebuild via tools/build_project_classmap.php after code changes.
 return [
+    'DataForSeoClient' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoClient.php',
+    'DataForSeoResearchService' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoResearchService.php',
+    'SeoDataLedger' => dirname(__DIR__,2).'/app/Services/Seo/SeoDataLedger.php',
+    'SeoDataSchema' => dirname(__DIR__,2).'/app/Services/Seo/SeoDataSchema.php',
+    'SeoMarketService' => dirname(__DIR__,2).'/app/Services/Seo/SeoMarketService.php',
+    'SeoKeywordGapService' => dirname(__DIR__,2).'/app/Services/Seo/SeoKeywordGapService.php',
+    'SeoDataController' => dirname(__DIR__,2).'/app/Controllers/SeoDataController.php',
+
     'AIArticle' => dirname(__DIR__,2).'/app/Models/AIArticle.php',
     'AIAssistantInteraction' => dirname(__DIR__,2).'/app/Models/AIAssistantInteraction.php',
     'AICompetitiveAnalyst' => dirname(__DIR__,2).'/app/Services/CompetitorIntelligence/AICompetitiveAnalyst.php',

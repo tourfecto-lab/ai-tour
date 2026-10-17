@@ -100,7 +100,7 @@ $router->group('/ai', function ($router) {
     $router->get('/reports', 'AIController', 'showReports', ['AuthMiddleware']);
     $router->get('/report/{id}', 'AIController', 'showReport', ['AuthMiddleware']);
     $router->get('/competitors', 'AIController', 'showCompetitors', ['AuthMiddleware']);
-    $router->get('/keywords', 'AIController', 'showKeywords', ['AuthMiddleware']);
+    $router->get('/keywords', 'SeoDataController', 'index', ['AuthMiddleware']);
     $router->get('/articles', 'AIController', 'showArticles', ['AuthMiddleware']);
     $router->get('/article/{id}', 'AIController', 'showArticle', ['AuthMiddleware']);
 }, ['AuthMiddleware']);
@@ -411,3 +411,5 @@ $router->get('/seo-expert', 'SeoExpertController', 'index', ['AuthMiddleware']);
 
 require_once __DIR__.'/../Controllers/BusinessHubController.php';
 $router->get('/business-hub','BusinessHubController','index',['AuthMiddleware']);
+
+$router->get('/admin/seo-markets', 'SeoDataController', 'index', ['AuthMiddleware','AdminMiddleware']);
