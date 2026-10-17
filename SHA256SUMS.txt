@@ -1,0 +1,2 @@
+0c6f870b94b2f2549a365b0410c2efd022c9fff9387ed8676f2b76f8cf2343fa  tourfecto-phase3-deployment.zip
+3dde380f66e1fd1e37103068cf472a4cb401a5ea38109e1d6a7dfa082853fd84  tourfecto-phase3-only.zip

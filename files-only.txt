@@ -1,0 +1,35 @@
+Source commit: 8fa137e0ae39f6c36f6462fd50f08e769d003a47
+Baseline: 8d46940
+Tests excluded.
+
+app/Config/project_classmap.php
+app/Controllers/AdminController.php
+app/Controllers/AiVisibilityController.php
+app/Core/ClientNavigation.php
+app/Jobs/AiVisibilityCheckJob.php
+app/Services/AiVisibility/AiVisibilityDetector.php
+app/Services/AiVisibility/AiVisibilityEvidence.php
+app/Services/AiVisibility/AiVisibilityLedger.php
+app/Services/AiVisibility/AiVisibilityMetrics.php
+app/Services/AiVisibility/AiVisibilityProvider.php
+app/Services/AiVisibility/AiVisibilityQuestions.php
+app/Services/AiVisibility/AiVisibilitySchema.php
+app/Services/AiVisibility/AiVisibilityService.php
+app/Services/AiVisibility/GeminiVisibilityProvider.php
+app/Services/AiVisibility/GeoLlmsBuilder.php
+app/Services/AiVisibility/OpenAiVisibilityProvider.php
+app/Services/AiVisibility/SonarVisibilityProvider.php
+app/Services/AutoFix/FixValueBuilder.php
+app/Services/SeoExpert/SeoExpertService.php
+app/Services/Subscription/BillingPlanCatalog.php
+app/Services/Subscription/PlanUsage.php
+app/Services/System/SystemSettingsService.php
+app/routes/api.php
+app/routes/web.php
+cron/schedule.php
+cron/seo_ai_visibility.php
+database/migrations/2026_10_17_000002_ai_visibility.sql
+docs/seo/phase-3-files.txt
+docs/seo/phase-3-test-output.txt
+docs/seo/phase-3.md
+public_html/assets/js/ai-visibility.js
