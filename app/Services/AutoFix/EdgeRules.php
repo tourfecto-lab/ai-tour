@@ -165,7 +165,7 @@ class EdgeRules
             if($sx){$pol=json_decode((string)$sx[0]['policy_json'],true)?:[];if(($pol['auto_alt']??true)!==false)$rules['auto_alt']=1;}
             // مقالات معتمدة بتتنشر من خلال ملف الربط في مواقع PHP (/guides/{slug}) - نص بس
             $articles=[];
-            foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified') AND (published_url LIKE '%/guides/%' OR published_url LIKE '%tf_article=%') ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
+            foreach($db->query("SELECT title,expected_value,published_url,updated_at,before_json FROM seo_expert_tasks WHERE website_id=? AND kind='content' AND is_active=1 AND status IN ('active','verified','needs_client') AND (published_url LIKE '%/guides/%' OR published_url LIKE '%tf_article=%') ORDER BY id DESC LIMIT 50",[$websiteId]) as $a){
                 // الرابط ممكن يكون /guides/{slug} أو البديل ?tf_article={slug}
                 parse_str((string)parse_url((string)$a['published_url'],PHP_URL_QUERY),$q);
                 $slug=isset($q['tf_article'])&&is_string($q['tf_article'])?$q['tf_article']:basename((string)parse_url((string)$a['published_url'],PHP_URL_PATH));
@@ -281,7 +281,7 @@ PHPH;
     public static function snippet(int $websiteId, string $endpoint): string
     {
         $token = self::token($websiteId);
-        $endpoint = rtrim($endpoint, '/') . '/api/edge/rules';
+        $endpoint = rtrim($endpoint, '/') . '/index.php?__tf_api=%2Fapi%2Fedge%2Frules';
         return self::bodyHelpers() . <<<PHP
 /* Tourfecto Edge v4 - Page-scoped approved SEO updates. Data only; no remote code execution. */
 if ( defined( 'TF_EDGE_RUNTIME_V4' ) ) { return; }
@@ -299,7 +299,7 @@ if ( ! function_exists( 'tf_edge_rules' ) ) {
             set_transient('tf_edge_rules_v4',\$last,30);return \$last;
         }
         \$rules = array(); \$valid = false;
-        \$r = wp_remote_get( '{$endpoint}?token={$token}&cv=4&site=' . rawurlencode( home_url() ), array( 'timeout' => 2, 'redirection' => 0, 'headers' => array( 'Cache-Control' => 'no-cache' ) ) );
+        \$r = wp_remote_get( '{$endpoint}&token={$token}&cv=4&site=' . rawurlencode( home_url() ), array( 'timeout' => 2, 'redirection' => 0, 'headers' => array( 'Cache-Control' => 'no-cache' ) ) );
         if ( ! is_wp_error( \$r ) && 200 === wp_remote_retrieve_response_code( \$r ) ) {
             \$d = json_decode( wp_remote_retrieve_body( \$r ), true );
             if ( is_array( \$d ) && isset( \$d['data']['rules'] ) && is_array( \$d['data']['rules'] ) ) {
@@ -446,7 +446,7 @@ PHP
     public static function phpConnector(int $websiteId, string $endpoint): string
     {
         $token = self::token($websiteId);
-        $endpoint = rtrim($endpoint, '/') . '/api/edge/rules';
+        $endpoint = rtrim($endpoint, '/') . '/index.php?__tf_api=%2Fapi%2Fedge%2Frules';
         $code = <<<'PHPCODE'
 <?php
 /**
@@ -514,7 +514,7 @@ function tf_edge_rules()
     if ($now - (int) ($cache['t'] ?? 0) < 120 || $now - (int) ($cache['f'] ?? 0) < 15) {
         return $rules = $last;
     }
-    $body = tf_edge_fetch(TF_EDGE_ENDPOINT . '?token=' . rawurlencode(TF_EDGE_TOKEN) . '&cv=4&site=' . rawurlencode(tf_edge_site()));
+    $body = tf_edge_fetch(TF_EDGE_ENDPOINT . '&token=' . rawurlencode(TF_EDGE_TOKEN) . '&cv=4&site=' . rawurlencode(tf_edge_site()));
     $data = $body !== null ? json_decode($body, true) : null;
     if (is_array($data) && isset($data['data']['rules']) && is_array($data['data']['rules'])) {
         $rules = $data['data']['rules'];
@@ -786,7 +786,9 @@ function tf_edge_articles_route()
         if(($_SERVER['REQUEST_METHOD']??'GET')!=='HEAD')echo $key;exit;
     }
     $articles = tf_edge_rules()['articles'] ?? [];
+    $requestedSlug=tf_edge_article_slug();
     if (!is_array($articles) || !$articles) {
+        if($requestedSlug!==null){http_response_code(503);header('Content-Type: text/plain; charset=utf-8');header('Cache-Control: no-store');header('Retry-After: 120');echo 'Guide temporarily unavailable. Please try again later.';exit;}
         return;
     }
     $base = tf_edge_site();
@@ -807,12 +809,13 @@ function tf_edge_articles_route()
         tf_edge_page('Travel guides', 'Travel guides and tips.', $base . '/guides', '<h1>Travel guides</h1><div class="list">' . $list . '</div>');
     }
     $slug = tf_edge_article_slug();
-    if ($slug === null || !isset($articles[$slug]) || !is_array($articles[$slug])) {
-        return;
+    if ($slug === null) return;
+    if (!isset($articles[$slug]) || !is_array($articles[$slug])) {
+        http_response_code(404);header('Content-Type: text/plain; charset=utf-8');header('Cache-Control: no-store');echo 'Guide not found.';exit;
     }
     $a = $articles[$slug];
     $title = (string) ($a['title'] ?? '');
-    $canonical = $base . '/guides/' . $slug;
+    $canonical = isset($_GET['tf_article']) ? $base.'/?tf_article='.rawurlencode($slug) : $base . '/guides/' . $slug;
     $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($a['published_at'] ?? '')) ? $a['published_at'] : '';
     $image = (is_string($a['image'] ?? null) && preg_match('#^https://[^\s"<>]+$#', $a['image'])) ? $a['image'] : '';
     $figure = $image !== '' ? '<figure><img src="' . tf_edge_e($image) . '" alt="' . tf_edge_e($a['image_alt'] ?? $title) . '" loading="eager"></figure>' : '';
@@ -829,7 +832,7 @@ function tf_edge_articles_route()
 
 // فحص سريع لصاحب الموقع: https://your-site.com/?tf_check=1
 if (($_GET['tf_check'] ?? '') === '1') {
-    $body = tf_edge_fetch(TF_EDGE_ENDPOINT . '?token=' . rawurlencode(TF_EDGE_TOKEN) . '&cv=4&site=' . rawurlencode(tf_edge_site()));
+    $body = tf_edge_fetch(TF_EDGE_ENDPOINT . '&token=' . rawurlencode(TF_EDGE_TOKEN) . '&cv=4&site=' . rawurlencode(tf_edge_site()));
     $ok = $body !== null && is_array(json_decode($body, true));
     header('Content-Type: text/plain; charset=utf-8');
     header('Cache-Control: no-store');

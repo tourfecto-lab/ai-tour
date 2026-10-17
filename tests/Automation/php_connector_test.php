@@ -28,7 +28,9 @@ $server = proc_open(['php', '-S', '127.0.0.1:' . $port, $dir . '/router.php'], [
 usleep(400000);
 function render($connector, $path, $page) {
     global $port;
-    return @file_get_contents('http://127.0.0.1:' . $port . $path);
+    $body=@file_get_contents('http://127.0.0.1:' . $port . $path, false, stream_context_create(['http'=>['ignore_errors'=>true]]));
+    $GLOBALS['lastConnectorStatus']=$http_response_header[0]??'';
+    return $body;
 }
 
 file_put_contents($cache, json_encode(['t' => time(), 'f' => 0, 'rules' => [
@@ -64,10 +66,12 @@ check(strpos($art, '<img src="https://example.com/img/luxor.jpg" alt="Luxor &quo
 check(strpos($art, '<meta property="og:image" content="https://example.com/img/luxor.jpg">') !== false && strpos($art, '"image":"https://example.com/img/luxor.jpg"') !== false, 'og:image and schema image');
 $fallback = (string) render($connector, '/?tf_article=discover-egypt', $page);
 check(strpos($fallback, '<h1>Discover Egypt</h1>') !== false, 'fallback ?tf_article= works');
+check(str_contains($fallback,'rel="canonical" href="http://127.0.0.1:'.$port.'/?tf_article=discover-egypt"'),'fallback article canonical uses its accessible URL');
 $index = (string) render($connector, '/guides', $page);
 check(strpos($index, 'href="/guides/discover-egypt"') !== false, 'guides index lists the article');
 $missing = (string) render($connector, '/guides/unknown', $page);
-check(strpos($missing, '<title>Old</title>') !== false, 'unknown article falls through to the site');
+check(str_contains($missing,'Guide not found.') && !str_contains($missing,'<title>Old</title>'), 'unknown article is explicit, never a soft homepage success');
+check(str_contains($GLOBALS['lastConnectorStatus'],'404'),'unknown article returns an actual HTTP 404');
 
 // Phase 4 uses the customer's explicitly configured local header/footer.
 file_put_contents($dir.'/header.php','<!doctype html><html><head><title>Site theme</title></head><body><header>Customer navigation</header>');
@@ -90,6 +94,9 @@ file_put_contents($dir.'/page.html',$page);
 file_put_contents($cache, json_encode(['t' => time(), 'f' => 0, 'rules' => []]));
 $plain = (string) render($connector, '/', $page);
 check(strpos($plain, '<title>Old</title>') !== false && strpos($plain, 'content="old"') !== false, 'no rules: page unchanged');
+
+$unavailable=(string)render($connector,'/?tf_article=discover-egypt',$page);
+check(str_contains($GLOBALS['lastConnectorStatus'],'503') && str_contains($unavailable,'temporarily unavailable') && !str_contains($unavailable,'<title>Old</title>'),'missing article rules return 503 instead of the homepage');
 
 proc_terminate($server);
 @unlink($cache); @unlink($connector); @unlink($dir . '/page.html'); @unlink($dir . '/router.php'); @rmdir($dir);

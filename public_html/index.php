@@ -1,5 +1,8 @@
 <?php
 
+require_once __DIR__.'/../app/Services/Http/ApiRouteBridge.php';
+ApiRouteBridge::normalize($_SERVER,$_GET);
+
 // منع ظهور رسائل PHP (Deprecated/Warning) على الشاشة قبل ما إعدادات
 // التطبيق تتحمّل: على الاستضافة الجديدة (PHP 8.4 و display_errors=On)
 // كانت الرسائل دي بتتطبع قبل ردود JSON زي /login فالفورم يفشل ويظهر

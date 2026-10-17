@@ -19,6 +19,7 @@ class SeoExpertController extends Controller
         try{
             if($action==='setup'){$r=$s->setup($uid);$r['csrf_token']=Csrf::token();return $this->success($r);}
             if($action==='overview')return $this->success($s->overview($uid,$wid));
+            if($action==='recheck')return $this->success($s->recheck($uid,$id));
             if($action==='detail')return $this->success($s->detail($uid,$id));
             if($action==='configure')return $this->success($s->configure($uid,$wid,$this->data));
             if($action==='importBrief')return $this->success($s->importBrief($uid,$wid,(string)$this->get('language','en')));
@@ -35,6 +36,7 @@ class SeoExpertController extends Controller
     }
     public function setup(array $p=[]): array{return $this->action('setup',$p);}
     public function overview(array $p=[]): array{return $this->action('overview',$p);}
+    public function recheck(array $p=[]): array{return $this->action('recheck',$p);}
     public function detail(array $p=[]): array{return $this->action('detail',$p);}
     public function configure(array $p=[]): array{return $this->action('configure',$p);}
     public function importBrief(array $p=[]): array{return $this->action('importBrief',$p);}

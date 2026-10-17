@@ -96,5 +96,5 @@ check($publisher->setSeoFields(home_url(),'user','offline-password',42,$fields)[
 check(json_decode($requests[1]['body'],true)===['token'=>'signed-token'],'apply sends only the exact plugin-issued signature');
 require $root.'/app/Services/AutoFix/TourfectoPluginBundle.php';
 $bundle=TourfectoPluginBundle::files(32,'https://platform.example/api/rules','site.example');
-check(isset($bundle['tourfecto-seo/modules/tourfecto-content-seo.php']) && str_contains($bundle['tourfecto-seo/tourfecto-seo.php'],'Version: 3.7.0'),'download bundle includes the signed endpoint and updated plugin version');
+check(isset($bundle['tourfecto-seo/modules/tourfecto-content-seo.php']) && str_contains($bundle['tourfecto-seo/tourfecto-seo.php'],'Version: 3.7.1'),'download bundle includes the signed endpoint and updated plugin version');
 echo "\n".($n-$fails)."/$n passed\n";exit($fails?1:0);

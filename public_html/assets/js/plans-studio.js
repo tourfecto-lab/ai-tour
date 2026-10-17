@@ -16,6 +16,7 @@
     };
     const say = (msg, bad, wallet) => {
         const el = root.querySelector('#psMsg');
+        if (!el) { root.innerHTML = '<div id="psMsg" class="ps-msg" role="status"></div>'; return say(msg, bad, wallet); }
         el.innerHTML = esc(msg) + (wallet ? ` <a class="p-btn sm" href="/subscription#wallet">${t('اشحن المحفظة', 'Top up wallet')}</a>` : '');
         el.className = 'ps-msg' + (bad ? ' bad' : ''); el.hidden = !msg;
         if (msg) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });

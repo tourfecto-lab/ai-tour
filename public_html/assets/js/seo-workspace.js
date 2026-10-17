@@ -58,8 +58,8 @@
   const resultsTitle=make('h3','',t('اللي اتعمل على موقعك','What was done on your website'));
   const stats=make('div','se-stats');const recent=make('ul','se-recent');
   const statBox=(id,label)=>{const box=make('div','se-stat');const v=make('strong','','—');v.id=id;box.append(v,make('span','',label));stats.append(box);};
-  statBox('seStatChanges',t('تعديلات اتطبقت واتأكد منها','Changes applied and verified'));
-  statBox('seStatArticles',t('مقالات منشورة','Articles published'));
+  statBox('seStatChanges',t('تعديلات اتطبقت واتأكد منها','Previously verified changes'));
+  statBox('seStatArticles',t('مقالات منشورة','Previously verified articles'));
   statBox('seStatPages',t('صفحات اتفحصت في آخر فحص','Pages checked in last scan'));
   results.append(resultsTitle,stats,recent);panels.get('overview').append(results);
   let summaryFor='';
@@ -72,9 +72,9 @@
     if(!d||!d.success)continue;const run=d.data.run||{},tasks=d.data.tasks||[];
     if(pagesScanned===null){let snap=run.snapshot;if(typeof snap==='string'){try{snap=JSON.parse(snap);}catch(e){snap=null;}}if(snap&&Array.isArray(snap.pages))pagesScanned=snap.pages.length;}
     for(const task of tasks){
-     const done=task.status==='verified'||(task.kind==='content'&&task.status==='active'&&task.published_url);
+     const done=task.status==='verified';
      if(!done)continue;
-     if(task.kind==='content'){articles++;items.push({text:t('مقال: ','Article: ')+task.title,url:task.published_url});}
+     if(task.kind==='content'){articles++;items.push({text:t('مقال — تحقق سابق: ','Article — previously verified: ')+task.title,url:task.published_url});}
      else if(task.kind==='metadata'){changes++;items.push({text:({title:t('عنوان','Title'),description:t('وصف','Description')}[task.field_name]||task.field_name)+' — '+(task.page_path||'/'),url:task.page_url||siteUrl(task.page_path)});}
     }
    }
@@ -88,7 +88,7 @@
   };
   const research=make('article','se-card');research.append(make('h3','',t('بحث المنافسين والكلمات','Competitor & keyword research')),make('p','',t('افتح أدوات البحث الموجودة في المنصة. بدء تحليل جديد يتبع التكلفة والموافقة المعروضة في أداته.','Open the existing research tools. New analysis follows the cost and approval shown by each tool.')));
   const researchLinks=make('div','se-actions');
-  for(const [href,label] of [['/competitors',t('تحليل المنافسين','Competitor analysis')],['/keywords',t('بحث الكلمات','Keyword research')]]){const a=make('a','p-btn outline',label);a.href=href;a.target='_blank';a.rel='noopener noreferrer';researchLinks.append(a);}
+  for(const [href,label] of [['/ai/competitors',t('تحليل المنافسين','Competitor analysis')],['/ai/keywords',t('بحث الكلمات','Keyword research')]]){const a=make('a','p-btn outline',label);a.href=href;a.target='_blank';a.rel='noopener noreferrer';researchLinks.append(a);}
   research.append(researchLinks);panels.get('scan').append(research);
   const cycleChoices=make('article','se-card');cycleChoices.append(make('h3','',t('الفحوصات المحفوظة','Stored inspections')));const scanRuns=make('div','se-actions');scanRuns.id='seScanRuns';cycleChoices.append(scanRuns);panels.get('scan').append(cycleChoices);
   const planHint=make('p','se-note',t('افتح دورة من القائمة لعرض الخطة. إنشاء دورة جديدة موجود في صفحة الفحص.','Open a cycle below to view its plan. Start a new cycle on the inspection page.'));panels.get('plan').prepend(planHint);
@@ -106,7 +106,7 @@
    if(!state||state.websiteId!==selected()){nextText.textContent=t('جارٍ تحميل حالة الموقع. لو استمر الانتظار، اضغط تحديث الحالة.','Loading website state. If this continues, choose Refresh status.');return;}
    if(!state.configured){nextText.textContent=t('أكمل بيانات الشركة وحدود العمل، ثم ابدأ أول فحص.','Complete company facts and work limits, then start your first inspection.');nextActions.append(link('settings',t('أكمل الإعداد','Complete setup')));}
    else if(!state.workerReady){nextText.textContent=t('المتابعة في الخلفية تحتاج مراجعة مهام السيرفر. راجع التنبيه أدناه قبل بدء دورة.','Background work requires attention to the server worker. Review the notice below before starting a cycle.');nextActions.append(link('settings',t('راجع الإعدادات','Review settings')));}
-   else if(state.cycleBlock&&/limit|الحد/i.test(state.cycleBlock)){nextText.textContent=t('خلصت الدورات المسموحة الشهر ده. التعديلات اللي اتعملت شغالة على موقعك — شوفها تحت. لو عايز فحص جديد دلوقتي علّي الحد من الإعدادات، وإلا هتتجدد الشهر الجاي.','You used this month’s cycles. Applied changes stay live on your site — see below. To scan again now, raise the limit in settings; otherwise it renews next month.');nextActions.append(link('settings',t('علّي الحد','Raise the limit')),link('results',t('النتائج','Results')));}
+   else if(state.cycleBlock&&/limit|الحد/i.test(state.cycleBlock)){nextText.textContent=t('خلصت الدورات المسموحة الشهر ده. التعديلات المتحققة سابقًا معروضة تحت؛ أعد التحقق من حالتها الحالية. لو عايز فحص جديد دلوقتي علّي الحد من الإعدادات، وإلا هتتجدد الشهر الجاي.','You used this month’s cycles. Previously verified changes are listed below; recheck their current state. To scan again now, raise the limit in settings; otherwise it renews next month.');nextActions.append(link('settings',t('علّي الحد','Raise the limit')),link('results',t('النتائج','Results')));}
    else if(state.cycleBlock){nextText.textContent=state.cycleBlock;nextActions.append(link('plan',t('تابع الدورة الحالية','Follow the current cycle')));}
    else if(state.runs.length){nextText.textContent=t('راجع آخر دورة والمهام المطلوبة قبل بدء دورة جديدة.','Review your latest cycle and required tasks before starting a new one.');nextActions.append(runLink(state.runs[0]));}
    else {nextText.textContent=t('إعداداتك محفوظة. افتح الفحص وراجع الاستخدام المعروض قبل البدء.','Setup is saved. Open inspection and review the displayed usage before starting.');nextActions.append(link('scan',t('ابدأ الفحص','Start inspection')));}

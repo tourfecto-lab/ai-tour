@@ -5,6 +5,32 @@
  */
 (function (global) {
     'use strict';
+    // Send affected routes to the same front controller without relying on pretty-URL rewrites.
+    // Dispatch still runs the original AuthMiddleware, CSRF and ownership checks. Never retry writes.
+    const nativeFetch = global.fetch;
+    global.fetch = function (input, init) {
+        try {
+            const url = new URL(input instanceof Request ? input.url : String(input), global.location.href);
+            if (url.origin === global.location.origin && /^\/api\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(url.pathname)) {
+                const route = url.pathname;
+                url.pathname = '/index.php';
+                url.searchParams.set('__tf_api', route);
+                input = input instanceof Request ? new Request(url.href, input) : url.href;
+            }
+        } catch (_) { /* Keep normal fetch behavior for unsupported inputs. */ }
+        return nativeFetch.call(global, input, init);
+    };
+
+
+    // Older deployed views can still emit these two legacy customer links.
+    function fixLegacyResearchLinks() {
+        document.querySelectorAll('a[href="/keywords"],a[href="/competitors"]').forEach(a => a.setAttribute('href', '/ai' + a.getAttribute('href')));
+    }
+    function watchResearchLinks() {
+        fixLegacyResearchLinks();
+        if (document.body) new MutationObserver(fixLegacyResearchLinks).observe(document.body, { childList: true, subtree: true });
+    }
+    if (document.body) watchResearchLinks(); else document.addEventListener('DOMContentLoaded', watchResearchLinks, { once: true });
 
     function esc(v) {
         if (v === null || v === undefined) return '';

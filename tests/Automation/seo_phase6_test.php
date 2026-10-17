@@ -63,6 +63,6 @@ $r=SitemapSubmissionService::submit($api,'https://travel.example/','https://trav
 $failure=new GoogleSearchConsoleAPI('offline',fn()=>['http_code'=>403,'body'=>'{"error":{"message":"Insufficient permission"}}']);
 $r=SitemapSubmissionService::submit($failure,'https://travel.example/','https://travel.example/sitemap.xml',SitemapSubmissionService::SCOPE,true,$xmlReader);check(!$r['success']&&str_contains($r['error'],'403')&&!$r['listing_ok'],'fake GSC permission error remains visible');
 $bundle=TourfectoPluginBundle::files(1,'https://platform.example','travel.example');
-check(isset($bundle['tourfecto-seo/modules/tourfecto-international.php'])&&str_contains($bundle['tourfecto-seo/tourfecto-seo.php'],'Version: 3.7.0'),'updated customer plugin contains multilingual and key routes');
+check(isset($bundle['tourfecto-seo/modules/tourfecto-international.php'])&&str_contains($bundle['tourfecto-seo/tourfecto-seo.php'],'Version: 3.7.1'),'updated customer plugin contains multilingual and key routes');
 check(str_contains(file_get_contents($root.'/app/Controllers/SearchConsoleController.php'),"'allow_sitemap_submit'=>\$this->allowSitemapSubmit"),'write opt-in travels inside signed OAuth state');
 echo "\n".($n-$fails)."/$n passed\n";exit($fails?1:0);

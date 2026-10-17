@@ -9,6 +9,8 @@ let measured=false;const evil='<img src=x onerror="window.geoUnsafe=true">';
 const providers=()=>Object.fromEntries(['openai','gemini','perplexity'].map(p=>[p,{state:measured?'measured_sample':'not_measured',share_of_voice:measured?.5:null,citation_rate:measured?0:null,questions:measured?2:0,citation_questions:measured?2:0,week_start:measured?'2026-10-12':null,partial:measured,top_competitors:measured?{[evil]:1}:{},trend:Array.from({length:8},(_,i)=>({week:'2026-10-'+String(i+1).padStart(2,'0'),share_of_voice:measured&&i===7?.5:null,questions:measured&&i===7?2:0}))}]));
 await page.route('http://tourfecto.test/**',async route=>{
 const req=route.request(),u=new URL(req.url());let data={};
+// Match the same logical route after the production front-controller transport normalizes it.
+if(u.pathname==='/index.php'&&u.searchParams.has('__tf_api')){u.pathname=u.searchParams.get('__tf_api');u.searchParams.delete('__tf_api');}
 if(u.pathname==='/'){await route.fulfill({contentType:'text/html',body:'<!doctype html><meta charset="utf-8">'+fs.readFileSync(process.env.TF_GEO_UI_ARTIFACT||'/tmp/geo-ui.html','utf8')});return;}
 if(req.method()==='POST')posts.push([u.pathname,req.postDataJSON()]);else gets.push(u.pathname+u.search);
 if(u.pathname==='/api/websites')data={websites:[{id:1,main_url:'https://example.com'}]};

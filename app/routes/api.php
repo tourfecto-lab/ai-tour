@@ -1798,3 +1798,5 @@ foreach (['profile','run','nap','links'] as $op) $router->post('/api/local-seo/'
 
 foreach(['sites','data','sitemapData'] as $op)$router->get('/api/international-seo/'.$op,'InternationalSeoController',$op,['AuthMiddleware']);
 foreach(['generate','draft','publish','submit','disable'] as $op)$router->post('/api/international-seo/'.$op,'InternationalSeoController',$op,['AuthMiddleware']);
+
+$router->post('/api/seo-expert/runs/{id}/recheck','SeoExpertController','recheck',['AuthMiddleware']);
