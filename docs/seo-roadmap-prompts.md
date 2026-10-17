@@ -17,6 +17,8 @@
 ```
 You are a senior PHP engineer working on Tourfecto (repo tourfecto-lab/ai-tour), an AI SaaS for tour and travel companies. Read this context carefully before touching code.
 
+BASE BRANCH (CRITICAL): the latest code is on branch `claude/stoic-heisenberg-66srnk`, NOT `main` (main is an old snapshot). Always `git fetch` and create your phase branch FROM `claude/stoic-heisenberg-66srnk`. Before you finish, merge the latest `claude/stoic-heisenberg-66srnk` into your branch and resolve conflicts without deleting existing features. Push real code commits (including your tests under tests/Automation/) to the phase branch — do not push a branch that only contains a ZIP. The deployment ZIP must be built from `git diff --name-only --diff-filter=AM 0127545 HEAD` (excluding tests/) so it contains every changed file since the original deployment.
+
 STACK & CONVENTIONS
 - PHP 8 custom MVC, no framework. Live classes are listed in app/Config/project_classmap.php — every NEW class must be added there or it will not load in production.
 - Routes: app/routes/web.php and app/routes/api.php. Middleware is an array like ['AuthMiddleware','AdminMiddleware'] or 'PlanGateMiddleware:ai_tool'.
