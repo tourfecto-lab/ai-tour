@@ -25,6 +25,7 @@ class PageContext
             $fresh = $this->get(self::freshAuditUrl($url), true);
             if ($fresh['error'] === null && $fresh['http'] === 200 && $fresh['body'] !== '') $r = $fresh;
         }
+        $out['http_status'] = (int) $r['http'];
         if ($r['error'] !== null || $r['http'] < 200 || $r['http'] >= 400 || $r['body'] === '') {
             $out['error'] = $r['error'] ?? ('http_' . $r['http']);
             return $out;

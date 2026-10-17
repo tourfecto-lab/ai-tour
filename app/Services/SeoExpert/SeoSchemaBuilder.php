@@ -148,7 +148,7 @@ class SeoSchemaBuilder
 
     /**
      * Schema الصفحة كـ @graph (أو null لو مفيش حاجة مفيدة تتضاف).
-     * @param array{business_name:string, site_url:string, rating?:?array} $ctx
+     * @param array{business_name?:string, site_url:string, rating?:?array, verified_pages?:array} $ctx
      * @return array{graph:array, types:string[]}|null
      */
     public static function forPage(array $page, array $ctx): ?array
@@ -193,18 +193,33 @@ class SeoSchemaBuilder
 
         $segments = array_values(array_filter(explode('/', trim($path, '/')), 'strlen'));
         if ($segments && !self::hasType($existing, ['BreadcrumbList'])) {
+            // A URL directory is not proof that a navigable parent page exists.
+            // Reuse successful crawl observations, including their exact final URLs.
+            $parents = [];
+            $origin = static fn(array $p): array => [strtolower($p['scheme'] ?? ''), strtolower($p['host'] ?? ''), $p['port'] ?? (strtolower($p['scheme'] ?? '') === 'https' ? 443 : 80)];
+            $siteParts = parse_url($site);
+            foreach ($ctx['verified_pages'] ?? [] as $observed) {
+                if (!is_array($observed) || ($observed['ok'] ?? false) !== true || (int) ($observed['http_status'] ?? 0) !== 200 || !empty($observed['coming_soon'])) continue;
+                $parentUrl = (string) ($observed['final_url'] ?? $observed['url'] ?? '');
+                $parts = parse_url($parentUrl);
+                if (!$siteParts || !$parts || !filter_var($parentUrl, FILTER_VALIDATE_URL) || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+                    || $origin($parts) !== $origin($siteParts) || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) continue;
+                $name = self::clean((string) (($observed['h1'] ?? '') ?: ($observed['title'] ?? '')), 110);
+                if ($name !== '') $parents[rtrim($parts['path'] ?? '/', '/')] = ['url' => $parentUrl, 'name' => $name];
+            }
             $items = [['@type' => 'ListItem', 'position' => 1, 'name' => $business !== '' ? $business : 'Home', 'item' => $site . '/']];
             $acc = '';
             foreach ($segments as $i => $seg) {
                 $acc .= '/' . $seg;
                 $last = $i === count($segments) - 1;
-                $name = $last ? self::clean((string) ($page['h1'] ?: $page['title']), 110) : self::label($seg);
+                if (!$last && (!isset($parents[$acc]) || count($items) >= 5)) continue;
+                $name = $last ? self::clean((string) (($page['h1'] ?? '') ?: ($page['title'] ?? '')), 110) : $parents[$acc]['name'];
                 if ($name === '' || count($items) >= 6) {
                     continue;
                 }
                 $item = ['@type' => 'ListItem', 'position' => count($items) + 1, 'name' => $name];
                 if (!$last) {
-                    $item['item'] = $site . $acc . '/';
+                    $item['item'] = $parents[$acc]['url'];
                 } else {
                     $item['item'] = $url;
                 }

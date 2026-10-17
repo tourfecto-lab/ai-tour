@@ -233,7 +233,7 @@ class SeoExpertService
         $host=(string)parse_url($site['main_url'],PHP_URL_HOST);$scheme=parse_url($site['main_url'],PHP_URL_SCHEME)?:'https';$n=0;
         foreach($pages as $p){
             if($n>=40)break;if(!SeoPagePolicy::classify($p)['eligible'])continue;
-            $built=SeoSchemaBuilder::forPage($p,['business_name'=>$business,'site_url'=>$scheme.'://'.$host]);if(!$built)continue;
+            $built=SeoSchemaBuilder::forPage($p,['business_name'=>$business,'site_url'=>$scheme.'://'.$host,'verified_pages'=>$pages]);if(!$built)continue;
             $json=json_encode($built['graph'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);$clean=EdgeRules::sanitize('jsonld',(string)$json,$host);if(!is_string($clean))continue;
             $trip=in_array('TouristTrip',$built['types'],true);
             $this->task($r,'metadata','geo',$p,$trip?'Add trip structured data (TouristTrip)':'Add breadcrumb structured data',$trip?'Describes this trip to Google and AI assistants: name, description, image, your company and the price exactly as written on the page. Nothing is invented; existing schema on the page is kept.':'Shows the page position in your site (Home > Section > Page) in search results.','jsonld',$clean);$n++;

@@ -53,4 +53,16 @@ $service->build(9001);
 check($pdo->query('SELECT status FROM seo_expert_runs WHERE id=9001')->fetchColumn()==='draft','unconfirmed article does not block the safe remainder of the plan');
 check((int)$pdo->query("SELECT COUNT(*) FROM seo_expert_tasks WHERE kind='content'")->fetchColumn()===0,'unsupported duration never becomes a publishable content task');
 check((int)$pdo->query("SELECT COUNT(*) FROM seo_expert_tasks WHERE kind='manual' AND title='Confirm article facts before writing' AND status='needs_client'")->fetchColumn()===1,'rejected draft becomes an explicit client confirmation task');
+// The complete planning transaction must carry crawl evidence into schema generation.
+AiText::$response=['success'=>true,'data'=>json_encode(['summary'=>'Review the inspected destination pages and their factual navigation.','changes'=>[],'client_tasks'=>[],'content_drafts'=>[]])];
+$parent=array_replace($page,['url'=>'https://example.com/tours','page_path'=>'/tours','h1'=>'Egypt Tours','http_status'=>200]);
+$destination=array_replace($page,['url'=>'https://example.com/tours/luxor','page_path'=>'/tours/luxor','h1'=>'Luxor Tours','http_status'=>200]);
+$policyPages=[];foreach(['privacy','cookies','terms','cancellation'] as $slug)$policyPages[]=array_replace($page,['url'=>'https://example.com/page/'.$slug,'page_path'=>'/page/'.$slug,'h1'=>ucfirst($slug).' Policy','http_status'=>200]);
+$pdo->prepare("UPDATE seo_expert_runs SET status='scanned',snapshot_json=? WHERE id=9001")->execute([json_encode(['pages'=>array_merge([$parent,$destination],$policyPages),'tech'=>[]])]);
+$service->build(9001);
+check($pdo->query('SELECT status FROM seo_expert_runs WHERE id=9001')->fetchColumn()==='draft','breadcrumb evidence survives normal plan persistence');
+$s=$pdo->prepare("SELECT expected_value FROM seo_expert_tasks WHERE run_id=9001 AND field_name='jsonld' AND page_url=? ORDER BY id DESC LIMIT 1");
+foreach($policyPages as $policyPage){$s->execute([$policyPage['url']]);$schema=json_decode($s->fetchColumn(),true);$crumbs=array_values(array_filter($schema['@graph'],static fn($node)=>$node['@type']==='BreadcrumbList'))[0];check(array_column($crumbs['itemListElement'],'item')===['https://example.com/',$policyPage['url']],'saved policy proposal excludes nonexistent /page/: '.$policyPage['page_path']);}
+$s->execute([$destination['url']]);$schema=json_decode($s->fetchColumn(),true);$crumbs=array_values(array_filter($schema['@graph'],static fn($node)=>$node['@type']==='BreadcrumbList'))[0];
+check(array_column($crumbs['itemListElement'],'item')===['https://example.com/','https://example.com/tours',$destination['url']],'saved destination proposal retains the verified exact parent URL');
 echo "$n assertions passed\n";
