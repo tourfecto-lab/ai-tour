@@ -56,6 +56,8 @@ if (!function_exists('tf_autotranslate_path_excluded')) {
     function tf_autotranslate_path_excluded(string $path): bool
     {
         $path = '/' . ltrim(strtolower($path), '/');
+        // The printable monthly document has its own Arabic language; account UI translation must not rewrite it.
+        if ($path === '/api/local-seo/report') return true;
         $prefixes = [
             '/sites/', '/r/', '/assets/', '/favicon', '/robots.txt', '/sitemap', '/.well-known',
             '/webhooks', '/api/webhook', '/api/chat/webhook', '/api/edge', '/embed.js',
