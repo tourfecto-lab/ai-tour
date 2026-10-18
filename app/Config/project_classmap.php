@@ -823,6 +823,7 @@ return [
     'SeoMonthlyReportService' => dirname(__DIR__,2).'/app/Services/Seo/SeoMonthlyReportService.php',
     'LocalSeoController' => dirname(__DIR__,2).'/app/Controllers/LocalSeoController.php',
     'SeoPlatformBookingService' => dirname(__DIR__,2).'/app/Services/SeoImpact/SeoPlatformBookingService.php',
+    'SeoPlatformProductService' => dirname(__DIR__,2).'/app/Services/SeoImpact/SeoPlatformProductService.php',
     'SeoImpactService' => dirname(__DIR__,2).'/app/Services/SeoImpact/SeoImpactService.php',
     'SeoImpactCollectJob' => dirname(__DIR__,2).'/app/Jobs/SeoImpactCollectJob.php',
     'HreflangService' => dirname(__DIR__,2).'/app/Services/International/HreflangService.php',

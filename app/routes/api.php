@@ -1770,6 +1770,8 @@ $router->post('/api/seo-impact/monitors/{id}/refresh','SeoImpactController','ref
 $router->post('/api/seo-impact/sites/{website_id}/ai','SeoImpactController','ai',['AuthMiddleware']);
 $router->post('/api/seo-impact/sites/{website_id}/bookings','SeoImpactController','bookings',['AuthMiddleware']);
 $router->get('/api/seo-impact/sites/{website_id}/platform-bookings/products','SeoImpactController','platformProducts',['AuthMiddleware']);
+$router->post('/api/seo-impact/sites/{website_id}/platform-bookings/products/preview','SeoImpactController','platformProductPreview',['AuthMiddleware']);
+$router->post('/api/seo-impact/sites/{website_id}/platform-bookings/products','SeoImpactController','platformProductCreate',['AuthMiddleware']);
 $router->post('/api/seo-impact/sites/{website_id}/platform-bookings','SeoImpactController','platformBookings',['AuthMiddleware']);
 $router->post('/api/seo-impact/booking/{website_id}','SeoImpactController','ingest',[]);
 
