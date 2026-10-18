@@ -10,10 +10,10 @@
    ['overview',t('نظرة عامة','Overview'),t('حالة الخدمة والخطوة التالية لموقعك.','Your service state and next step.')],
    ['scan',t('الفحص','Research'),t('ابدأ الفحص، ثم انتقل للخطة لمراجعة المقترحات.','Start an inspection, then review the proposals in Plan.')],
    ['plan',t('الخطة','Plan'),t('اختر دورة، راجع المهام والحقائق، واعتمد التعديلات المناسبة.','Choose a cycle, review tasks and facts, then approve appropriate changes.')],
-   ['execute',t('التنفيذ','Apply'),t('حرّر صفحة أو رحلة موجودة، وراجع المعاينة قبل الحفظ.','Edit an existing page or tour and review the preview before saving.')],
+   ['execute',t('محرر WordPress','WordPress editor'),t('أداة إضافية لتحرير صفحات WordPress المتصلة. تنفيذ مهام خطة SEO يبدأ من اعتمادها داخل الخطة.','Optional editing for connected WordPress pages. SEO plan execution starts when you approve tasks in Plan.')],
    ['results',t('النتائج','Results'),t('راجع نتائج الدورات، وقارن الأداء بالبيانات المتاحة.','Review cycle outcomes and compare performance using available data.')],
    ['settings',t('الإعدادات','Settings'),t('إدارة الربط، وبيانات الشركة، وحدود العمل وتكلفته.','Manage connections, company facts, work limits and cost.')],
-   ['tours',t('الرحلات','Tours'),t('جهّز رحلة جديدة كمسودة، ثم استكمل بيانات الحجز قبل نشرها.','Prepare a new tour draft and complete booking details before publishing.')]
+   ['tours',t('رحلات WordPress','WordPress tours'),t('أداة إضافية لمسودات رحلات Traveler على WordPress؛ راجع بيانات الحجز قبل نشرها.','Optional Traveler tour drafts on WordPress; review booking facts before publishing.')]
   ];
   const allowed=new Set(pages.map(p=>p[0]));
   const selected=()=>Number(document.getElementById('seWebsite')?.value||0);
@@ -53,6 +53,23 @@
   const overviewCard=make('article','se-card se-overview-card');
   const nextHeading=make('h3','',t('الخطوة التالية','Next step'));const nextText=make('p');nextText.id='seNextStep';
   const nextActions=make('div','se-actions');overviewCard.append(nextHeading,nextText,nextActions);panels.get('overview').prepend(overviewCard);
+  const journey=make('article','se-card se-journey');journey.id='seJourney';
+  journey.append(make('h3','',t('خطواتك مع المنصة','Your steps with the platform')));
+  const journeySteps=make('ol');journeySteps.id='seJourneySteps';journey.append(journeySteps);
+  const responsibility=make('p','se-note',t('دورك: تأكيد معلومات نشاطك، ربط حساباتك، ومراجعة التغييرات قبل اعتمادها. المنصة تجمع الصفحات والبيانات المتاحة، تعد الخطة، تنفذ المعتمد وتتحقق من ظهوره، وتجدول قياس الأثر. الحقائق الناقصة والإجراءات خارج صلاحيات الربط تظهر لك كمهام محددة.','You confirm business facts, connect accounts and approve reviewed changes. The platform collects available pages and data, prepares the plan, executes approved work, verifies publication and schedules measurement. Missing facts and actions beyond connected permissions appear as explicit tasks.'));
+  journey.append(responsibility);overviewCard.after(journey);
+  let latestTasks=null;
+  const renderJourney=()=>{
+   journeySteps.replaceChildren();
+   const matching=state&&state.websiteId===selected(),connected=matching&&state.connections?.connector==='publicly_observed'&&state.connections?.gsc==='measured'&&state.connections?.analytics==='measured',working=matching&&state.runs.some(r=>['queued','scanning','scanned','planning','executing','monitoring'].includes(r.status));
+   const steps=[
+    [t('أكد بيانات شركتك وحدود التكلفة','Confirm facts and cost limits'),matching&&state.configured?'done':'action',link('settings',t('بيانات النشاط والتكلفة','Business facts and cost'))],
+    [t('اربط موقعك ومصادر القياس','Connect your site and measurement sources'),connected?'done':'action',link('settings',t('مراجعة الربط','Review connections'))],
+    [t('راجع الخطة واعتمد التغييرات المناسبة','Review the plan and approve suitable changes'),matching&&state.runs.length?'action':'waiting',matching&&state.runs.length?runLink(state.runs[0]):link('scan',t('بدء الفحص والخطة','Start inspection and planning'))],
+    [t('تابع التنفيذ والنتيجة','Follow execution and measurement'),working?'working':matching&&state.runs.length?'available':'waiting',link('results',t('عرض النتائج والمتابعة','View results and follow-up'))]
+   ];
+   for(const [label,status,action] of steps){const row=make('li');row.dataset.stepState=status;row.append(make('strong','',label),make('span','se-step-state',({done:t('مكتمل الإعداد','Setup complete'),action:t('راجع المطلوب منك','Review your action'),working:t('المنصة تعمل في الخلفية','The platform is working in the background'),available:t('افتح النتيجة وحالة القياس','Open outcomes and measurement status'),waiting:t('المنصة تتابع بعد اكتمال الخطوة السابقة','The platform follows after the preceding step')})[status]),action);journeySteps.append(row);}
+  };
   // بدل 4 كروت بتكرر التبويبات: ملخص باللي المنصة عملته فعلًا على الموقع
   const results=make('article','se-card se-results-card');
   const resultsTitle=make('h3','',t('اللي اتعمل على موقعك','What was done on your website'));
@@ -65,11 +82,13 @@
   let summaryFor='';
   const siteUrl=path=>{const o=document.getElementById('seWebsite')?.selectedOptions?.[0];const host=(o?.textContent||'').trim();return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)?'https://'+host+(path||'/'):'';};
   const loadSummary=async()=>{
-   if(!state||state.websiteId!==selected())return;const key=state.websiteId+':'+state.runs.map(r=>r.id+r.status).join(',');if(key===summaryFor)return;summaryFor=key;
+   if(!state||state.websiteId!==selected())return;const key=state.websiteId+':'+state.runs.map(r=>r.id+r.status+':'+(r.revision||'')).join(',');if(key===summaryFor)return;summaryFor=key;
    const ids=state.runs.slice(0,5).map(r=>r.id);let changes=0,articles=0,pagesScanned=null;const items=[];
    for(const id of ids){
     let d;try{d=await (await fetch('/api/seo-expert/runs/'+id,{credentials:'same-origin',headers:{Accept:'application/json'}})).json();}catch(e){continue;}
     if(!d||!d.success)continue;const run=d.data.run||{},tasks=d.data.tasks||[];
+    if(key!==summaryFor)return;
+    if(Number(id)===Number(state.runs[0]?.id)){latestTasks=tasks;renderNext();}
     if(pagesScanned===null){let snap=run.snapshot;if(typeof snap==='string'){try{snap=JSON.parse(snap);}catch(e){snap=null;}}if(snap&&Array.isArray(snap.pages))pagesScanned=snap.pages.length;}
     for(const task of tasks){
      const done=task.status==='verified';
@@ -105,10 +124,11 @@
    if(!selected()){nextText.textContent=t('أضف موقعك أو اختَر موقعًا من القائمة لبدء الخدمة.','Add or choose a website to begin.');const a=make('a','p-btn',t('إدارة المواقع','Manage websites'));a.href='/websites';nextActions.append(a);return;}
    if(!state||state.websiteId!==selected()){nextText.textContent=t('جارٍ تحميل حالة الموقع. لو استمر الانتظار، اضغط تحديث الحالة.','Loading website state. If this continues, choose Refresh status.');return;}
    if(!state.configured){nextText.textContent=t('أكمل بيانات الشركة وحدود العمل، ثم ابدأ أول فحص.','Complete company facts and work limits, then start your first inspection.');nextActions.append(link('settings',t('أكمل الإعداد','Complete setup')));}
-   else if(!state.workerReady){nextText.textContent=t('المتابعة في الخلفية تحتاج مراجعة مهام السيرفر. راجع التنبيه أدناه قبل بدء دورة.','Background work requires attention to the server worker. Review the notice below before starting a cycle.');nextActions.append(link('settings',t('راجع الإعدادات','Review settings')));}
+   else if(!state.workerReady){nextText.textContent=t('المتابعة غير متاحة من المنصة حاليًا. عملك السابق محفوظ؛ تواصل مع الدعم لو استمر التنبيه.','Background processing is unavailable from the platform. Existing work is preserved; contact support if this continues.');nextActions.append(link('results',t('راجع العمل المحفوظ','Review saved work')));}
+   else if(state.runs.some(r=>['queued','scanning','scanned','planning','executing','monitoring'].includes(r.status))){const run=state.runs.find(r=>['queued','scanning','scanned','planning','executing','monitoring'].includes(r.status));nextText.textContent=t('المنصة تعمل على دورتك في الخلفية. افتحها لمتابعة الحالة تلقائيًا؛ لا تحتاج بدء دورة أخرى أو إبقاء الصفحة مفتوحة.','The platform is processing your existing cycle. Open it for automatic status updates; no new cycle or open browser is required.');nextActions.append(runLink(run));}
    else if(state.cycleBlock&&/limit|الحد/i.test(state.cycleBlock)){nextText.textContent=t('خلصت الدورات المسموحة الشهر ده. التعديلات المتحققة سابقًا معروضة تحت؛ أعد التحقق من حالتها الحالية. لو عايز فحص جديد دلوقتي علّي الحد من الإعدادات، وإلا هتتجدد الشهر الجاي.','You used this month’s cycles. Previously verified changes are listed below; recheck their current state. To scan again now, raise the limit in settings; otherwise it renews next month.');nextActions.append(link('settings',t('علّي الحد','Raise the limit')),link('results',t('النتائج','Results')));}
    else if(state.cycleBlock){nextText.textContent=state.cycleBlock;nextActions.append(link('plan',t('تابع الدورة الحالية','Follow the current cycle')));}
-   else if(state.runs.length){nextText.textContent=t('راجع آخر دورة والمهام المطلوبة قبل بدء دورة جديدة.','Review your latest cycle and required tasks before starting a new one.');nextActions.append(runLink(state.runs[0]));}
+   else if(state.runs.length){const tasks=latestTasks||[],excluded=x=>['excluded','needs_evidence'].includes(x.recommendation_review?.state),pending=tasks.filter(x=>x.status==='pending'&&!excluded(x)).length,client=tasks.filter(x=>x.status==='needs_client'&&!excluded(x)&&x.follow_up?.state!=='waiting_google').length;nextText.textContent=pending?t('الخطة جاهزة. راجع واعتمد المقترحات المناسبة؛ المنصة تنفذ المعتمد وتتحقق من ظهوره. مقترحات للمراجعة: ','Your plan is ready. Review suitable proposals; the platform executes approved work and verifies it. Proposals to review: ')+pending:client?t('المطلوب منك الآن معلومات أو إجراءات محددة داخل الخطة. مهام للمراجعة: ','Your plan needs specific information or external actions. Tasks to review: ')+client:t('تابع آخر دورة ونتائجها. القياس يحتاج اكتمال فترته؛ وجود تعديل على الموقع لا يثبت تحسن الترتيب.','Review your latest cycle and results. Measurement needs a complete window; a visible edit does not establish ranking improvement.');nextActions.append(runLink(state.runs[0]),link('results',t('النتائج','Results')));}
    else {nextText.textContent=t('إعداداتك محفوظة. افتح الفحص وراجع الاستخدام المعروض قبل البدء.','Setup is saved. Open inspection and review the displayed usage before starting.');nextActions.append(link('scan',t('ابدأ الفحص','Start inspection')));}
   };
   const runLink=run=>{const source=root.querySelector('#seRuns [data-run="'+run.id+'"]');const a=link('plan',source?.textContent||'#'+run.id);a.dataset.seOpenRun=String(run.id);return a;};
@@ -122,22 +142,24 @@
    document.title=info[1]+' | Tourfecto';updateLinks();adoptModules();
    window.dispatchEvent(new CustomEvent('tourfecto-seo-page',{detail:{page:active,websiteId:selected()}}));
    if(focus)heading.focus({preventScroll:true});
+   if(active==='plan')openLatest();
   };
+  const openLatest=()=>{setTimeout(()=>{if(active!=='plan'||!state||state.websiteId!==selected()||document.getElementById('seDetail')?.children.length||root.hasAttribute('aria-busy'))return;const b=root.querySelector('#seRuns [data-run="'+Number(state.runs[0]?.id)+'"]');if(b&&!b.disabled)b.click();},0);};
   const go=page=>{const next=allowed.has(page)?page:'overview';if(next!==active)history.pushState(null,'',urlFor(next));show(next,true);};
   root.addEventListener('click',event=>{
    const a=event.target.closest('a[data-se-page]');if(!a||event.defaultPrevented||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
    event.preventDefault();if(a.dataset.seOpenRun){const b=root.querySelector('#seRuns [data-run="'+Number(a.dataset.seOpenRun)+'"]');if(b&&!b.disabled)b.click();}go(a.dataset.sePage);
   });
   window.addEventListener('popstate',()=>{const page=pageFromURL();history.replaceState(null,'',urlFor(page));show(page,true);});
-  window.addEventListener('tourfecto-seo-overview',event=>{const d=event.detail;if(!d||d.websiteId!==selected())return;state=d;const worker=document.getElementById('seWorker');if(worker)worker.hidden=!!d.workerReady;renderNext();renderRuns();updateLinks();loadSummary();history.replaceState(null,'',urlFor(active));});
-  document.getElementById('seWebsite').addEventListener('change',()=>{state=null;renderNext();renderRuns();updateLinks();history.replaceState(null,'',urlFor(active));});
+  window.addEventListener('tourfecto-seo-overview',event=>{const d=event.detail;if(!d||d.websiteId!==selected())return;if(state?.runs[0]?.id!==d.runs[0]?.id)latestTasks=null;state=d;const worker=document.getElementById('seWorker');if(worker)worker.hidden=!!d.workerReady;renderNext();renderRuns();renderJourney();updateLinks();loadSummary();openLatest();history.replaceState(null,'',urlFor(active));});
+  document.getElementById('seWebsite').addEventListener('change',()=>{state=null;latestTasks=null;renderNext();renderRuns();renderJourney();updateLinks();history.replaceState(null,'',urlFor(active));});
   // Existing transfers keep their content and permissions; navigation only reveals the destination.
   for(const name of ['tourfecto-editor-open','tourfecto-editor-draft','tourfecto-editor-task'])window.addEventListener(name,()=>go('execute'));
   window.addEventListener('tourfecto-seo-cycle-started',()=>go('plan'));
   const observer=new MutationObserver(()=>{if(!frame)frame=requestAnimationFrame(()=>{frame=0;adoptModules();updateLinks();});});
   observer.observe(root.parentElement,{childList:true,subtree:true});
   window.addEventListener('pagehide',event=>{if(!event.persisted){observer.disconnect();if(frame)cancelAnimationFrame(frame);}},{once:true});
-  renderNext();renderRuns();show(active);
+  renderNext();renderRuns();renderJourney();show(active);
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();

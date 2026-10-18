@@ -70,7 +70,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
         await page.locator('#localKeywords').fill('Luxor tours\nCairo tours');
         await page.locator('#localRun').click();
         await page.waitForFunction(() => !document.querySelector('#localRun').disabled);
-        check((await page.locator('#localStatus').innerText()).includes('Confirm paid Maps'), 'unconfirmed Maps request reaches the payment guard, not a missing-website error');
+        check((await page.locator('#localStatus').innerText()).includes('الاستهلاك المدفوع'), 'unconfirmed Maps request reaches the payment guard, not a missing-website error');
         check(writes.find(w => w.op === 'run').body.paid_confirmed === false, 'Maps paid consent remains explicitly false until checked');
         await page.locator('#localPaid').check();
         await page.locator('#localRun').click();
@@ -79,7 +79,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
         await page.locator('#localLinks').click();
         await page.waitForFunction(() => !document.querySelector('#localLinks').disabled);
         check((await page.locator('#localLinkGap').innerText()).includes('editor.example'), 'link-gap action retains website scope through JSON transport');
-        check(writes.length === 5, 'each local customer click makes exactly one write request');
+        check(writes.length === 6 && writes.filter(w => w.op === 'profile').length === 1 && writes.filter(w => w.op === 'nap').length === 2, 'one confirmation saves once and starts one comparison without replaying writes');
       } else {
         await page.waitForFunction(() => document.querySelector('#intlSitemapResult').textContent.includes('submitted'));
         await page.locator('#intlGenerate').click();

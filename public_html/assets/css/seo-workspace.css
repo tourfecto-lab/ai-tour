@@ -26,6 +26,12 @@
 #seoExpertRoot .se-stat span{font-size:13px;opacity:.8}
 #seoExpertRoot .se-recent{margin:0;padding-inline-start:18px;line-height:2}
 #seoExpertRoot .se-recent a{color:inherit;text-underline-offset:3px}
+#seoExpertRoot .se-journey ol{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding-inline-start:24px}
+#seoExpertRoot .se-journey li{padding:16px;border:1px solid var(--panel-border);border-radius:10px;overflow-wrap:anywhere}
+#seoExpertRoot .se-journey li strong,#seoExpertRoot .se-step-state{display:block;margin-bottom:8px}
+#seoExpertRoot .se-step-state{font-size:13px;opacity:.85}
+#seoExpertRoot .se-journey [data-step-state=done]{border-inline-start:3px solid #308455}
+#seoExpertRoot .se-journey [data-step-state=working]{border-inline-start:3px solid #b08a46}
 @media(max-width:700px){
  #seoExpertRoot .se-stats{gap:8px}
  #seoExpertRoot .se-stat{padding:10px}
@@ -38,4 +44,5 @@
  #seoExpertRoot #seConnectionSummary{display:block;margin-inline-end:0}
  #seoExpertRoot .se-page-heading h2{font-size:20px}
  #seoExpertRoot .se-actions input.p-select{min-width:0;max-width:100%}
+ #seoExpertRoot .se-journey ol{grid-template-columns:1fr}
 }

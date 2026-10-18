@@ -3,7 +3,15 @@
 ob_start();
 class Database {
     public array $writes=[];
+    public array $reads=[];
+    public ?array $savedProfile=null;
     public function exec($sql,$args): void {$this->writes[]=[$sql,$args];}
+    public function query($sql,$args): array {
+        $this->reads[]=[$sql,$args];
+        if(str_contains($sql,'SELECT profile_json'))return $this->savedProfile?[['profile_json'=>json_encode($this->savedProfile)]]:[];
+        if(str_contains($sql,'seo_local_grid_runs')||str_contains($sql,'seo_citation_tasks'))return [];
+        throw new RuntimeException('Unexpected offline query');
+    }
 }
 class Controller {
     protected Database $db;
@@ -65,5 +73,11 @@ check(!$result['success']&&count($db->writes)===$before,'foreign website IDs can
 GbpSyncService::$connected=false;
 $result=(new LocalSeoController($input,$db))->profile();
 check(!$result['success']&&count($db->writes)===$before,'the no-coordinate path still requires a connected GBP account');
+$db->savedProfile=$profile+['directory_profiles'=>$input['directory_profiles'],'confirmed_at'=>'2026-10-18T08:00:00Z','private_marker'=>'must not be exposed'];
+$result=(new LocalSeoController(['website_id'=>33],$db))->data();
+check($result['success']&&$result['data']['profile']['directory_profiles']===$input['directory_profiles'],'reopening the page restores the customer-approved directory profiles');
+check(!array_intersect(['private_marker','place_id','latitude'],array_keys($result['data']['profile'])),'read-only guidance exposes only the required business facts');
+check($result['data']['maps_grid_ready']===false,'saved NAP facts do not imply map coordinates are available');
+check(array_reduce($db->reads,fn($ok,$read)=>$ok&&$read[1]===[33,1],true),'saved guidance reads remain scoped by website and customer');
 echo $n.' assertions passed'.PHP_EOL;
 ob_end_flush();
