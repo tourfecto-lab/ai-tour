@@ -130,6 +130,7 @@ return [
     'PlansStudioController' => dirname(__DIR__,2).'/app/Controllers/PlansStudioController.php',
     'SeoConnectedTaskVerifier' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoConnectedTaskVerifier.php',
     'SeoRecommendationReview' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoRecommendationReview.php',
+    'SeoTaskFollowUp' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoTaskFollowUp.php',
     'SeoSchemaBuilder' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoSchemaBuilder.php',
     'PageSpeedService' => dirname(__DIR__,2).'/app/Services/Seo/PageSpeedService.php',
     'SeoTrafficAlertService' => dirname(__DIR__,2).'/app/Services/Seo/SeoTrafficAlertService.php',

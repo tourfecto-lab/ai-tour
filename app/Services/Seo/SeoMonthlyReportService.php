@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__.'/../SeoExpert/SeoTaskFollowUp.php';
+require_once __DIR__.'/../SeoExpert/SeoRecommendationReview.php';
 /** Calendar-month, Arabic, print/PDF-friendly reports; absent sources stay unknown. */
 class SeoMonthlyReportService
 {
@@ -11,8 +13,24 @@ class SeoMonthlyReportService
     public static function assemble(array $sources,array $period): array {
         return ['period'=>$period,'gsc'=>$sources['gsc']??['state'=>'not_connected'],'rankings'=>$sources['rankings']??[],
             'ai_visibility'=>$sources['ai_visibility']??[],'core_web_vitals'=>$sources['core_web_vitals']??null,'tasks'=>$sources['tasks']??[],
-            'impact'=>$sources['impact']??[],'next_plan'=>$sources['next_plan']??[],
+            'impact'=>$sources['impact']??[],'next_plan'=>$sources['next_plan']??[],'google_follow_up'=>$sources['google_follow_up']??[],'excluded_proposals'=>$sources['excluded_proposals']??[],
             'note'=>'مقارنة قبل/بعد رصدية وليست إثباتًا أن التعديل سبب النتيجة. القيم غير المتاحة ليست صفرًا.'];
+    }
+    /** Current next-step plan, separate from the historical reporting-period metrics. */
+    public static function followUpPlan(array $tasks,?int $now=null): array {
+        $out=['next_plan'=>[],'google_follow_up'=>[],'excluded_proposals'=>[]];
+        foreach($tasks as $task){
+            $snapshot=json_decode((string)($task['snapshot_json']??''),true)?:[];
+            $task['recommendation_review']=$task['recommendation_review']??SeoRecommendationReview::assess($task,$snapshot['pages']??[]);
+            $follow=SeoTaskFollowUp::forTask($task,$now);
+            $bucket=$follow['state']==='waiting_google'?'google_follow_up':($follow['state']==='excluded'?'excluded_proposals':'next_plan');
+            if(count($out[$bucket])>=10)continue;
+            $row=array_intersect_key($task,array_flip(['id','title','instructions','page_url']));
+            $row['follow_up']=$follow;
+            if($bucket==='excluded_proposals')$row['review_reason']=$task['recommendation_review']['reason'];
+            $out[$bucket][]=$row;
+        }
+        return $out;
     }
     public function data(int $uid,int $wid,?string $now=null): array {
         (new SeoMarketService($this->db))->site($wid,$uid);$period=self::month($now);$start=$period['start'];$end=$period['end'].' 23:59:59';$sources=[];
@@ -33,7 +51,16 @@ class SeoMonthlyReportService
         }
         if($this->has('seo_expert_tasks')){
             $sources['tasks']=$this->db->query("SELECT id,title,page_url,published_url,status,checked_at FROM seo_expert_tasks WHERE website_id=? AND user_id=? AND status IN ('active','verified') AND updated_at BETWEEN ? AND ? ORDER BY id",[$wid,$uid,$start,$end]);
-            $sources['next_plan']=$this->db->query("SELECT title,instructions,page_url FROM seo_expert_tasks WHERE website_id=? AND user_id=? AND status IN ('pending','needs_client') AND created_at<=? ORDER BY id DESC LIMIT 10",[$wid,$uid,$end]);
+            $candidates=$this->db->query("SELECT * FROM seo_expert_tasks WHERE website_id=? AND user_id=? AND status IN ('pending','needs_client') AND created_at<=? ORDER BY id DESC LIMIT 1000",[$wid,$uid,$end]);
+            // Fetch each owned run once; never multiply its potentially large snapshot per task row.
+            $groups=[];foreach($candidates as $index=>$task)$groups[(int)$task['run_id']][]=$index;
+            $hasRuns=$this->has('seo_expert_runs');
+            foreach($groups as $runId=>$indices){
+                $run=$hasRuns?$this->db->query('SELECT snapshot_json FROM seo_expert_runs WHERE id=? AND website_id=? AND user_id=? LIMIT 1',[$runId,$wid,$uid]):[];
+                $snapshot=json_decode((string)($run[0]['snapshot_json']??''),true)?:[];
+                foreach($indices as $index)$candidates[$index]['recommendation_review']=SeoRecommendationReview::assess($candidates[$index],$snapshot['pages']??[]);
+            }
+            $sources=array_replace($sources,self::followUpPlan($candidates));
         }
         if($this->has('seo_impact_monitors')){
             $sources['impact']=$this->db->query('SELECT id,page_url,window_days,status,result_json,last_collected_at FROM seo_impact_monitors WHERE website_id=? AND user_id=? AND created_at<=? ORDER BY id DESC LIMIT 100',[$wid,$uid,$end]);
@@ -50,6 +77,7 @@ class SeoMonthlyReportService
         $html.='<h2>الظهور في عينات إجابات الذكاء الاصطناعي</h2><ul>';foreach($data['ai_visibility'] as $a)$html.='<li>'.$e($a['provider']).' · السوق '.$e($a['market_id']).': '.$e(round((float)$a['share_of_voice']*100,1)).'% من '.$e($a['samples']).' عينة</li>';$html.='</ul><p>هذه عينات API وليست ترتيبًا في تطبيقات المستهلكين.</p>';
         $html.='<h2>Core Web Vitals</h2>';if(empty($data['core_web_vitals']['samples']))$html.='<p>غير مقاس في هذا الشهر</p>';foreach($data['core_web_vitals']['samples']??[] as $sample){$html.='<p>'.$e($sample['url']??'').' · '.$e($data['core_web_vitals']['captured_at']??'').'</p>';foreach(['field'=>'بيانات المستخدمين الحقيقية','lab'=>'قياس المختبر'] as $key=>$label){$html.='<p>'.$label.': ';$values=[];foreach($sample[$key]??[] as $k=>$v)if(is_scalar($v))$values[]=$e($k).': '.$e($v);$html.=($values?implode(' · ',$values):$unknown).'</p>';}}
         $html.='<h2>المهام المطبقة والتحقق</h2><ul>';foreach($data['tasks'] as $t)$html.='<li>'.$e($t['title']).' — '.$e($t['status']==='verified'?'تم التحقق':'مطبق؛ التحقق قيد الانتظار').'</li>';$html.='</ul><h2>الأثر المقاس — نوافذ 7/14/28 يومًا</h2><table><tr><th>الصفحة</th><th>النافذة</th><th>المهام المرتبطة</th><th>نقرات قبل / بعد</th><th>الحالة</th></tr>';
-        foreach($data['impact'] as $i){$b=$i['result']['search']['before']['clicks']??null;$a=$i['result']['search']['after']['clicks']??null;$html.='<tr><td>'.$e($i['page_url']).'</td><td>'.$e($i['window_days']).'</td><td>'.$e(implode(', ',$i['task_ids']??[])).'</td><td>'.$e($b??$unknown).' / '.$e($a??$unknown).'</td><td>'.$e($i['status']).'</td></tr>';}$html.='</table><h2>خطة الشهر القادم للمراجعة</h2><ul>';foreach($data['next_plan'] as $p)$html.='<li><strong>'.$e($p['title']).'</strong><p>'.$e($p['instructions']).'</p></li>';$html.='</ul><p>'.$e($data['note']).'</p></body></html>';return $html;
+        foreach($data['impact'] as $i){$b=$i['result']['search']['before']['clicks']??null;$a=$i['result']['search']['after']['clicks']??null;$html.='<tr><td>'.$e($i['page_url']).'</td><td>'.$e($i['window_days']).'</td><td>'.$e(implode(', ',$i['task_ids']??[])).'</td><td>'.$e($b??$unknown).' / '.$e($a??$unknown).'</td><td>'.$e($i['status']).'</td></tr>';}$html.='</table><h2>متابعة زحف Google — الحالة وقت إعداد التقرير</h2><ul>';foreach($data['google_follow_up']??[] as $t)$html.='<li>'.$e($t['page_url']??$t['title']).' — '.$e($t['follow_up']['reason']).' — '.$e($t['follow_up']['checked_at']??'').'</li>';$html.='</ul><h2>اقتراحات مستبعدة من الاعتماد</h2><ul>';foreach($data['excluded_proposals']??[] as $t)$html.='<li>'.$e($t['title']).' — '.$e($t['review_reason']).'</li>';$html.='</ul>';
+        $html.='<h2>خطة الشهر القادم — مراجعة العميل وقت إعداد التقرير</h2><ul>';foreach($data['next_plan'] as $p)$html.='<li><strong>'.$e($p['title']).'</strong><p>'.$e($p['instructions']).'</p></li>';$html.='</ul><p>'.$e($data['note']).'</p></body></html>';return $html;
     }
 }

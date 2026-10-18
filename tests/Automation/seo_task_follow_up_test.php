@@ -1,0 +1,36 @@
+<?php
+require __DIR__.'/../../app/Services/SeoExpert/SeoTaskFollowUp.php';
+$n=0;function check($ok,$label){global $n;if(!$ok)throw new RuntimeException($label);$n++;echo "PASS $label\n";}
+$now=strtotime('2026-10-18 12:00:00 UTC');$observation=['kind'=>'indexing','state'=>'needs_review','reason_code'=>'discovered_not_crawled','checked_at'=>'2026-10-18T11:00:00Z','observed'=>['indexed'=>false,'verdict'=>'NEUTRAL','reason'=>'discovered_not_crawled','fetch'=>'PAGE_FETCH_STATE_UNSPECIFIED','robots'=>'ROBOTS_TXT_STATE_UNSPECIFIED','last_crawl'=>null]];
+$task=['kind'=>'manual','status'=>'needs_client','field_name'=>'gsc_indexing','page_url'=>'https://example.com/tours/luxor','evidence'=>['latest_connected_attempt'=>$observation]];
+$state=fn($t=null)=>SeoTaskFollowUp::forTask($t??$task,$now)['state'];
+check($state()==='waiting_google','recent discovered/not crawled observation is Google follow-up');
+check($task['status']==='needs_client','derived follow-up does not mutate stored task');
+$change=function(array $patch,array $observed=[])use($task,$observation){$t=$task;$t['evidence']['latest_connected_attempt']=array_replace($observation,$patch,['observed'=>array_replace($observation['observed'],$observed)]);return $t;};
+foreach(['unknown_to_google','crawled_not_indexed','robots_blocked','noindex','fetch_server_error','google_chose_other_canonical'] as $reason)check($state($change(['reason_code'=>$reason],['reason'=>$reason]))==='needs_review','real review remains customer work: '.$reason);
+check($state($change(['checked_at'=>'2026-10-16T11:00:00Z']))==='needs_check','stale Google observation requires refresh');
+check($state($change(['checked_at'=>'not a date']))==='needs_check','invalid observation date cannot imply waiting');
+check($state($change(['checked_at'=>'2026-10-19T11:00:00Z']))==='needs_check','future observation cannot imply waiting');
+check($state($change(['state'=>'not_measured']))==='needs_check','latest unavailable attempt cannot reuse old certainty');
+check($state($change(['kind'=>'sitemap']))==='needs_check','other-system proof cannot imply indexing wait');
+check($state($change([],['fetch'=>'SERVER_ERROR']))==='needs_review','contradictory fetch failure is not waiting');
+check($state($change([],['robots'=>'DISALLOWED']))==='needs_review','robots block is not waiting');
+check($state($change([],['last_crawl'=>'2026-10-17T12:00:00Z']))==='needs_review','already crawled contradiction is not waiting');
+check($state($change([],['verdict'=>'FAIL']))==='needs_review','failed verdict is not waiting');
+check($state($change([],['indexed'=>true]))==='needs_review','inconsistent indexed response is not waiting');
+check($state(array_replace($task,['evidence'=>[]]))==='needs_check','old task without measured Google proof requires refresh');
+$legacy=$task;unset($legacy['evidence']);$legacy['evidence_json']=json_encode(['check'=>$observation]);check($state($legacy)==='waiting_google','stored JSON evidence supports legacy task detail');
+check($state(array_replace($task,['status'=>'verified']))==='verified','verified task remains a dated verification');
+check($state(array_replace($task,['recommendation_review'=>['state'=>'excluded']]))==='excluded','excluded task cannot become pending Google work');
+check($state(array_replace($task,['kind'=>'metadata','status'=>'approved']))==='in_progress','approved site changes remain in progress');
+check($state(array_replace($task,['page_url'=>'https://example.com/quiz']))==='needs_review','operational indexing intent remains a customer decision');
+require __DIR__.'/../../app/Services/Seo/SeoMonthlyReportService.php';
+$reportTasks=[$task+['id'=>1,'title'=>'Waiting page','instructions'=>'Follow crawling'],array_replace($change(['reason_code'=>'noindex'],['reason'=>'noindex']),['id'=>2,'title'=>'Fix unintended noindex','instructions'=>'Review indexing intent.']),['id'=>3,'kind'=>'metadata','status'=>'pending','page_url'=>'https://example.com/quiz','title'=>'Retained wrong proposal','instructions'=>'Retained history.']];
+$plan=SeoMonthlyReportService::followUpPlan($reportTasks,$now);
+check(count($plan['google_follow_up'])===1&&count($plan['next_plan'])===1&&count($plan['excluded_proposals'])===1,'monthly report separates Google follow-up, customer action and excluded history');
+check(!isset($plan['google_follow_up'][0]['evidence'],$plan['google_follow_up'][0]['snapshot_json']),'report projection does not expose raw connection evidence or page snapshot');
+$data=SeoMonthlyReportService::assemble($plan,['start'=>'2026-09-01','end'=>'2026-09-30']);
+$html=SeoMonthlyReportService::html($data,'https://example.com');
+check(str_contains($html,'متابعة زحف Google')&&str_contains($html,'وقت إعداد التقرير'),'report labels follow-up as current, separate from historical monthly metrics');
+check(strpos($html,'Waiting page')===false||substr_count($html,'Waiting page')===1,'waiting task is not duplicated into customer work');
+echo "$n assertions passed\n";
