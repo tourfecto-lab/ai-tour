@@ -13,7 +13,7 @@ final class SeoImpactController extends Controller {
             if($op==='bookings')return $this->success($s->configureBookings($uid,$wid,($this->data['enabled']??false)===true));
             return $this->error('Unsupported operation',422);
         }catch(InvalidArgumentException $e){return $this->error($e->getMessage(),422);}
-        catch(Throwable $e){Logger::warning('SEO measurement needs review',['user_id'=>$uid,'website_id'=>$wid,'operation'=>$op]);return $this->error('Measurement unavailable. Review SQL, worker and provider connections. / راجع SQL ومهام السيرفر وربط المصادر.',503);}
+        catch(Throwable $e){Logger::warning('SEO measurement needs review',['user_id'=>$uid,'website_id'=>$wid,'operation'=>$op]);return $this->error('Measurement is temporarily unavailable. Your saved work is retained; retry or contact support. / القياس غير متاح مؤقتًا. عملك محفوظ؛ أعد المحاولة أو تواصل مع الدعم.',503);}
     }
     public function overview(array $p=[]): array{return $this->action('overview',$p);}
     public function create(array $p=[]): array{return $this->action('create',$p);}

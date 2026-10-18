@@ -53,7 +53,16 @@ final class SeoImpactService {
         $changes=$this->db->query('SELECT id,page_url,change_date,source FROM seo_impact_changes WHERE user_id=? AND website_id=? ORDER BY id DESC LIMIT 50',[$uid,$wid]);
         $sources=$this->db->query('SELECT enabled,source_status,tracking_started_at,last_received_at FROM seo_booking_sources WHERE user_id=? AND website_id=?',[$uid,$wid]);
         $ai=$this->db->query('SELECT provider,page_path,date_start,date_end,citations,source_kind,evidence_url FROM seo_ai_observations WHERE user_id=? AND website_id=? ORDER BY id DESC LIMIT 30',[$uid,$wid]);
-        return ['installed'=>true,'monitors'=>$monitors,'changes'=>$changes,'booking_source'=>$sources[0]??null,'ai'=>$ai,'note'=>'Before/after is observational; seasons, ads, other edits and tracking changes can affect results.'];
+        $summary=$this->db->query("SELECT COUNT(*) history_count,
+            COALESCE(SUM(status<>'superseded'),0) active_comparisons,
+            COUNT(DISTINCT CASE WHEN status<>'superseded' THEN page_hash END) monitored_pages,
+            COALESCE(SUM(status='reported' AND result_json IS NOT NULL),0) collected_comparisons,
+            COALESCE(SUM(status IN ('queued','waiting_period','waiting_data')),0) waiting_comparisons,
+            COALESCE(SUM(status NOT IN ('superseded','reported','queued','waiting_period','waiting_data')),0) needs_review_comparisons,
+            MIN(CASE WHEN status IN ('queued','waiting_period','waiting_data') THEN COALESCE(next_due_at,TIMESTAMP(DATE_ADD(change_date,INTERVAL (window_days+3) DAY),'04:00:00')) END) next_collection_at
+            FROM seo_impact_monitors WHERE user_id=? AND website_id=?",[$uid,$wid])[0];
+        foreach(['history_count','active_comparisons','monitored_pages','collected_comparisons','waiting_comparisons','needs_review_comparisons'] as $key)$summary[$key]=(int)$summary[$key];
+        return ['installed'=>true,'summary'=>$summary,'measurement_sources'=>(new SeoImpactSources($this->db))->readiness($uid,$wid,$site['url']),'monitors'=>$monitors,'changes'=>$changes,'booking_source'=>$sources[0]??null,'ai'=>$ai,'note'=>'Before/after is observational; seasons, ads, other edits and tracking changes can affect results.'];
     }
     public function create(int $uid,int $wid,array $in): array {
         $this->requireReady();$site=$this->site($uid,$wid);$anchorSource='client_declared_date';
@@ -120,10 +129,11 @@ final class SeoImpactService {
     }
     public function configureBookings(int $uid,int $wid,bool $enabled): array {
         $this->requireReady();$site=$this->site($uid,$wid);if(!$enabled){$this->db->query('UPDATE seo_booking_sources SET enabled=0 WHERE website_id=? AND user_id=?',[$wid,$uid]);return $this->overview($uid,$wid);}
+        $base=defined('APP_URL')?APP_URL:'';if(!str_starts_with((string)$base,'https://'))throw new InvalidArgumentException('Configure HTTPS APP_URL before linking booking receipts.');
+        $source=new SeoImpactSources($this->db);$source->assertWordPressTarget($uid,$wid,$site['url']);
         $r=$this->db->query('SELECT * FROM seo_booking_sources WHERE website_id=? AND user_id=?',[$wid,$uid]);$secret=$r?(new Encryption())->decrypt($r[0]['secret_enc']):bin2hex(random_bytes(32));
         $this->db->query("INSERT INTO seo_booking_sources(website_id,user_id,secret_enc,source_url,enabled,tracking_started_at) VALUES(?,?,?,?,1,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE enabled=1,source_url=VALUES(source_url),user_id=VALUES(user_id),secret_enc=VALUES(secret_enc),source_status='pending'",[$wid,$uid,(new Encryption())->encrypt($secret),$site['url']]);
-        $base=defined('APP_URL')?APP_URL:'';if(!str_starts_with((string)$base,'https://'))throw new InvalidArgumentException('Configure HTTPS APP_URL before linking booking receipts.');
-        (new SeoImpactSources($this->db))->wordpress($uid,$wid,$site['url'],['endpoint'=>rtrim($base,'/').'/api/seo-impact/booking/'.$wid,'secret'=>$secret]);$this->db->query("UPDATE seo_booking_sources SET source_status='connected' WHERE website_id=? AND user_id=?",[$wid,$uid]);return $this->overview($uid,$wid);
+        $source->wordpress($uid,$wid,$site['url'],['endpoint'=>rtrim($base,'/').'/api/seo-impact/booking/'.$wid,'secret'=>$secret]);$this->db->query("UPDATE seo_booking_sources SET source_status='connected' WHERE website_id=? AND user_id=?",[$wid,$uid]);return $this->overview($uid,$wid);
     }
     public function ingest(int $wid,string $secret,array $in): void {
         $this->requireReady();if(!preg_match('/^[a-f0-9]{64}$/D',$secret))throw new InvalidArgumentException('Unauthorized booking source.');$r=$this->db->query('SELECT * FROM seo_booking_sources WHERE website_id=? AND enabled=1',[$wid]);if(!$r||!hash_equals((new Encryption())->decrypt($r[0]['secret_enc']),$secret))throw new InvalidArgumentException('Unauthorized booking source.');
