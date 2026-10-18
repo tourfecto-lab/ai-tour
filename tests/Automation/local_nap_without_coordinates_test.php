@@ -29,17 +29,26 @@ class SeoMarketService {
     public function site($wid,$uid): array{if($wid!==33||$uid!==1)throw new InvalidArgumentException('Website not found');return ['main_url'=>'https://customer.example'];}
 }
 class GbpSyncService {
-    public static bool $connected=true;
-    public function findConnection($wid,$uid){return new class {public function getAttribute($key){return $key==='status'?(GbpSyncService::$connected?'connected':'error'):'offline-id';}};}
+    public static ?string $status='connected';
+    public function findConnection($wid,$uid){if(self::$status===null)return null;return new class {public function getAttribute($key){return $key==='status'?GbpSyncService::$status:'offline-id';}};}
 }
-class GoogleReviewSyncService {public function getValidAccessToken($connection){return 'offline';}}
+class GoogleReviewSyncService {
+    public static bool $valid=true;
+    public function getValidAccessToken($connection){if(!self::$valid)throw new RuntimeException('Offline token denied');return 'offline';}
+}
 class GoogleBusinessAPI {
     public static array $location=[];
+    public static bool $available=true;
+    public static int $calls=0;
     public function __construct(...$args){}
-    public function getLocation(): array{return ['success'=>true,'location'=>self::$location];}
+    public function getLocation(): array{self::$calls++;return ['success'=>self::$available,'location'=>self::$location];}
 }
+class SeoPublicPageReader {public function fetch(string $url): array{return ['success'=>false];}}
 class Logger {public static function warning(...$args){}}
+require_once __DIR__.'/../../app/Core/Contracts/KeywordRankingSourceInterface.php';
+require_once __DIR__.'/../../app/Services/Seo/DataForSeoRankingSource.php';
 require_once __DIR__.'/../../app/Services/GoogleBusiness/LocalRankGridService.php';
+require_once __DIR__.'/../../app/Services/GoogleBusiness/NapConsistencyService.php';
 require_once __DIR__.'/../../app/Controllers/LocalSeoController.php';
 $n=0;
 function check($ok,string $label): void{global $n;if(!$ok)throw new RuntimeException($label);$n++;echo 'PASS '.$label.PHP_EOL;}
@@ -70,14 +79,42 @@ $result=(new LocalSeoController(array_replace($input,['confirmed'=>false]),$db))
 check(!$result['success']&&count($db->writes)===$before,'customer confirmation remains required before storing facts');
 $result=(new LocalSeoController(array_replace($input,['website_id'=>99]),$db))->profile();
 check(!$result['success']&&count($db->writes)===$before,'foreign website IDs cannot save the profile');
-GbpSyncService::$connected=false;
+GbpSyncService::$status='disconnected';
 $result=(new LocalSeoController($input,$db))->profile();
-check(!$result['success']&&count($db->writes)===$before,'the no-coordinate path still requires a connected GBP account');
+check(!$result['success']&&count($db->writes)===$before,'an explicitly disconnected GBP account cannot confirm its profile');
+GbpSyncService::$status='error';
+$result=(new LocalSeoController($input,$db))->profile();
+check($result['success']&&count($db->writes)===$before+1,'a saved sync error does not block confirmation when Google returns the actual profile');
+GoogleBusinessAPI::$available=false;$before=count($db->writes);
+$result=(new LocalSeoController($input,$db))->profile();
+check(!$result['success']&&count($db->writes)===$before,'a failed live Google read cannot save or confirm a historical error profile');
+GoogleBusinessAPI::$available=true;GoogleReviewSyncService::$valid=false;
+$result=(new LocalSeoController($input,$db))->profile();
+check(!$result['success']&&count($db->writes)===$before,'invalid OAuth credentials still prevent profile confirmation');
+GoogleReviewSyncService::$valid=true;
 $db->savedProfile=$profile+['directory_profiles'=>$input['directory_profiles'],'confirmed_at'=>'2026-10-18T08:00:00Z','private_marker'=>'must not be exposed'];
 $result=(new LocalSeoController(['website_id'=>33],$db))->data();
 check($result['success']&&$result['data']['profile']['directory_profiles']===$input['directory_profiles'],'reopening the page restores the customer-approved directory profiles');
 check(!array_intersect(['private_marker','place_id','latitude'],array_keys($result['data']['profile'])),'read-only guidance exposes only the required business facts');
 check($result['data']['maps_grid_ready']===false,'saved NAP facts do not imply map coordinates are available');
 check(array_reduce($db->reads,fn($ok,$read)=>$ok&&$read[1]===[33,1],true),'saved guidance reads remain scoped by website and customer');
+$result=(new NapConsistencyService($db))->check(1,33);
+check(count($result['observations'])===2&&$result['observations'][0]['fetch_state']==='unavailable','citation comparison retries a sync-error account and uses a fresh successful Google profile');
+check($result['observations'][0]['checks']['name']['expected']===GoogleBusinessAPI::$location['name'],'comparison uses the live official facts rather than claiming a stale profile is verified');
+check(count(array_filter($result['observations'][0]['checks'],fn($c)=>$c['state']==='unknown'))===4&&count($db->writes)===$before,'unavailable website and directory sources stay unknown and create no mismatch tasks');
+foreach(['disconnected','pending',null] as $status){
+    GbpSyncService::$status=$status;$calls=GoogleBusinessAPI::$calls;
+    $r=(new LocalSeoController($input,$db))->profile();
+    check(!$r['success']&&denied(fn()=>(new NapConsistencyService($db))->check(1,33))&&GoogleBusinessAPI::$calls===$calls,'inactive or absent connection cannot trigger Google reads or NAP confirmation: '.($status??'absent'));
+}
+GbpSyncService::$status='error';GoogleBusinessAPI::$available=false;
+try{(new NapConsistencyService($db))->check(1,33);$blocked=false;}catch(RuntimeException $e){$blocked=true;}
+check($blocked&&count($db->writes)===$before,'comparison fails closed when the live profile cannot be verified');
+GoogleBusinessAPI::$available=true;GoogleReviewSyncService::$valid=false;
+try{(new NapConsistencyService($db))->check(1,33);$blocked=false;}catch(RuntimeException $e){$blocked=true;}
+check($blocked&&count($db->writes)===$before,'comparison fails closed when token validation fails');
+GoogleReviewSyncService::$valid=true;$fresh=GoogleBusinessAPI::$location;GoogleBusinessAPI::$location['place_id']='another-branch';
+check(denied(fn()=>(new NapConsistencyService($db))->check(1,33))&&count($db->writes)===$before,'retrying a sync error cannot silently switch the confirmed business branch');
+GoogleBusinessAPI::$location=$fresh;
 echo $n.' assertions passed'.PHP_EOL;
 ob_end_flush();

@@ -41,7 +41,11 @@ class LocalSeoController extends Controller
             }
             if($op==='profile'){
                 if($this->get('confirmed',false)!==true)throw new InvalidArgumentException('Confirm the business location and profiles');
-                $connection=(new GbpSyncService())->findConnection($wid,$uid);if(!$connection||$connection->getAttribute('status')!=='connected')throw new InvalidArgumentException('Connect Google Business first');
+                $connection=(new GbpSyncService())->findConnection($wid,$uid);
+                // Review sync failures do not prove that profile access was revoked.
+                // Retry recoverable records; token validation and the live Google read
+                // below must both succeed before any customer facts are saved.
+                if(!$connection||!in_array($connection->getAttribute('status'),['connected','error'],true))throw new InvalidArgumentException('Connect Google Business first');
                 $token=(new GoogleReviewSyncService())->getValidAccessToken($connection);
                 $r=(new GoogleBusinessAPI($token,$connection->getAttribute('external_account_id'),$connection->getAttribute('external_location_id')))->getLocation();
                 if(empty($r['success']))throw new RuntimeException('GBP profile unavailable');$profile=$r['location'];

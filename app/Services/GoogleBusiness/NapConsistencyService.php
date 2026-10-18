@@ -47,7 +47,9 @@ class NapConsistencyService
         if($this->official)$fresh=($this->official)($uid,$wid);
         else {
             $connection=(new GbpSyncService())->findConnection($wid,$uid);
-            if(!$connection||$connection->getAttribute('status')!=='connected')throw new InvalidArgumentException('Reconnect Google Business before comparing citations');
+            // A review-sync error can coexist with working profile access. Verify
+            // the token and current profile instead of blocking on the saved flag.
+            if(!$connection||!in_array($connection->getAttribute('status'),['connected','error'],true))throw new InvalidArgumentException('Reconnect Google Business before comparing citations');
             $token=(new GoogleReviewSyncService())->getValidAccessToken($connection);
             $r=(new GoogleBusinessAPI($token,$connection->getAttribute('external_account_id'),$connection->getAttribute('external_location_id')))->getLocation();
             if(empty($r['success']))throw new RuntimeException('Current GBP profile unavailable');$fresh=$r['location'];
