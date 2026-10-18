@@ -42,6 +42,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
           if (op === 'run' && body.paid_confirmed !== true) return route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ success: false, error: 'Confirm paid Maps measurement first' }) });
           if (op === 'run') data = { run_id: 5 };
           if (op === 'nap') data = { observations: [] };
+          if (op === 'profile') data = { maps_grid_ready: false };
           if (op === 'links') data = { available: true, candidates: [{ domain: 'editor.example', signals: { linked_competitors: 2 }, collaboration_idea: 'Review actual evidence' }] };
         } else {
           if (op === 'sites') data = { sites: [{ id: 33, main_url: 'https://customer.example' }], builders: [{ id: 44, slug: 'confirmed-builder', status: 'published' }] };
@@ -64,6 +65,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
         await page.locator('#localProfile').click();
         await page.waitForFunction(() => !document.querySelector('#localProfile').disabled);
         check((await page.locator('#localStatus').innerText()).includes('حُفظ'), 'GBP confirmation works through the real Panel.fetchJSON helper');
+        check((await page.locator('#localStatus').innerText()).includes('يمكنك مقارنة') && (await page.locator('#localStatus').innerText()).includes('إحداثيات') && !writes.some(w => w.op === 'run'), 'NAP confirmation explains missing Maps coordinates without starting a grid');
         check(writes.find(w => w.op === 'profile').body.directory_profiles[0] === 'https://directory.example/customer' && writes.find(w => w.op === 'profile').body.confirmed === true, 'GBP identity confirmation and directory URLs survive JSON transport');
         await page.locator('#localKeywords').fill('Luxor tours\nCairo tours');
         await page.locator('#localRun').click();

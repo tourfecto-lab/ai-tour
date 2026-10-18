@@ -12,6 +12,13 @@ class LocalRankGridService
             $x=fmod($x+540,360)-180;$out[]=['row'=>$row,'col'=>$col,'latitude'=>round($y,6),'longitude'=>round($x,6)];
         }return $out;
     }
+    /** A confirmed NAP profile may have no Maps coordinates; never cast missing values to zero. */
+    public static function gridForProfile(array $profile,float $spacingKm=1): array
+    {
+        $lat=$profile['latitude']??null;$lng=$profile['longitude']??null;
+        if(!is_numeric($lat)||!is_numeric($lng))throw new InvalidArgumentException('GBP location has no confirmed coordinates for Maps measurement');
+        return self::grid((float)$lat,(float)$lng,$spacingKm);
+    }
     public static function rank(array $items,array $identity): ?int
     {
         foreach($items as $item){
@@ -35,7 +42,7 @@ class LocalRankGridService
         $keywords=array_values(array_unique(array_map('trim',$keywords)));if(count($keywords)<2||count($keywords)>$limit['keywords'])throw new InvalidArgumentException('Choose 2–'.$limit['keywords'].' keywords for this plan');
         foreach($keywords as $k)if($k===''||mb_strlen($k)>255||preg_match('/\b(?:site|inurl|intitle|filetype):/i',$k))throw new InvalidArgumentException('Invalid plain keyword');
         if(empty($profile['place_id'])&&empty($profile['cid']))throw new InvalidArgumentException('GBP must provide a stable Maps place ID/CID; names alone cannot identify a branch');
-        $points=self::grid((float)$profile['latitude'],(float)$profile['longitude'],$spacing);
+        $points=self::gridForProfile($profile,$spacing);
         $config=['profile'=>$profile,'market'=>$market,'keywords'=>$keywords,'points'=>$points];$hash=hash('sha256',json_encode($config,JSON_THROW_ON_ERROR));
         $id=$this->db->transaction(function()use($uid,$wid,$config,$hash,$limit){
             // Account-level lock and allowance shared across websites.

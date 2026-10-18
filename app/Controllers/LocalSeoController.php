@@ -20,14 +20,15 @@ class LocalSeoController extends Controller
                 $token=(new GoogleReviewSyncService())->getValidAccessToken($connection);
                 $r=(new GoogleBusinessAPI($token,$connection->getAttribute('external_account_id'),$connection->getAttribute('external_location_id')))->getLocation();
                 if(empty($r['success']))throw new RuntimeException('GBP profile unavailable');$profile=$r['location'];
-                if($profile['latitude']===null||$profile['longitude']===null)throw new InvalidArgumentException('GBP location has no confirmed coordinates');
-                LocalRankGridService::grid((float)$profile['latitude'],(float)$profile['longitude']);
+                // Name/phone/address checks do not require a customer-facing Maps pin.
+                // A rank grid still validates coordinates separately before any paid work.
+                try{LocalRankGridService::gridForProfile($profile);$mapsReady=true;}catch(InvalidArgumentException $e){$mapsReady=false;}
                 $query=[];parse_str((string)parse_url($profile['maps_uri']??'',PHP_URL_QUERY),$query);$profile['cid']=isset($query['cid'])&&preg_match('/^[0-9]+$/D',(string)$query['cid'])?(string)$query['cid']:null;
                 $dirs=$this->get('directory_profiles',[]);if(!is_array($dirs)||count($dirs)>15)throw new InvalidArgumentException('Maximum fifteen directory profiles');
                 foreach($dirs as $url)if(!is_string($url)||strlen($url)>1800||!filter_var($url,FILTER_VALIDATE_URL)||parse_url($url,PHP_URL_SCHEME)!=='https'||parse_url($url,PHP_URL_USER)||parse_url($url,PHP_URL_PASS))throw new InvalidArgumentException('Use public HTTPS directory profile URLs without credentials');
                 $profile['directory_profiles']=array_values(array_unique($dirs));$profile['confirmed_at']=gmdate('c');
                 $this->db->exec('REPLACE INTO seo_local_profiles(website_id,user_id,profile_json,updated_at) VALUES(?,?,?,UTC_TIMESTAMP())',[$wid,$uid,json_encode($profile,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
-                return $this->success(['profile'=>$profile]);
+                return $this->success(['profile'=>$profile,'maps_grid_ready'=>$mapsReady]);
             }
             if($op==='run'){
                 if($this->get('paid_confirmed',false)!==true)throw new InvalidArgumentException('Confirm paid Maps measurement first');

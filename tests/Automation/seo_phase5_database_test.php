@@ -18,7 +18,13 @@ $profile=['name'=>'Nile Travel','phone'=>'+201001234567','website'=>'https://exa
 $s=$pdo->prepare('INSERT INTO seo_local_profiles VALUES(1,1,?,UTC_TIMESTAMP())');$s->execute([json_encode($profile)]);
 $ledger=new class {public function reserve(...$a){return 1;}public function settle(...$a){}};
 $calls=[];$client=new DataForSeoClient(['enabled'=>'1','login'=>'offline','password'=>'fixture','local_enabled'=>'1','backlinks_enabled'=>'1','monthly_budget_usd'=>10],function($endpoint,$tasks)use(&$calls){$calls[]=[$endpoint,$tasks];return ['status_code'=>20000,'cost'=>0.001,'tasks'=>[['status_code'=>20000,'result'=>[['items'=>[['type'=>'maps_search','place_id'=>'fixture-place','rank_group'=>3]]]]]]];},$ledger);
-$grid=new LocalRankGridService($db,$client);$start=$grid->start(1,1,['Luxor tours','Cairo travel']);$id=$start['run_id'];
+$grid=new LocalRankGridService($db,$client);
+$missingCoordinates=$profile;$missingCoordinates['latitude']=null;$missingCoordinates['longitude']=null;
+$s=$pdo->prepare('UPDATE seo_local_profiles SET profile_json=? WHERE website_id=1 AND user_id=1');$s->execute([json_encode($missingCoordinates)]);
+check(denied(fn()=>$grid->start(1,1,['Luxor tours','Cairo travel'])),'a confirmed NAP profile without coordinates cannot start a Maps grid');
+check(count($calls)===0&&(int)$pdo->query('SELECT COUNT(*) FROM seo_local_grid_runs')->fetchColumn()===0&&(int)$pdo->query('SELECT COUNT(*) FROM jobs')->fetchColumn()===0,'missing coordinates create no paid provider calls, grid run or queued worker');
+$s->execute([json_encode($profile)]);
+$start=$grid->start(1,1,['Luxor tours','Cairo travel']);$id=$start['run_id'];
 check($start['maximum_paid_requests']===50&&$start['limits']['keywords']===3,'grid preflight returns request count and current plan limit');
 check($grid->start(1,1,['Luxor tours','Cairo travel'])['run_id']===$id,'identical monthly request reuses existing run');
 check(denied(fn()=>$grid->start(2,1,['a','b'])),'foreign owner cannot start paid measurement');
