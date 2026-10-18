@@ -8,9 +8,18 @@ final class SeoRecommendationReview
     public static function applied(array $task): bool {
         return !empty($task['is_active'])||!empty($task['previous_task_id'])||!empty($task['external_post_id'])||!empty($task['published_url'])||in_array($task['status']??'',['approved','active','verified','publishing','uncertain','reverted'],true);
     }
+    public static function decisionEligible(array $task): bool {
+        if(self::applied($task)||!in_array($task['status']??'',['pending','needs_client'],true))return false;
+        if(($task['kind']??'')==='metadata')return in_array($task['field_name']??'',['title','description'],true);
+        return ($task['kind']??'')==='manual'
+            &&!SeoPagePolicy::route((string)($task['page_url']??''))['eligible']
+            &&(str_starts_with((string)($task['title']??''),'Not indexed: ')||str_starts_with((string)($task['title']??''),'مش ظاهرة في جوجل: '));
+    }
     public static function assess(array $task,array $pages): array {
         $out=['state'=>'reviewable','code'=>'human_review','reason'=>'Review the proposal against current customer facts. / راجع الاقتراح وفق معلومات العميل الحالية.','basis'=>'stored_page_snapshot'];
         if(self::applied($task))return ['state'=>'retained','code'=>'previously_attempted','reason'=>'Existing execution history is retained. / تم الاحتفاظ بسجل التنفيذ.','basis'=>'task_history'];
+        $e=$task['evidence']??json_decode((string)($task['evidence_json']??''),true)??[];
+        if(self::decisionEligible($task)&&($e['review_decision']['decision']??'')==='keep_current')return array_replace($out,['state'=>'excluded','code'=>'client_kept_current','reason'=>'Reviewed: keep the current page. / تمت المراجعة: الاحتفاظ بالصفحة الحالية. '.(string)($e['review_decision']['reason']??''),'basis'=>'customer_review']);
         $kind=$task['kind']??'';
         $title=(string)($task['title']??'');
         if($kind==='manual'&&(str_starts_with($title,'Not indexed: ')||str_starts_with($title,'مش ظاهرة في جوجل: '))&&!SeoPagePolicy::route((string)($task['page_url']??''))['eligible'])return array_replace($out,['code'=>'indexing_intent_review','reason'=>'Decide whether this operational page should appear in search. No indexing restriction is changed automatically. / حدد هل الصفحة التشغيلية مطلوب ظهورها في البحث؛ لا نغيّر قرار الفهرسة تلقائيًا.']);

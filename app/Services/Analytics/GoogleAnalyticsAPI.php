@@ -123,8 +123,9 @@ class GoogleAnalyticsAPI
         return false;
     }
     public function getLandingPeriod(string $property,string $page,string $start,string $end,string $goal='',string $channel='organic'): array {
-        $host=(string)parse_url($page,PHP_URL_HOST);$path=(string)(parse_url($page,PHP_URL_PATH)?:'/');
-        $filters=[['filter'=>['fieldName'=>'hostName','stringFilter'=>['matchType'=>'EXACT','value'=>$host,'caseSensitive'=>false]]],['filter'=>['fieldName'=>'landingPage','stringFilter'=>['matchType'=>'EXACT','value'=>$path,'caseSensitive'=>true]]]];
+        $host=(string)parse_url($page,PHP_URL_HOST);$path=(string)(parse_url($page,PHP_URL_PATH)?:'/');$query=(string)(parse_url($page,PHP_URL_QUERY)??'');
+        $dimension=$query!==''?'landingPagePlusQueryString':'landingPage';if($query!=='')$path.='?'.$query;
+        $filters=[['filter'=>['fieldName'=>'hostName','stringFilter'=>['matchType'=>'EXACT','value'=>$host,'caseSensitive'=>false]]],['filter'=>['fieldName'=>$dimension,'stringFilter'=>['matchType'=>'EXACT','value'=>$path,'caseSensitive'=>true]]]];
         if($channel==='organic')$filters[]=['filter'=>['fieldName'=>'sessionDefaultChannelGroup','stringFilter'=>['matchType'=>'EXACT','value'=>'Organic Search']]];
         $names=$goal!==''?['sessions','engagedSessions','sessionKeyEventRate:'.$goal]:['sessions','engagedSessions','sessionKeyEventRate','keyEvents','ecommercePurchases','purchaseRevenue'];
         $r=$this->runReport($property,['dateRanges'=>[['startDate'=>$start,'endDate'=>$end]],'metrics'=>array_map(static fn($n)=>['name'=>$n],$names),'dimensionFilter'=>['andGroup'=>['expressions'=>$filters]],'limit'=>'1']);

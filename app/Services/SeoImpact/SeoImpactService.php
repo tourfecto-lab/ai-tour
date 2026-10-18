@@ -22,24 +22,34 @@ final class SeoImpactService {
             $date=substr((string)($task['checked_at']??$task['updated_at']??gmdate('Y-m-d')),0,10);SeoImpactRules::periods($date,7);
             $key='seo_task_'.$taskId;
             $this->db->query("INSERT IGNORE INTO seo_impact_changes(user_id,website_id,external_key,page_url,change_date,source,created_at) VALUES(?,?,?,?,?,'seo_expert_applied',UTC_TIMESTAMP())",[$uid,$wid,$key,$page['url'],$date]);
-            $change=$this->db->query('SELECT change_date FROM seo_impact_changes WHERE website_id=? AND user_id=? AND external_key=?',[$wid,$uid,$key]);$date=$change[0]['change_date'];$ids=[];
+            $change=$this->db->query('SELECT change_date,page_url FROM seo_impact_changes WHERE website_id=? AND user_id=? AND external_key=?',[$wid,$uid,$key]);$date=$change[0]['change_date'];$ids=[];
+            // Verification may switch a PHP publication from /guides/ to its working query URL.
+            // Preserve the original change day and old results; only move this task's mappings.
+            $old=$this->db->query('SELECT monitor_id FROM seo_auto_impact_monitors WHERE website_id=? AND user_id=? AND task_id=?',[$wid,$uid,$taskId]);
+            if($change[0]['page_url']!==$page['url'])$this->db->query('UPDATE seo_impact_changes SET page_url=? WHERE website_id=? AND user_id=? AND external_key=?',[$page['url'],$wid,$uid,$key]);
             foreach(self::automaticWindows($date) as $window){$days=$window['window_days'];
                 $this->db->query("INSERT IGNORE INTO seo_impact_monitors(user_id,website_id,page_url,page_path,page_hash,change_date,anchor_source,window_days,goal_event,channel,status,next_due_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'seo_expert_applied',?,'','organic','queued',?,UTC_TIMESTAMP(),UTC_TIMESTAMP())",[$uid,$wid,$page['url'],$page['path'],$page['hash'],$date,$days,$window['due_at']]);
                 $m=$this->db->query("SELECT id FROM seo_impact_monitors WHERE website_id=? AND user_id=? AND page_hash=? AND change_date=? AND window_days=? AND goal_event='' AND channel='organic'",[$wid,$uid,$page['hash'],$date,$days]);$id=(int)$m[0]['id'];
-                $this->db->exec('INSERT IGNORE INTO seo_auto_impact_monitors(website_id,user_id,task_id,window_days,monitor_id) VALUES(?,?,?,?,?)',[$wid,$uid,$taskId,$days,$id]);
+                $this->db->exec('INSERT INTO seo_auto_impact_monitors(website_id,user_id,task_id,window_days,monitor_id) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE monitor_id=VALUES(monitor_id)',[$wid,$uid,$taskId,$days,$id]);
+                $this->db->query("UPDATE seo_impact_monitors SET status='queued',updated_at=UTC_TIMESTAMP() WHERE id=? AND status='superseded'",[$id]);
                 $this->enqueue($id,max(0,strtotime($window['due_at'].' UTC')-time()));$ids[]=$id;
-            }return $ids;
+            }
+            foreach(array_unique(array_column($old,'monitor_id')) as $oldId){
+                if(in_array((int)$oldId,$ids,true))continue;
+                $this->db->query("UPDATE seo_impact_monitors SET status='superseded',next_due_at=NULL,updated_at=UTC_TIMESTAMP() WHERE id=? AND user_id=? AND website_id=? AND anchor_source='seo_expert_applied' AND NOT EXISTS (SELECT 1 FROM seo_auto_impact_monitors WHERE monitor_id=?)",[$oldId,$uid,$wid,$oldId]);
+            }
+            return $ids;
         });
     }
     public function syncAutomatic(?int $runId=null,int $limit=100): int {
         if(!$this->ready()||!$this->db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_auto_impact_monitors'"))return 0;
-        $sql="SELECT t.id,t.user_id,t.website_id FROM seo_expert_tasks t JOIN websites w ON w.id=t.website_id AND w.user_id=t.user_id WHERE t.status IN ('active','verified') AND t.updated_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 365 DAY) AND (SELECT COUNT(*) FROM seo_auto_impact_monitors a WHERE a.website_id=t.website_id AND a.task_id=t.id)<3";
+        $sql="SELECT t.id,t.user_id,t.website_id FROM seo_expert_tasks t JOIN websites w ON w.id=t.website_id AND w.user_id=t.user_id WHERE t.status IN ('active','verified') AND t.updated_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 365 DAY) AND ((SELECT COUNT(*) FROM seo_auto_impact_monitors a WHERE a.website_id=t.website_id AND a.user_id=t.user_id AND a.task_id=t.id)<3 OR (t.kind='content' AND t.published_url<>'' AND EXISTS (SELECT 1 FROM seo_auto_impact_monitors a LEFT JOIN seo_impact_monitors m ON m.id=a.monitor_id AND m.user_id=a.user_id AND m.website_id=a.website_id WHERE a.website_id=t.website_id AND a.user_id=t.user_id AND a.task_id=t.id AND (m.id IS NULL OR BINARY m.page_url<>BINARY t.published_url))))";
         $args=[];if($runId!==null){$sql.=' AND t.run_id=?';$args[]=$runId;}$sql.=' ORDER BY t.id LIMIT '.max(1,min(500,$limit));$count=0;
         foreach($this->db->query($sql,$args) as $t){try{$count+=count($this->recordAppliedTask((int)$t['user_id'],(int)$t['website_id'],(int)$t['id']));}catch(Throwable $e){Logger::warning('Automatic impact monitor needs review',['task_id'=>$t['id']]);}}return $count;
     }
     public function overview(int $uid,int $wid): array {
         $site=$this->site($uid,$wid);if(!$this->ready())return ['installed'=>false,'monitors'=>[],'changes'=>[],'ai'=>[]];
-        $monitors=$this->db->query('SELECT * FROM seo_impact_monitors WHERE user_id=? AND website_id=? ORDER BY id DESC LIMIT 20',[$uid,$wid]);foreach($monitors as &$m){$m['result']=json_decode((string)$m['result_json'],true);unset($m['result_json']);}unset($m);
+        $monitors=$this->db->query('SELECT * FROM seo_impact_monitors WHERE user_id=? AND website_id=? ORDER BY id DESC LIMIT 20',[$uid,$wid]);foreach($monitors as &$m){$m['periods']=null;try{$m['periods']=SeoImpactRules::periods($m['change_date'],(int)$m['window_days']);}catch(InvalidArgumentException $e){/* Historic comparisons remain readable beyond the creation window. */}$m['result']=json_decode((string)$m['result_json'],true);unset($m['result_json']);}unset($m);
         $changes=$this->db->query('SELECT id,page_url,change_date,source FROM seo_impact_changes WHERE user_id=? AND website_id=? ORDER BY id DESC LIMIT 50',[$uid,$wid]);
         $sources=$this->db->query('SELECT enabled,source_status,tracking_started_at,last_received_at FROM seo_booking_sources WHERE user_id=? AND website_id=?',[$uid,$wid]);
         $ai=$this->db->query('SELECT provider,page_path,date_start,date_end,citations,source_kind,evidence_url FROM seo_ai_observations WHERE user_id=? AND website_id=? ORDER BY id DESC LIMIT 30',[$uid,$wid]);
@@ -66,12 +76,13 @@ final class SeoImpactService {
     }
     public function refresh(int $uid,int $id): array {
         $this->requireReady();$m=$this->monitor($uid,$id);$this->site($uid,(int)$m['website_id']);
+        if($m['status']==='superseded')throw new InvalidArgumentException('This historic comparison was replaced after the publication URL changed.');
         if(!empty($m['last_collected_at'])&&strtotime($m['last_collected_at'].' UTC')>time()-900)throw new InvalidArgumentException('Wait 15 minutes between provider refreshes.');
         // Refresh replaces a future pending job only; it never interrupts a processing job.
         $this->db->query("UPDATE jobs SET available_at=UTC_TIMESTAMP() WHERE job_class='SeoImpactCollectJob' AND payload=? AND status='pending'",[json_encode(['monitor_id'=>$id])]);$this->enqueue($id);return $this->overview($uid,(int)$m['website_id']);
     }
     public function collect(int $id): void {
-        $this->requireReady();$r=$this->db->query('SELECT * FROM seo_impact_monitors WHERE id=?',[$id]);if(!$r)return;$m=$r[0];$uid=(int)$m['user_id'];$wid=(int)$m['website_id'];$site=$this->site($uid,$wid);SeoImpactRules::page($m['page_url'],$site['url']);
+        $this->requireReady();$r=$this->db->query('SELECT * FROM seo_impact_monitors WHERE id=?',[$id]);if(!$r||$r[0]['status']==='superseded')return;$m=$r[0];$uid=(int)$m['user_id'];$wid=(int)$m['website_id'];$site=$this->site($uid,$wid);SeoImpactRules::page($m['page_url'],$site['url']);
         if(!ExternalExecution::lock('seo-impact-monitor:'.$id))throw new RuntimeException('Monitor busy.');
         try {
             $periods=SeoImpactRules::periods($m['change_date'],(int)$m['window_days']);$source=new SeoImpactSources($this->db);$search=$source->search($m,$periods);$analytics=$source->analytics($m,$periods);
@@ -79,7 +90,7 @@ final class SeoImpactService {
             foreach(['search'=>['clicks','impressions','ctr','position'],'analytics'=>['sessions','goal_session_rate','key_events','purchase_events']] as $name=>$fields)foreach($fields as $field)$out['differences'][$name][$field]=SeoImpactRules::difference($out[$name]['before'][$field]??null,$out[$name]['after'][$field]??null,in_array($field,['ctr','goal_session_rate'],true));
             $hasComparable=false;foreach($out['differences'] as $diffs)foreach($diffs as $diff)if($diff['state']!=='not_comparable')$hasComparable=true;
             $status=!$periods['ready']?'waiting_period':($hasComparable?'reported':'sources_unavailable');
-            $this->db->query('UPDATE seo_impact_monitors SET status=?,result_json=?,last_collected_at=UTC_TIMESTAMP(),next_due_at=?,updated_at=UTC_TIMESTAMP() WHERE id=?',[$status,json_encode($out,JSON_THROW_ON_ERROR),!$periods['ready']?$periods['due_at']:null,$id]);
+            $this->db->query("UPDATE seo_impact_monitors SET status=?,result_json=?,last_collected_at=UTC_TIMESTAMP(),next_due_at=?,updated_at=UTC_TIMESTAMP() WHERE id=? AND status<>'superseded'",[$status,json_encode($out,JSON_THROW_ON_ERROR),!$periods['ready']?$periods['due_at']:null,$id]);
             if(!$periods['ready']){
                 // The current job is still processing, so schedule its one future successor explicitly.
                 $exists=$this->db->query("SELECT id FROM jobs WHERE job_class='SeoImpactCollectJob' AND payload=? AND status='pending' LIMIT 1",[json_encode(['monitor_id'=>$id])]);

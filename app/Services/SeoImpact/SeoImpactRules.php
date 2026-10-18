@@ -19,9 +19,14 @@ final class SeoImpactRules {
     }
     public static function page(string $url,string $home): array {
         $p=parse_url($url);$host=parse_url($home,PHP_URL_HOST);
-        if(strlen($url)>1800||!$p||($p['scheme']??'')!=='https'||!WordPressConnector::hostsEqual((string)($p['host']??''),(string)$host)||isset($p['user'])||isset($p['pass'])||!empty($p['query'])||!empty($p['fragment'])||isset($p['port'])&&$p['port']!==parse_url($home,PHP_URL_PORT))throw new InvalidArgumentException('Use a public HTTPS page on this website, without query/fragment/credentials.');
+        // PHP connector articles use this exact route when clean /guides URLs are unavailable.
+        // Tracking, preview and arbitrary query parameters must not become separate pages.
+        $query=(string)($p['query']??'');
+        if(strlen($url)>1800||!$p||($p['scheme']??'')!=='https'||!WordPressConnector::hostsEqual((string)($p['host']??''),(string)$host)||isset($p['user'])||isset($p['pass'])||($query!==''&&!preg_match('/^tf_article=[a-z0-9]+(?:-[a-z0-9]+)*$/D',$query))||isset($p['fragment'])||isset($p['port'])&&$p['port']!==parse_url($home,PHP_URL_PORT))throw new InvalidArgumentException('Use a public HTTPS page on this website; only the connector tf_article query route is supported.');
         $raw=$p['path']??'/';if(strlen($raw)>1000||preg_match('/[\x00-\x20\\\\]/',$raw))throw new InvalidArgumentException('Invalid page path.');
-        return ['url'=>$url,'path'=>rtrim($raw,'/')?:'/','hash'=>hash('sha256',rtrim($raw,'/')?:'/')];
+        $path=(rtrim($raw,'/')?:'/').($query!==''?'?'.$query:'');
+        if(strlen($path)>1000)throw new InvalidArgumentException('Invalid page path.');
+        return ['url'=>$url,'path'=>$path,'hash'=>hash('sha256',$path)];
     }
     public static function booking(array $in,string $home): array {
         $key=$in['booking_key']??'';$version=$in['source_version']??null;
