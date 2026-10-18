@@ -43,7 +43,9 @@ class LocalSeoController extends Controller
     public function profile(array $p=[]): array{return $this->action('profile');} public function run(array $p=[]): array{return $this->action('run');}
     public function nap(array $p=[]): array{return $this->action('nap');} public function links(array $p=[]): array{return $this->action('links');}
     public function report(array $p=[]): void {
-        if(!$this->isAuthenticated()){http_response_code(401);return;}$uid=(int)$this->user['id'];$wid=(int)$this->get('website_id');
+        if(!$this->isAuthenticated()){http_response_code(401);exit;}$uid=(int)$this->user['id'];$wid=(int)$this->get('website_id');
         try{$site=(new SeoMarketService($this->db))->site($wid,$uid);$data=(new SeoMonthlyReportService($this->db))->data($uid,$wid);header('Cache-Control: no-store, private');header('Content-Type: text/html; charset=utf-8');echo SeoMonthlyReportService::html($data,$site['main_url']);}catch(Throwable $e){http_response_code(503);echo 'التقرير غير متاح؛ راجع الربط والترحيل.';}
+        // This is a complete HTML response; the API dispatcher must not replace its Content-Type or status.
+        exit;
     }
 }

@@ -15,3 +15,5 @@ All 53 suite groups ran: 51 pass. The two known baseline billing failures remain
 After uploading, reopen the authenticated monthly report with an English account UI. Confirm the document still has lang=ar and dir=rtl and the current Google follow-up/excluded/customer-review sections remain present. This does not refresh Google indexing observations or prove ranking improvements.
 
 Rollback: restore the backed-up helper and reload PHP. No data rollback is needed.
+
+Deployment follow-up: real PHP output buffering also requires the scoped LocalSeoController response completion correction. Use the coherent archive documented in report-response-update.md; the earlier one-file instruction alone is superseded.
