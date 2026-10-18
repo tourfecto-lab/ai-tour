@@ -730,7 +730,7 @@ $ node tests/Automation/seo_phase3_browser_test.cjs
   ok  three provider keys use masked admin inputs
   ok  admin persists all eight fields including disabled providers
   ok  keys submitted once and cleared after save
-  ok  no browser JavaScript errors: 
+  ok  no browser JavaScript errors:
 
 18/18 passed
 Exit status: 0
@@ -1268,4 +1268,3 @@ Exit status: 0
 
 $ git diff --check
 Exit status: 0
-
