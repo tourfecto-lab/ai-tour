@@ -82,11 +82,18 @@ class GbpSyncService
 
     public function findConnection(int $websiteId, int $userId): ?PlatformConnection
     {
-        $rows = (new PlatformConnection())->where([
+        $conditions = [
             'website_id' => $websiteId,
             'user_id' => $userId,
             'platform' => 'google_business',
-        ], [], 1);
+        ];
+        $model = new PlatformConnection();
+        // Reconnects can leave older failed records. Prefer the latest working
+        // connection, while retaining the latest failure for reconnect guidance.
+        $rows = $model->where($conditions + ['status' => 'connected'], ['id' => 'DESC'], 1);
+        if (!$rows) {
+            $rows = $model->where($conditions, ['id' => 'DESC'], 1);
+        }
 
         return !empty($rows) ? $rows[0] : null;
     }

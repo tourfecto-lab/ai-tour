@@ -1,7 +1,19 @@
-Correct JSON Content-Type for Local SEO and International SEO writes. Base 1416152; known billing baseline 8fa137e. New browser regression uses the actual Panel.fetchJSON helper and a fake HTTP endpoint that follows Controller JSON parsing. It failed before the fix on NAP website scope. Research suite uses a mock Database, fake transport and ledger, no SQLite or PDO connection. Remaining suites use existing guarded test fixtures. PHP 8.4.26, MariaDB 11.8.6.
+Correct Local/International SEO JSON requests and select the newest working GBP connection. Base 1416152; known billing baseline 8fa137e. New browser regression uses the actual Panel.fetchJSON helper and a fake HTTP endpoint that follows Controller JSON parsing. It failed before the fix on NAP website scope. Research suite uses a mock Database, fake transport and ledger, no SQLite or PDO connection. Remaining suites use existing guarded test fixtures. PHP 8.4.26, MariaDB 11.8.6.
 Offline transports; no customer/provider production calls.
 GEO/Phase4/Phase5/Phase6: guarded disposable tourfecto_test; billing: tourfecto_phase4_billing.
 Phase2 suite newly added because original documented test files are absent from the merged history.
+
+$ php tests/Automation/gbp_connection_selection_database_test.php
+PASS a stale failed connection cannot hide a newer connected GBP record
+PASS the newest connected GBP record is selected deterministically
+PASS a newer unsuccessful reconnect does not replace the working connection
+PASS selection excludes another user, another site and another platform
+PASS no foreign website connection is returned to a different owner
+PASS when no connection is active the newest saved state remains available for reconnect guidance
+PASS a site without GBP records returns null
+PASS selection retains every historical connection record
+8 assertions passed
+Exit status: 0
 
 $ node tests/Automation/seo_customer_json_transport_browser_test.cjs
 PASS NAP comparison sends the chosen website in a body PHP can parse
@@ -313,7 +325,7 @@ Runtime:       PHP 8.4.26
 
 ....                                                                4 / 4 (100%)
 
-Time: 00:00.003, Memory: 8.00 MB
+Time: 00:00.004, Memory: 8.00 MB
 
 OK (4 tests, 7 assertions)
 Exit status: 0
@@ -1163,7 +1175,7 @@ build your plan
   FAIL paid: trial cap gone; plan 20 + custom 10 + earlier pack 10 kept
   FAIL chatbot replies: plan + custom + pack
 renewal
-  ok  renews at the custom price $169 ({"success":true,"subscription_id":489,"charged":169,"new_period_end":"2026-11-18 07:35:16","balance":240})
+  ok  renews at the custom price $169 ({"success":true,"subscription_id":500,"charged":169,"new_period_end":"2026-11-18 07:39:13","balance":240})
   ok  custom extras granted again for the new period (+10) and pack still on (+10)
 after the trial: automatic charge
   ok  customer can cancel renewal during the trial
@@ -1413,7 +1425,7 @@ Runtime:       PHP 8.4.26
 
 .........                                                           9 / 9 (100%)
 
-Time: 00:00.072, Memory: 18.00 MB
+Time: 00:00.073, Memory: 18.00 MB
 
 OK (9 tests, 57 assertions)
 Exit status: 0
@@ -1577,11 +1589,17 @@ $ node --check public_html/assets/js/international-seo.js
 Exit status: 0
 
 $ php tools/lint.php
-OK: 1282 PHP files checked, no syntax errors.
+OK: 1283 PHP files checked, no syntax errors.
 Exit status: 0
 
 $ node --check public_html/assets/js/seo-expert.js
 Exit status: 0
 
 $ git diff --check
+docs/seo/customer-json-transport-test-output.txt:1062: trailing whitespace.
++  ok  no browser JavaScript errors:
+docs/seo/customer-json-transport-test-output.txt:1597: new blank line at EOF.
+Exit status: 2
+
+$ git diff --check (rerun after the generated log was finalized and whitespace normalized)
 Exit status: 0
