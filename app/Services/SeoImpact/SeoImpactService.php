@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/SeoImpactRules.php';
 require_once __DIR__.'/SeoImpactSources.php';
+require_once __DIR__.'/SeoPlatformBookingService.php';
 final class SeoImpactService {
     private Database $db;
     public function __construct(?Database $db=null){$this->db=$db??Database::getInstance();}
@@ -62,7 +63,7 @@ final class SeoImpactService {
             MIN(CASE WHEN status IN ('queued','waiting_period','waiting_data') THEN COALESCE(next_due_at,TIMESTAMP(DATE_ADD(change_date,INTERVAL (window_days+3) DAY),'04:00:00')) END) next_collection_at
             FROM seo_impact_monitors WHERE user_id=? AND website_id=?",[$uid,$wid])[0];
         foreach(['history_count','active_comparisons','monitored_pages','collected_comparisons','waiting_comparisons','needs_review_comparisons'] as $key)$summary[$key]=(int)$summary[$key];
-        return ['installed'=>true,'summary'=>$summary,'measurement_sources'=>(new SeoImpactSources($this->db))->readiness($uid,$wid,$site['url']),'monitors'=>$monitors,'changes'=>$changes,'booking_source'=>$sources[0]??null,'ai'=>$ai,'note'=>'Before/after is observational; seasons, ads, other edits and tracking changes can affect results.'];
+        return ['installed'=>true,'summary'=>$summary,'measurement_sources'=>(new SeoImpactSources($this->db))->readiness($uid,$wid,$site['url']),'platform_bookings'=>(new SeoPlatformBookingService($this->db))->overview($uid,$wid),'monitors'=>$monitors,'changes'=>$changes,'booking_source'=>$sources[0]??null,'ai'=>$ai,'note'=>'Before/after is observational; seasons, ads, other edits and tracking changes can affect results.'];
     }
     public function create(int $uid,int $wid,array $in): array {
         $this->requireReady();$site=$this->site($uid,$wid);$anchorSource='client_declared_date';

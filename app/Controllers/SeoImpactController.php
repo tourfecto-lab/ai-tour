@@ -3,10 +3,16 @@ require_once __DIR__.'/../Services/SeoImpact/SeoImpactService.php';
 final class SeoImpactController extends Controller {
     private function action(string $op,array $p): array {
         header('Cache-Control: no-store, private');if(!$this->isAuthenticated())return $this->error('Unauthorized',401);
-        if($op!=='overview'){if($e=$this->verifyCsrf())return $e;if($e=$this->rateLimitGuard('user','seo_impact_write',10,60))return $e;}
+        if(!in_array($op,['overview','platform_products'],true)){if($e=$this->verifyCsrf())return $e;if($e=$this->rateLimitGuard('user','seo_impact_write',10,60))return $e;}
         $uid=(int)$this->user['id'];$wid=(int)($p['website_id']??0);$s=new SeoImpactService();
         try {
             if($op==='overview')return $this->success($s->overview($uid,$wid));
+            if($op==='platform_products')return $this->success((new SeoPlatformBookingService($this->db))->products($uid,$wid,(string)$this->get('q',''),(int)$this->get('cursor',0)));
+            if($op==='platform_bookings'){
+                $ids=$this->data['product_ids']??null;if(!is_array($ids))throw new InvalidArgumentException('Choose the products belonging to this website.');
+                (new SeoPlatformBookingService($this->db))->configure($uid,$wid,$ids,($this->data['confirmed']??false)===true);
+                return $this->success($s->overview($uid,$wid));
+            }
             if($op==='create')return $this->success($s->create($uid,$wid,$this->data));
             if($op==='refresh')return $this->success($s->refresh($uid,(int)($p['id']??0)));
             if($op==='ai')return $this->success($s->importAi($uid,$wid,$this->data));
@@ -20,6 +26,8 @@ final class SeoImpactController extends Controller {
     public function refresh(array $p=[]): array{return $this->action('refresh',$p);}
     public function ai(array $p=[]): array{return $this->action('ai',$p);}
     public function bookings(array $p=[]): array{return $this->action('bookings',$p);}
+    public function platformProducts(array $p=[]): array{return $this->action('platform_products',$p);}
+    public function platformBookings(array $p=[]): array{return $this->action('platform_bookings',$p);}
     public function ingest(array $p=[]): array {
         header('Cache-Control: no-store');if($e=$this->rateLimitGuard('ip','seo_paid_webhook',60,60))return $e;
         try{(new SeoImpactService())->ingest((int)($p['website_id']??0),(string)($_SERVER['HTTP_X_TOURFECTO_SECRET']??''),$this->data);return $this->success(['received'=>true]);}

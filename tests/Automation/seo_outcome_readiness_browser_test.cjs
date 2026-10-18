@@ -16,7 +16,7 @@ await p.addStyleTag({content:fs.readFileSync(path.resolve(__dirname,'../../publi
 check((await p.locator('#imSummary').innerText()).includes('24')&&(await p.locator('#imSummary').innerText()).includes('25'),'summary uses full-server counts rather than treating the displayed monitor list as all measurements');
 check(await p.locator('#imSummary time').getAttribute('datetime')==='2026-10-27T04:00:00Z','the next collection date is explicit and machine-readable before metrics exist');
 check((await p.locator('#imSummary').innerText()).includes('No comparison collected yet'),'zero collected comparisons are a waiting state, not a fabricated zero business result');
-check(!await p.locator('#imAdvanced').getAttribute('open')&&await p.locator('#imCreate').count()===1&&await p.locator('#imAi').count()===1,'technical comparison and manual AI forms are retained behind optional settings');
+check((await p.locator('#imAdvanced').getAttribute('open'))===null&&await p.locator('#imCreate').count()===1&&await p.locator('#imAi').count()===1,'technical comparison and manual AI forms are retained behind optional settings');
 check(await p.locator('#imConnect').isDisabled()&&(await p.locator('#imBookingHelp').innerText()).includes('custom'),'custom sites are not asked to activate a WooCommerce-only connection');
 check(writes.every(w=>w.api.endsWith('/probe')),'opening readiness creates no comparisons, booking sources, paid analyses or approvals');
 await p.locator('#imAdvanced summary').click();await p.locator('#imPage').fill('https://customer.example/unsaved');await p.locator('#imLoad').click();await p.waitForFunction(()=>!document.querySelector('#seoImpact').hasAttribute('aria-busy'));
