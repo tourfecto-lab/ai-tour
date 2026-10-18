@@ -1,7 +1,7 @@
 (async()=>{
 'use strict';
 const el=id=>document.getElementById(id),json=x=>JSON.stringify(x,null,2);let current=null,sites=[],busy=false;
-async function api(op,data,query=''){const r=await window.Panel.fetchJSON('/api/international-seo/'+op+query,data?{method:'POST',body:JSON.stringify(data)}:{});if(!r.success)throw Error(r.error||r.message||'تعذر الطلب');return r.data;}
+async function api(op,data,query=''){const r=await window.Panel.fetchJSON('/api/international-seo/'+op+query,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{});if(!r.success)throw Error(r.error||r.message||'تعذر الطلب');return r.data;}
 async function work(fn){if(busy)return;busy=true;for(const b of document.querySelectorAll('#internationalSeo button'))b.disabled=true;try{await fn();}catch(e){el('intlStatus').textContent=e.message;}finally{busy=false;for(const b of document.querySelectorAll('#internationalSeo button'))b.disabled=false;}}
 function version(){el('intlReviewed').checked=false;const v=current?.versions.find(v=>v.language===el('intlLanguage').value);el('intlFields').value=v?v.fields_json:json(current?.fields||{});}
 async function load(){current=await api('data',null,'?generated_website_id='+Number(el('intlBuilder').value));el('intlSource').textContent=json(current.source);el('intlVersions').textContent=current.versions.map(v=>v.language+': '+v.status+' · '+(v.current?'الأصل لم يتغير':'تحتاج مراجعة الأصل الجديد')).join('\n');el('intlConfirmed').checked=false;version();}
