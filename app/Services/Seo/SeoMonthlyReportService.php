@@ -51,7 +51,9 @@ class SeoMonthlyReportService
         }
         if($this->has('seo_expert_tasks')){
             $sources['tasks']=$this->db->query("SELECT id,title,page_url,published_url,status,checked_at FROM seo_expert_tasks WHERE website_id=? AND user_id=? AND status IN ('active','verified') AND updated_at BETWEEN ? AND ? ORDER BY id",[$wid,$uid,$start,$end]);
-            $candidates=$this->db->query("SELECT * FROM seo_expert_tasks WHERE website_id=? AND user_id=? AND status IN ('pending','needs_client') AND created_at<=? ORDER BY id DESC LIMIT 1000",[$wid,$uid,$end]);
+            // These sections describe current follow-up, including work created after the
+            // historical metric month. Keep the period boundary on measured results only.
+            $candidates=$this->db->query("SELECT * FROM seo_expert_tasks WHERE website_id=? AND user_id=? AND status IN ('pending','needs_client') ORDER BY id DESC LIMIT 1000",[$wid,$uid]);
             // Fetch each owned run once; never multiply its potentially large snapshot per task row.
             $groups=[];foreach($candidates as $index=>$task)$groups[(int)$task['run_id']][]=$index;
             $hasRuns=$this->has('seo_expert_runs');

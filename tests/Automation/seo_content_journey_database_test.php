@@ -73,6 +73,10 @@ try {
  check(count($reportA['google_follow_up'])===1&&count($reportB['google_follow_up'])===1,'real monthly report query assigns each tenant its Google follow-up');
  check(!str_contains(json_encode($reportA),$fixtures[2]['site'])&&!str_contains(json_encode($reportB),$fixtures[1]['site']),'monthly report separates customer domains');
  check(denied(fn()=>$reports->data(1,2,$period)),'foreign monthly report rejected before assembly');
+ $currentA=$reports->data(1,1);$currentB=$reports->data(2,2);
+ check(count($currentA['google_follow_up'])===1&&count($currentB['google_follow_up'])===1,'current-month Google follow-up is included when reporting the previous calendar month');
+ check(!str_contains(json_encode($currentA),$fixtures[2]['site'])&&!str_contains(json_encode($currentB),$fixtures[1]['site']),'current follow-up keeps customer ownership boundaries');
+ check($currentA['period']===SeoMonthlyReportService::month()&&empty($currentA['tasks'])&&empty($currentB['tasks']),'current follow-up does not move this-month verified tasks into last-month historical results');
  $detail=$service->detail(2,9102);$waiting=array_values(array_filter($detail['tasks'],fn($t)=>($t['follow_up']['state']??'')==='waiting_google'));
  check(count($waiting)===1&&$waiting[0]['status']==='needs_client','detail derives Google category without changing durable task status');
  check(count(AiText::$calls)===2,'exactly one fake generation per tenant');

@@ -31,6 +31,9 @@ check(denied(fn()=>$service->clientDone(1,9021,'Forged completion while proposal
 require_once $root.'/app/Services/Seo/SeoMonthlyReportService.php';
 $plan=SeoMonthlyReportService::followUpPlan([$task(9021)+['snapshot_json'=>json_encode(['pages'=>[$page]])]]);
 check(count($plan['excluded_proposals'])===1&&!$plan['next_plan'],'monthly next-plan excludes a reviewed keep-current proposal and retains its reason');
+$current=(new SeoMonthlyReportService($db,fn()=>null))->data(1,1);
+check(count($current['excluded_proposals'])===1&&count($current['next_plan'])===1,'actual report query includes this-month review decisions and pending tasks alongside previous-month metrics');
+check($current['excluded_proposals'][0]['review_reason']===$result['tasks'][0]['recommendation_review']['reason'],'current report retains the factual reason for keeping existing metadata');
 
 check(denied(fn()=>$review(9021,'reopen',1,1)),'stale review version is rejected');
 check(denied(fn()=>$review(9021,'reopen',2)),'another tenant cannot change a review decision');
