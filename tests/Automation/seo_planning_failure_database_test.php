@@ -65,4 +65,11 @@ $s=$pdo->prepare("SELECT expected_value FROM seo_expert_tasks WHERE run_id=9001 
 foreach($policyPages as $policyPage){$s->execute([$policyPage['url']]);$schema=json_decode($s->fetchColumn(),true);$crumbs=array_values(array_filter($schema['@graph'],static fn($node)=>$node['@type']==='BreadcrumbList'))[0];check(array_column($crumbs['itemListElement'],'item')===['https://example.com/',$policyPage['url']],'saved policy proposal excludes nonexistent /page/: '.$policyPage['page_path']);}
 $s->execute([$destination['url']]);$schema=json_decode($s->fetchColumn(),true);$crumbs=array_values(array_filter($schema['@graph'],static fn($node)=>$node['@type']==='BreadcrumbList'))[0];
 check(array_column($crumbs['itemListElement'],'item')===['https://example.com/','https://example.com/tours',$destination['url']],'saved destination proposal retains the verified exact parent URL');
+// Generic schema instructions are checked against real page context during normal persistence.
+AiText::$response=['success'=>true,'data'=>json_encode(['summary'=>'Review the specific missing main heading while keeping valid existing identity schema.','changes'=>[],'client_tasks'=>[['page_index'=>0,'category'=>'geo','title'=>'Implement structured data for tours','instructions'=>'Add schema for the business and its tour offerings.'],['page_index'=>0,'category'=>'seo','title'=>'Add H1 to /tours/luxor','instructions'=>'Add one descriptive H1 matching the confirmed destination services.']],'content_drafts'=>[]])];
+$identityPage=array_replace($page,['schema'=>[['@type'=>'TravelAgency','name'=>'Example tours']]]);
+$pdo->prepare("UPDATE seo_expert_runs SET status='scanned',snapshot_json=? WHERE id=9001")->execute([json_encode(['pages'=>[$identityPage],'tech'=>[]])]);
+$service->build(9001);
+check((int)$pdo->query("SELECT COUNT(*) FROM seo_expert_tasks WHERE title='Implement structured data for tours'")->fetchColumn()===0,'normal persistence drops unsupported generic schema task');
+check((int)$pdo->query("SELECT COUNT(*) FROM seo_expert_tasks WHERE title='Add H1 to /tours/luxor'")->fetchColumn()===1,'normal persistence retains targeted site task');
 echo "$n assertions passed\n";

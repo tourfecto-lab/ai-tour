@@ -130,9 +130,9 @@ class SeoPlanQualityGate
      * نصايح زي "حسّن السرعة" أو "اعمل باك لينكات" أو "انشر على السوشيال"
      * مش مهمة للعميل - والسوشيال والمنافسين وجوجل بيزنس خدمات المنصة نفسها.
      */
-    public static function filterClientTasks(array $tasks): array
+    public static function filterClientTasks(array $tasks,array $pages=[]): array
     {
-        return array_values(array_filter($tasks, static function ($t): bool {
+        return array_values(array_filter($tasks, static function ($t)use($pages): bool {
             $title = trim((string) ($t['title'] ?? ''));
             if (preg_match(self::GENERIC_TASK, $title)) {
                 return false;
@@ -140,6 +140,15 @@ class SeoPlanQualityGate
             $text = $title . ' ' . (string) ($t['instructions'] ?? '');
             $pointsToPage = (bool) preg_match('#(?:^|[\s(\'"])/[a-z0-9][a-z0-9\-/]*#i', $text);
             $technical = (bool) preg_match('/\b(h1|noindex|canonical|redirects?|404|hreflang|schema|alt[\s-]?text|sitemap|robots\.txt|lcp|cls|ttfb|https|mixed content)\b/i', $text);
+            if($pages){
+                require_once __DIR__.'/SeoPagePolicy.php';
+                $page=$pages[$t['page_index']??-1]??null;if(!$page||!SeoPagePolicy::classify($page)['eligible'])return false;
+                if(preg_match('/\b(?:schema|structured data|json-ld)\b/i',$text)&&!preg_match('/\b(?:invalid|error|malformed|duplicate)\b/i',$text)){
+                    $types=[];$walk=static function($node)use(&$walk,&$types){if(!is_array($node))return;foreach((array)($node['@type']??[]) as $type)$types[]=$type;foreach($node as $v)if(is_array($v))$walk($v);};$walk($page['schema']??[]);
+                    $requested=[];foreach(['Product','TouristTrip','Trip','TravelAgency','Organization','FAQPage','BreadcrumbList','Article','ItemList','CollectionPage'] as $type)if(preg_match('/\b'.preg_quote($type,'/').'\b/i',$text))$requested[]=$type;
+                    if($types&&(!$requested||!array_diff($requested,$types)))return false;
+                }
+            }
             return $pointsToPage || $technical;
         }));
     }

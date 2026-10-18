@@ -129,6 +129,7 @@ return [
     'PlanGateMiddleware' => dirname(__DIR__,2).'/app/Middleware/PlanGateMiddleware.php',
     'PlansStudioController' => dirname(__DIR__,2).'/app/Controllers/PlansStudioController.php',
     'SeoConnectedTaskVerifier' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoConnectedTaskVerifier.php',
+    'SeoRecommendationReview' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoRecommendationReview.php',
     'SeoSchemaBuilder' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoSchemaBuilder.php',
     'PageSpeedService' => dirname(__DIR__,2).'/app/Services/Seo/PageSpeedService.php',
     'SeoTrafficAlertService' => dirname(__DIR__,2).'/app/Services/Seo/SeoTrafficAlertService.php',
