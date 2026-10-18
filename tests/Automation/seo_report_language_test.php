@@ -28,8 +28,11 @@ if($path==='/api/local-seo/report'){
 ROUTER;
 file_put_contents($dir.'/router.php',str_replace('ROOT',var_export($root,true),$router));
 $socket=stream_socket_server('tcp://127.0.0.1:0',$errno,$error);$port=(int)substr(strrchr(stream_socket_get_name($socket,false),':'),1);fclose($socket);
-$server=proc_open(['php','-d','output_buffering=4096','-S','127.0.0.1:'.$port,$dir.'/router.php'],[1=>['file',$dir.'/server.log','a'],2=>['file',$dir.'/server.log','a']],$pipes);usleep(250000);
+$server=proc_open(['php','-d','output_buffering=4096','-S','127.0.0.1:'.$port,$dir.'/router.php'],[1=>['file',$dir.'/server.log','a'],2=>['file',$dir.'/server.log','a']],$pipes);
 try{
+ $deadline=microtime(true)+5;$ready=false;
+ while(microtime(true)<$deadline){$probe=@stream_socket_client('tcp://127.0.0.1:'.$port,$errno,$error,.1);if($probe){fclose($probe);$ready=true;break;}if(!proc_get_status($server)['running'])break;usleep(25000);}
+ if(!$ready)throw new RuntimeException('Local report fixture server did not start: '.file_get_contents($dir.'/server.log'));
  foreach(['en','ar'] as $lang)foreach(['/api/local-seo/report?ui='.$lang,'/index.php?__tf_api=%2Fapi%2Flocal-seo%2Freport&ui='.$lang] as $path){$body=file_get_contents('http://127.0.0.1:'.$port.$path);check(str_contains(strtolower(implode(' ', $http_response_header??[])),'content-type: text/html'),'report retains HTML Content-Type under buffered dispatch');check($body===$html,'report bytes, Arabic labels and RTL survive '.$lang.' UI via '.(str_starts_with($path,'/index.php')?'bridge':'direct route'));}
  $failure=file_get_contents('http://127.0.0.1:'.$port.'/api/local-seo/report?ui=en&fail=1',false,stream_context_create(['http'=>['ignore_errors'=>true]]));check(str_contains($http_response_header[0]??'','503'),'failed report retains its HTTP error status');
  $unauthenticated=file_get_contents('http://127.0.0.1:'.$port.'/api/local-seo/report?ui=en&authenticated=0',false,stream_context_create(['http'=>['ignore_errors'=>true]]));check(str_contains($http_response_header[0]??'','401')&&$unauthenticated==='','unauthenticated report cannot fall through into HTTP 200');
