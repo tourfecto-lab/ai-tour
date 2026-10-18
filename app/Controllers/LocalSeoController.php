@@ -37,7 +37,7 @@ class LocalSeoController extends Controller
                 $profile=$row?json_decode($row['profile_json'],true):null;$mapsReady=false;
                 if(is_array($profile)){try{LocalRankGridService::gridForProfile($profile);$mapsReady=true;}catch(InvalidArgumentException $e){}}
                 $publicProfile=is_array($profile)?array_intersect_key($profile,array_flip(['name','phone','address','website','directory_profiles','confirmed_at'])):null;
-                return $this->success(['profile'=>$publicProfile,'maps_grid_ready'=>$mapsReady,'runs'=>(new LocalRankGridService($this->db))->history($uid,$wid),'tasks'=>$this->db->query('SELECT source_url,evidence_json,status FROM seo_citation_tasks WHERE website_id=? AND user_id=? ORDER BY id DESC LIMIT 50',[$wid,$uid])]);
+                return $this->success(['profile'=>$publicProfile,'maps_grid_ready'=>$mapsReady,'runs'=>(new LocalRankGridService($this->db))->history($uid,$wid),'tasks'=>$this->db->query("SELECT source_url,evidence_json,status FROM seo_citation_tasks WHERE website_id=? AND user_id=? AND status='pending' ORDER BY id DESC LIMIT 50",[$wid,$uid])]);
             }
             if($op==='profile'){
                 if($this->get('confirmed',false)!==true)throw new InvalidArgumentException('Confirm the business location and profiles');

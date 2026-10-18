@@ -17,11 +17,33 @@ class NapConsistencyService
             return $s;
         }return self::text($value);
     }
+    private static function addressHasDetails($address): bool {
+        if(!is_array($address))return self::text($address)!=='';
+        unset($address['regionCode'],$address['languageCode']);
+        return self::text($address)!=='';
+    }
+    private static function addressState($official,$observed): string {
+        if(!self::addressHasDetails($official)||!self::addressHasDetails($observed))return 'unknown';
+        if(is_array($official)&&is_array($observed)){
+            $missing=false;
+            foreach(['addressLines','locality','administrativeArea','postalCode','regionCode'] as $key){
+                $a=$official[$key]??'';$b=$observed[$key]??'';
+                $a=self::text(is_array($a)?implode(' ',$a):$a);$b=self::text(is_array($b)?implode(' ',$b):$b);
+                if($a!==''&&$b!==''&&$a!==$b)return 'mismatch';
+                if(($a==='')!==($b===''))$missing=true;
+            }
+            return $missing?'unknown':'match';
+        }
+        if(self::text($official)===self::text($observed))return 'match';
+        // Unstructured footer text cannot establish which structured field differs.
+        return is_array($official)||is_array($observed)?'unknown':'mismatch';
+    }
     public static function compare(array $official,array $observed): array {
         $out=[];$country=(string)($official['address']['regionCode']??'');
         foreach(['name','phone','address','website'] as $field){
             $a=self::normalize($field,$official[$field]??'',$country);$b=self::normalize($field,$observed[$field]??'',$country);
-            $out[$field]=['state'=>$a===''||$b===''?'unknown':($a===$b?'match':'mismatch'),'expected'=>$official[$field]??null,'observed'=>$observed[$field]??null];
+            $state=$field==='address'?self::addressState($official[$field]??null,$observed[$field]??null):($a===''||$b===''?'unknown':($a===$b?'match':'mismatch'));
+            $out[$field]=['state'=>$state,'expected'=>$official[$field]??null,'observed'=>$observed[$field]??null];
         }return $out;
     }
     public static function extract(string $html,string $customerDomain): array {
@@ -37,7 +59,7 @@ class NapConsistencyService
             $out=['name'=>is_string($o['name']??null)?$o['name']:null,'phone'=>is_string($o['telephone']??null)?$o['telephone']:null,'address'=>is_array($address)||is_string($address)?$address:null,'website'=>$o['url']??null];
         }
         if(empty($out['phone'])){foreach($xp->query('//footer//a[starts-with(@href,"tel:")]') as $tel){$out['phone']=substr($tel->getAttribute('href'),4);break;}}
-        if(empty($out['address'])){foreach($xp->query('//footer//address') as $address){$out['address']=trim($address->textContent);break;}}
+        if(!self::addressHasDetails($out['address']??null)){foreach($xp->query('//footer//address') as $address){$out['address']=trim($address->textContent);break;}}
         return $out;
     }
     public function __construct(private Database $db,private ?SeoPublicPageReader $reader=null,private $official=null) {}
@@ -61,12 +83,19 @@ class NapConsistencyService
             $observed=!empty($page['success'])?self::extract((string)$page['html'],DataForSeoRankingSource::normalizeHost($site['main_url'])):[];
             $checks=self::compare($fresh,$observed);$evidence=['source_url'=>$url,'checked_at'=>gmdate('c'),'fetch_state'=>!empty($page['success'])?'observed':'unavailable','checks'=>$checks];$observations[]=$evidence;
             $mismatch=array_filter($checks,static fn($r)=>$r['state']==='mismatch');
-            if(!array_filter($checks,static fn($r)=>$r['state']==='unknown')) {
+            $unknown=array_filter($checks,static fn($r)=>$r['state']==='unknown');
+            $hash=hash('sha256',json_encode([$url,$checks],JSON_THROW_ON_ERROR));
+            if(!empty($page['success'])){
+                // Keep history, but only the current observed evidence is actionable.
+                // Unknown replacement fields do not mean the old issue was fixed.
+                $priorState=$mismatch||$unknown?'superseded':'resolved';
+                $this->db->exec("UPDATE seo_citation_tasks SET status=? WHERE website_id=? AND user_id=? AND source_url=? AND status='pending' AND evidence_hash<>?",[$priorState,$wid,$uid,$url,$hash]);
+            }
+            if(!$unknown) {
                 $this->db->exec("UPDATE seo_citation_tasks SET status='resolved' WHERE website_id=? AND user_id=? AND source_url=? AND status='pending'",[$wid,$uid,$url]);
             }
             if(!$mismatch)continue;
-            $hash=hash('sha256',json_encode([$url,$checks],JSON_THROW_ON_ERROR));
-            $this->db->exec("INSERT INTO seo_citation_tasks(website_id,user_id,source_url,evidence_hash,evidence_json,created_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE status='pending'",[$wid,$uid,$url,$hash,json_encode($evidence,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
+            $this->db->exec("INSERT INTO seo_citation_tasks(website_id,user_id,source_url,evidence_hash,evidence_json,created_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE status='pending',evidence_json=VALUES(evidence_json)",[$wid,$uid,$url,$hash,json_encode($evidence,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR)]);
         }return ['observations'=>$observations,'note'=>'Missing or ambiguous markup is unknown. Review formatting/branch differences before changing a directory.'];
     }
 }
