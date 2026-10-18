@@ -6,19 +6,26 @@ final class SeoPlatformBookingService
     private function site(int $uid,int $wid): void {
         if(!$this->db->query('SELECT id FROM websites WHERE id=? AND user_id=?',[$wid,$uid]))throw new InvalidArgumentException('Website unavailable.');
     }
-    public function ready(): bool {
+    public function ready(): bool {return $this->missingRequirements()===[];}
+    private function missingRequirements(): array {
         $required=['seo_platform_booking_products'=>['product_id','website_id','user_id','confirmed_at'],'crm_products'=>['id','user_id','name','currency','is_active'],'bookings'=>['id','user_id','product_id','status','created_at'],'payment_transactions'=>['id','user_id','booking_id','amount','currency','status','gateway'],'refunds'=>['payment_transaction_id','user_id','amount','currency','status']];
-        $rows=$this->db->query("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('seo_platform_booking_products','crm_products','bookings','payment_transactions','refunds')");
-        $found=[];foreach($rows as $r)$found[$r['table_name']][]=$r['column_name'];
-        foreach($required as $table=>$cols)if(array_diff($cols,$found[$table]??[]))return false;
-        return true;
+        $rows=$this->db->query("SELECT TABLE_NAME AS tf_table,COLUMN_NAME AS tf_column FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name IN ('seo_platform_booking_products','crm_products','bookings','payment_transactions','refunds')");
+        // MySQL and MariaDB can expose unaliased information_schema labels with
+        // different case; PDO ATTR_CASE can also uppercase explicit aliases.
+        $found=[];foreach($rows as $r){
+            $r=array_change_key_case($r,CASE_LOWER);
+            $table=$r['tf_table']??$r['table_name']??null;$column=$r['tf_column']??$r['column_name']??null;
+            if(is_string($table)&&is_string($column))$found[$table][]=$column;
+        }
+        $missing=[];foreach($required as $table=>$cols)foreach(array_diff($cols,$found[$table]??[]) as $column)$missing[]=$table.'.'.$column;
+        return $missing;
     }
     public static function periods(?string $today=null): array {
         $end=SeoImpactRules::date($today??gmdate('Y-m-d'))->modify('-1 day');$start=$end->modify('-27 days');
         return ['current'=>['start'=>$start->format('Y-m-d'),'end'=>$end->format('Y-m-d')],'previous'=>['start'=>$start->modify('-28 days')->format('Y-m-d'),'end'=>$start->modify('-1 day')->format('Y-m-d')]];
     }
     public function overview(int $uid,int $wid,?string $today=null): array {
-        $this->site($uid,$wid);if(!$this->ready())return ['available'=>false,'state'=>'unavailable'];
+        $this->site($uid,$wid);$missing=$this->missingRequirements();if($missing)return ['available'=>false,'state'=>'unavailable','missing_requirements'=>$missing];
         $count=(int)($this->db->query('SELECT COUNT(*) n FROM seo_platform_booking_products m JOIN crm_products p ON p.id=m.product_id AND p.user_id=m.user_id WHERE m.user_id=? AND m.website_id=?',[$uid,$wid])[0]['n']??0);
         $out=['available'=>true,'state'=>$count?'configured':'not_configured','mapped_products'=>$count,'periods'=>self::periods($today),'cohort_basis'=>'booking_created_at_utc','valuation'=>'current_captured_payments_net_of_succeeded_refunds','page_attribution'=>'not_inferred','traffic_channel'=>'not_inferred'];
         if(!$count)return $out;
