@@ -171,7 +171,7 @@ class GoogleSearchConsoleAPI
             $reason = 'robots_blocked';
         } elseif (in_array($indexing, ['BLOCKED_BY_META_TAG', 'BLOCKED_BY_HTTP_HEADER'], true)) {
             $reason = 'noindex';
-        } elseif ($fetch !== '' && $fetch !== 'SUCCESSFUL') {
+        } elseif ($fetch !== '' && !in_array($fetch, ['SUCCESSFUL', 'PAGE_FETCH_STATE_UNSPECIFIED'], true)) {
             $reason = 'fetch_' . strtolower($fetch);
         } elseif ($gc && $uc && rtrim((string) $gc, '/') !== rtrim((string) $uc, '/')) {
             $reason = 'google_chose_other_canonical';

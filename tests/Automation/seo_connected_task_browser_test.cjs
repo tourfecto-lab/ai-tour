@@ -1,0 +1,31 @@
+const path=require('node:path');const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
+(async()=>{let n=0;const check=(ok,label)=>{if(!ok)throw Error(label);n++;console.log('PASS '+label);};const b=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});try{
+const p=await b.newPage(),writes=[],errors=[];p.on('pageerror',e=>errors.push(e.message));let version=7;
+const old='{"@graph":[{"@type":"BreadcrumbList","itemListElement":[{"item":"https://site.example/page/"}]}]}';
+let tasks=[{id:99,kind:'content',category:'aeo',status:'pending',title:'Reviewed guide',page_url:'https://site.example/',expected_value:'Reviewed text before booking.',field_name:'content',content_review:{meta_description:'Reviewed description.',faqs:[]}},...[201,202,203].map(id=>({id,kind:'manual',category:'seo',status:'needs_client',title:id===202?'Not indexed: Google could not fetch (PAGE_FETCH_STATE_UNSPECIFIED)':'Submit sitemap',instructions:'Check the existing Google connection.',page_url:'https://site.example/tours',expected_value:null,connected_check_kind:id===203?null:id===201?'sitemap':'indexing'}))];
+const detail=()=>({identity_valid:true,worker_ready:true,run:{id:10,status:'completed',version,summary:'Review current proposals',snapshot:{pages:[],opportunities:{scope_version:2}}},tasks});
+await p.route('http://platform.test/**',async r=>{const req=r.request(),u=new URL(req.url()),route=u.searchParams.get('__tf_api')||u.pathname;if(!route.startsWith('/api/'))return r.fulfill({contentType:'text/html',body:'<!doctype html><html lang="en"><section id="seoExpertRoot" data-user-id="1"></section></html>'});if(req.method()!=='GET')writes.push({route,body:req.postDataJSON()});let data={};
+if(route.endsWith('/setup'))data={installed:true,worker_ready:true,csrf_token:'fixture',websites:[{id:32,domain:'site.example'}]};
+else if(route.endsWith('/sites/32'))data={site:{id:32,url:'https://site.example'},worker_ready:true,quote:{allowed:true,source:'plan'},config:{status:'draft',version:1,brief:{business_name:'Example',business_facts:'Confirmed facts',audience:'Travelers',goal:'Bookings',language:'en'},policy:{max_cycles:3,max_cycle_price:0,max_pages:100}},runs:[{id:10,status:'completed'}],connections:{}};
+else if(route.endsWith('/probe'))data={connector:{state:'publicly_observed'},metrics:{gsc:{state:'measured'},analytics:{state:'measured'}},publishing:{state:'authenticated'}};
+else if(route.endsWith('/runs/10'))data=detail();
+else if(route.endsWith('/tasks/201/done')||route.endsWith('/tasks/202/done')){const id=route.includes('/201/')?201:202;tasks=tasks.map(t=>t.id===id?{...t,status:id===201?'verified':'needs_client',evidence:{latest_connected_attempt:{state:id===201?'verified':'needs_review',reason:id===201?'Google lists this sitemap; page indexing is not guaranteed.':'Google has not confirmed this URL indexed.',checked_at:'2026-10-18T12:00:00Z',observed:id===201?{pending:true,errors:0}:{coverage:'Discovered - currently not indexed',last_crawl:null}}}}:t);version++;data=detail();}
+await r.fulfill({contentType:'application/json',body:JSON.stringify({success:true,data})});});
+await p.goto('http://platform.test/seo-expert?website_id=32&page=plan');await p.addScriptTag({path:path.resolve(__dirname,'../../public_html/assets/js/panel.js')});await p.addScriptTag({path:path.resolve(__dirname,'../../public_html/assets/js/seo-expert.js')});await p.locator('[data-run="10"]').click();
+await p.locator('[data-connected-check="201"]').waitFor();
+check(await p.locator('[data-connected-check]').count()===2,'only recognized manual Google tasks offer connected check');
+check(!(await p.locator('[data-task="202"] h4').innerText()).includes('could not fetch'),'legacy unspecified fetch title no longer shown as a failure');
+await p.locator('[data-task="99"] [data-meta-description]').fill('Unsaved edit');await p.locator('[data-connected-check="201"]').click();await p.waitForFunction(()=>document.querySelector('#seMessage').textContent.includes('Save your edits'));
+check(!writes.some(w=>w.body.connected_check),'unsaved edits block connected check');
+await p.locator('[data-task="99"] [data-meta-description]').fill('Reviewed description.');await p.locator('[data-connected-check="201"]').click();await p.waitForFunction(()=>document.querySelector('[data-task="201"]')?.dataset.status==='verified');
+const saved=writes.find(w=>w.route.endsWith('/tasks/201/done'));
+check(saved.body.connected_check===true&&saved.body.version===7&&!('evidence' in saved.body),'browser requests versioned Google observation, not customer assertion');
+check((await p.locator('[data-task="201"] [data-google-observation]').innerText()).includes('indexing is not guaranteed'),'sitemap submission does not claim page indexing');
+check((await p.locator('[data-task="201"] [data-google-observation]').innerText()).includes('Pending Google processing: Yes'),'pending sitemap state visible with customer label');
+await p.locator('[data-connected-check="202"]').click();await p.waitForFunction(()=>document.querySelector('[data-task="202"] [data-google-observation]'));
+check(writes.find(w=>w.route.endsWith('/tasks/202/done')).body.version===8,'subsequent check uses latest plan version');
+check(await p.locator('[data-task="202"]').getAttribute('data-status')==='needs_client'&&(await p.locator('[data-task="202"] [data-google-observation]').innerText()).includes('Discovered - currently not indexed'),'unindexed task remains open with current coverage');
+check(await p.locator('[data-task="99"] [data-meta-description]').inputValue()==='Reviewed description.','unrelated draft remains unchanged');
+check(writes.every(w=>w.route.endsWith('/probe')||w.route.endsWith('/done')),'no cycle, submission, approval or publication triggered');
+check(errors.length===0,'connected Google task UI has no JavaScript errors');
+}finally{await b.close();}console.log(n+' assertions passed');})().catch(e=>{console.error(e.message);process.exitCode=1;});

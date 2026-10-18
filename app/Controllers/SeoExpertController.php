@@ -28,7 +28,7 @@ class SeoExpertController extends Controller
             if($action==='start')return $this->success($s->start($uid,$wid,$this->data),'Cycle queued',201);
             if($action==='approve')return $this->success($s->approve($uid,$id,$this->data));
             if($action==='edit')return $this->success($s->editTask($uid,$id,$this->data));
-            if($action==='done')return $this->success($s->clientDone($uid,$id,(string)$this->get('evidence','')));
+            if($action==='done')return $this->success((($this->data['connected_check']??false)===true?$s->recheckConnectedTask($uid,$id,$this->data):$s->clientDone($uid,$id,(string)$this->get('evidence',''))));
             if($action==='rollback')return $this->success($s->rollback($uid,$id));
             return $this->success($s->state($uid,$wid,$action));
         }catch(InvalidArgumentException $e){return $this->error($e->getMessage(),422);}
