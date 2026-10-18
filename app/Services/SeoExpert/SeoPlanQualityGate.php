@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/SeoClaimEvidence.php';
 
 /**
  * Tourfecto - بوابة جودة خطة SEO
@@ -78,7 +79,7 @@ class SeoPlanQualityGate
      * @param array $changes [['page_index'=>int,'field'=>string,'value'=>string,'reason'=>string], ...]
      * @param array $pages الصفحات المفحوصة (title/description أو values[field][0])
      */
-    public static function filterChanges(array $changes, array $pages, string $brand = ''): array
+    public static function filterChanges(array $changes, array $pages, string $brand = '', array $confirmedFacts = []): array
     {
         $current = static function (array $p, string $field): string {
             return (string) ($p['values'][$field][0] ?? ($p[$field] ?? ''));
@@ -102,6 +103,7 @@ class SeoPlanQualityGate
                 continue; // القيمة الحالية كويسة: مفيش سبب نغيّرها
             }
             $value = trim((string) ($c['value'] ?? ''));
+            if(in_array($field,['title','description'],true)&&SeoClaimEvidence::review([$field=>$value],$confirmedFacts)['state']==='needs_confirmation')continue;
             if ($issue !== 'not_gated') {
                 // البراند كان موجود في العنوان الحالي: لازم يفضل
                 if ($field === 'title' && $brand !== '' && mb_stripos($now, $brand) !== false && mb_stripos($value, $brand) === false) {

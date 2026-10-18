@@ -2,6 +2,7 @@
 require_once __DIR__.'/SeoPagePolicy.php';
 require_once __DIR__.'/SeoSchemaBuilder.php';
 require_once __DIR__.'/SeoPlanQualityGate.php';
+require_once __DIR__.'/SeoClaimEvidence.php';
 /** A retained proposal can be unsuitable without being deleted or counted as executed. */
 final class SeoRecommendationReview
 {
@@ -15,7 +16,10 @@ final class SeoRecommendationReview
             &&!SeoPagePolicy::route((string)($task['page_url']??''))['eligible']
             &&(str_starts_with((string)($task['title']??''),'Not indexed: ')||str_starts_with((string)($task['title']??''),'مش ظاهرة في جوجل: '));
     }
-    public static function assess(array $task,array $pages): array {
+    public static function assess(array $task,array $pages,array $facts=[]): array {
+        return self::assessment($task,$pages)+['claim_review'=>SeoClaimEvidence::task($task,$facts)];
+    }
+    private static function assessment(array $task,array $pages): array {
         $out=['state'=>'reviewable','code'=>'human_review','reason'=>'Review the proposal against current customer facts. / راجع الاقتراح وفق معلومات العميل الحالية.','basis'=>'stored_page_snapshot'];
         if(self::applied($task))return ['state'=>'retained','code'=>'previously_attempted','reason'=>'Existing execution history is retained. / تم الاحتفاظ بسجل التنفيذ.','basis'=>'task_history'];
         $e=$task['evidence']??json_decode((string)($task['evidence_json']??''),true)??[];

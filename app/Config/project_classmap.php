@@ -128,6 +128,7 @@ return [
     'AiRoutingAdminController' => dirname(__DIR__,2).'/app/Controllers/AiRoutingAdminController.php',
     'PlanGateMiddleware' => dirname(__DIR__,2).'/app/Middleware/PlanGateMiddleware.php',
     'PlansStudioController' => dirname(__DIR__,2).'/app/Controllers/PlansStudioController.php',
+    'SeoClaimEvidence' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoClaimEvidence.php',
     'SeoConnectedTaskVerifier' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoConnectedTaskVerifier.php',
     'SeoRecommendationReview' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoRecommendationReview.php',
     'SeoTaskFollowUp' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoTaskFollowUp.php',

@@ -8,6 +8,7 @@ final class SeoTaskFollowUp
         if(in_array($review,['excluded','needs_evidence'],true))return ['state'=>'excluded','reason'=>'Retained proposal excluded from approval. / اقتراح محفوظ ومستبعد من الاعتماد.'];
         if(($task['status']??'')==='verified')return ['state'=>'verified','reason'=>'Dated verification is retained; it is not a ranking improvement claim. / تم الاحتفاظ بالتحقق المؤرخ؛ وليس إثباتًا لتحسن الترتيب.'];
         if(in_array($task['status']??'',['approved','active','publishing'],true))return ['state'=>'in_progress','reason'=>'Approved work or publication verification is in progress. / يجري تنفيذ أو التحقق من العمل المعتمد.'];
+        if(($task['recommendation_review']['claim_review']['state']??'')==='needs_confirmation')return ['state'=>'needs_confirmation','reason'=>$task['recommendation_review']['claim_review']['reason']];
         $kind=SeoConnectedTaskVerifier::kind($task);
         if($kind==='indexing'){
             $e=$task['evidence']??json_decode((string)($task['evidence_json']??''),true)??[];

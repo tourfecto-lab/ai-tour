@@ -34,7 +34,7 @@ final class SeoPlanQualityGateTest extends TestCase
     {
         $kept = SeoPlanQualityGate::filterChanges([
             ['page_index' => 2, 'field' => 'title', 'value' => "Day Tours: Explore Egypt's Wonders"],
-            ['page_index' => 1, 'field' => 'description', 'value' => 'Discover all tours offered by Tourfecto Travel across Egypt, including day tours, Nile cruises, and excursions with licensed guides.'],
+            ['page_index' => 1, 'field' => 'description', 'value' => 'Discover all tours offered by Tourfecto Travel across Egypt, including day tours, Nile cruises, and excursions with local guides.'],
         ], $this->pages(), 'Tourfecto Travel');
         $this->assertCount(2, $kept);
         $this->assertSame("Day Tours: Explore Egypt's Wonders | Tourfecto Travel", $kept[0]['value']);
