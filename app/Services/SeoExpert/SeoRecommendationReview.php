@@ -17,7 +17,9 @@ final class SeoRecommendationReview
             &&(str_starts_with((string)($task['title']??''),'Not indexed: ')||str_starts_with((string)($task['title']??''),'مش ظاهرة في جوجل: '));
     }
     public static function assess(array $task,array $pages,array $facts=[]): array {
-        return self::assessment($task,$pages)+['claim_review'=>SeoClaimEvidence::task($task,$facts)];
+        $review=SeoClaimEvidence::task($task,$facts);$evidence=$task['evidence']??json_decode((string)($task['evidence_json']??''),true)??[];
+        if(($task['kind']??'')==='content'&&empty($task['is_active'])&&!empty($evidence['superseded_by_task_id']))$review['state']='historical';
+        return self::assessment($task,$pages)+['claim_review'=>$review];
     }
     private static function assessment(array $task,array $pages): array {
         $out=['state'=>'reviewable','code'=>'human_review','reason'=>'Review the proposal against current customer facts. / راجع الاقتراح وفق معلومات العميل الحالية.','basis'=>'stored_page_snapshot'];
@@ -49,6 +51,8 @@ final class SeoRecommendationReview
         return $out;
     }
     public static function publicVerificationEligible(array $task): bool {
+        $evidence=$task['evidence']??json_decode((string)($task['evidence_json']??''),true)??[];
+        if(($task['kind']??'')==='content'&&empty($task['is_active'])&&!empty($evidence['superseded_by_task_id']))return false;
         // URL Inspection and sitemap listings require their own connected checks.
         if(!in_array($task['kind']??'',['metadata','content'],true))return false;
         return in_array($task['status']??'',['active','verified','reverted'],true)||(($task['status']??'')==='needs_client'&&!empty($task['is_active']));

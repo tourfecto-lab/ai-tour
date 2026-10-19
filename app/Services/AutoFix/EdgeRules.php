@@ -177,7 +177,8 @@ class EdgeRules
                 $title=self::line((string)$a['title']);$body=trim(str_replace("\r",'',strip_tags((string)$a['expected_value'])));
                 if($title===''||$body==='')continue;
                 $articleSources[$slug]='task:'.(int)$a['id'];
-                $articles[$slug]=['url'=>(string)$a['published_url'],'title'=>mb_substr($title,0,150),'description'=>mb_substr(self::line(preg_replace('/\*\*/','',$body)),0,155),'body'=>mb_substr($body,0,12000),'published_at'=>substr((string)$a['updated_at'],0,10)];
+                $before=json_decode((string)$a['before_json'],true)?:[];$publishedDate=(string)($before['article_published_at']??substr((string)$a['updated_at'],0,10));if(!preg_match('/^\d{4}-\d{2}-\d{2}$/D',$publishedDate))$publishedDate=substr((string)$a['updated_at'],0,10);
+                $articles[$slug]=['url'=>(string)$a['published_url'],'title'=>mb_substr($title,0,150),'description'=>mb_substr(self::line(preg_replace('/\*\*/','',$body)),0,155),'body'=>mb_substr($body,0,12000),'published_at'=>$publishedDate];
                 $before=json_decode((string)$a['before_json'],true)?:[];
                 $links=$before['article_links']??[];
                 if(!$links){
@@ -206,19 +207,21 @@ class EdgeRules
         require_once dirname(__DIR__).'/Seo/ContentQualityService.php';
         if ($db->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_content_quality'")) {
             $qualityRows=$db->query('SELECT q.* FROM seo_content_quality q JOIN websites w ON w.id=q.website_id AND w.user_id=q.user_id WHERE q.website_id=? AND q.published_at IS NOT NULL ORDER BY q.id',[$websiteId]);
-            foreach($qualityRows as &$row){
+            $currentQuality=[];foreach($qualityRows as &$row){
                 $path=(string)parse_url((string)($row['page_url']??''),PHP_URL_PATH);
                 $slug=basename($path);
                 if(str_starts_with($path,'/guides/') && isset($rules['articles'][$slug]['url']))$row['page_url']=$rules['articles'][$slug]['url'];
                 parse_str((string)parse_url((string)($row['page_url']??''),PHP_URL_QUERY),$articleQuery);
                 $articleSlug=isset($articleQuery['tf_article'])&&is_string($articleQuery['tf_article'])?$articleQuery['tf_article']:$slug;
+                if(isset($articleSources[$articleSlug])&&$articleSources[$articleSlug]!==($row['source_key']??''))continue;
+                $currentQuality[]=$row;
                 if(isset($rules['articles'][$articleSlug])&&($articleSources[$articleSlug]??null)===($row['source_key']??'')){
                     $reviewedDescription=self::line((string)($row['description']??''));
                     if($reviewedDescription!==''&&mb_strlen($reviewedDescription)<=500)$rules['articles'][$articleSlug]['description']=$reviewedDescription;
                 }
             }
             unset($row);
-            $pageRules=ContentQualityService::rules($qualityRows,$siteHost,$rules['page_rules']??[]);
+            $pageRules=ContentQualityService::rules($currentQuality,$siteHost,$rules['page_rules']??[]);
             foreach ($pageRules as $path=>&$fields) foreach ($fields as $field=>&$value) {
                 $clean=self::sanitize($field,is_array($value)?json_encode($value):$value,$siteHost);
                 if ($clean!==null) $value=$field==='related_links'?json_decode($clean,true):$clean;

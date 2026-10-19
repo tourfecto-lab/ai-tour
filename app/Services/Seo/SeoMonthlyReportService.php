@@ -22,7 +22,7 @@ class SeoMonthlyReportService
         foreach($tasks as $task){
             $snapshot=json_decode((string)($task['snapshot_json']??''),true)?:[];
             $task['recommendation_review']=$task['recommendation_review']??SeoRecommendationReview::assess($task,$snapshot['pages']??[],SeoClaimEvidence::snapshotFacts($snapshot));
-            $follow=SeoTaskFollowUp::forTask($task,$now);
+            $follow=SeoTaskFollowUp::forTask($task,$now);if($follow['state']==='historical')continue;
             $bucket=$follow['state']==='waiting_google'?'google_follow_up':($follow['state']==='excluded'?'excluded_proposals':'next_plan');
             if(count($out[$bucket])>=10)continue;
             $row=array_intersect_key($task,array_flip(['id','title','instructions','page_url']));

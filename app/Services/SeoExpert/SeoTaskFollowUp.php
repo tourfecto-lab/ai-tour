@@ -5,6 +5,8 @@ final class SeoTaskFollowUp
 {
     public static function forTask(array $task,?int $now=null): array {
         $now??=time();$review=$task['recommendation_review']['state']??'';
+        $evidence=$task['evidence']??json_decode((string)($task['evidence_json']??''),true)??[];
+        if(($task['kind']??'')==='content'&&empty($task['is_active'])&&!empty($evidence['superseded_by_task_id']))return ['state'=>'historical','reason'=>'A newer publication revision is retained separately. / نسخة تاريخية؛ التصحيح الحالي محفوظ كمهمة مستقلة.'];
         if(in_array($review,['excluded','needs_evidence'],true))return ['state'=>'excluded','reason'=>'Retained proposal excluded from approval. / اقتراح محفوظ ومستبعد من الاعتماد.'];
         if(($task['status']??'')==='verified')return ['state'=>'verified','reason'=>'Dated verification is retained; it is not a ranking improvement claim. / تم الاحتفاظ بالتحقق المؤرخ؛ وليس إثباتًا لتحسن الترتيب.'];
         if(in_array($task['status']??'',['approved','active','publishing'],true))return ['state'=>'in_progress','reason'=>'Approved work or publication verification is in progress. / يجري تنفيذ أو التحقق من العمل المعتمد.'];

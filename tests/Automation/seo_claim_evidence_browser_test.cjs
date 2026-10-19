@@ -4,7 +4,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
 const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
 try{
  const writes=[],errors=[];let version=1;
- const claim={state:'needs_confirmation',reason:'Confirm the exact policy.',findings:[{code:'cancellation_policy',field:'description',quote:'Book with free cancellation. <img src=x onerror=alert(1)>'}]};
+ const claim={state:'needs_confirmation',reason:'Confirm the exact policy.',findings:[{code:'cancellation_policy',field:'description',quote:'Book with free cancellation. <img src=x onerror=alert(1)>'},{code:'guide_credentials',field:'description',quote:'Book with free cancellation. <img src=x onerror=alert(1)>'}]};
  let tasks=[
   {id:901,kind:'metadata',category:'seo',status:'pending',title:'Review tour summary',field_name:'description',page_url:'https://site.example/tours',expected_value:'Book with free cancellation.',recommendation_review:{state:'reviewable',reason:'Review this proposal.',claim_review:claim}},
   {id:902,kind:'metadata',category:'seo',status:'pending',title:'Reviewed title',field_name:'title',page_url:'https://site.example/tours',expected_value:'Egypt Tours | Example Tours',recommendation_review:{state:'reviewable',reason:'Review the title.',claim_review:{state:'no_flagged_claims',findings:[]}}},
@@ -27,6 +27,7 @@ try{
  const p=await open();
  check(await p.locator('[data-claim-summary]').innerText().then(s=>s.includes('Facts needing review: 2')),'summary counts factual reviews separately from technical results');
  check(await p.locator('[data-claim-review]').count()===2,'pending and already published claims both show warnings');
+ check(await p.locator('[data-task="901"] [data-claim-review] li').count()===1,'a sentence matching two claim patterns is shown only once');
  check(!await p.locator('[data-task="901"] [name=seTask]').isChecked(),'unsupported metadata is not automatically selected');
  check(await p.locator('[data-task="902"] [name=seTask]').isChecked(),'ordinary reviewed metadata retains normal default selection');
  check(await p.locator('[data-task="901"] [data-value]').isEditable(),'customer can correct the pending proposal in place');
