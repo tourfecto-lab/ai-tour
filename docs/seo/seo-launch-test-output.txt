@@ -1,5 +1,18 @@
 SEO customer launch: stored-evidence checklist, market review, bounded manual and automatic SEO wallet policy, article brief retry boundary, consented report schedules, canonical production bootstraps. Fake providers, guarded disposable MariaDB and actual Panel/Chromium; no production/provider/email/payment calls. Includes required phase1/2/3/connector/plans_studio/xpay/plan_gate/fx_bank plus phase4/5/6 and customer regressions. Each command exit is preserved below.
 
+
+$ node tests/Automation/seo_rejected_draft_browser_test.cjs
+PASS the exact rejected sentence is visible and escaped before recovery
+PASS opening the rejected proposal starts no generation or recovery automatically
+PASS explicit recovery uses the existing task edit API, optimistic version and CSRF
+PASS the original saved text opens in the existing content editor for correction
+PASS recovering one draft preserves edits in another draft
+PASS SEO description and FAQ editing stay available after recovery
+PASS the UI explains recovery is free and performs no cycle or publishing request
+PASS rejected draft recovery has no browser errors
+8 assertions passed
+Exit status: 0
+
 $ php tests/Automation/seo_provider_budget_admin_test.php
 PASS unprivileged role cannot read global provider figures: anonymous
 PASS unprivileged role cannot read global provider figures: customer
@@ -159,6 +172,7 @@ PASS readiness and email scheduling have no browser errors
 Exit status: 0
 
 $ node --check public_html/assets/js/seo-service-readiness.js
+
 Exit status: 0
 
 $ php tests/Automation/seo_keyword_input_test.php
@@ -580,6 +594,7 @@ PASS outcome readiness and asynchronous loading have no JavaScript errors
 Exit status: 0
 
 $ node --check public_html/assets/js/seo-impact.js
+
 Exit status: 0
 
 $ php tests/Automation/nap_address_evidence_test.php
@@ -621,20 +636,12 @@ PASS actual connected facts are previewed and previous directory profiles are re
 PASS Google facts render as escaped text
 PASS loading guidance never confirms facts or authorizes paid work
 PASS an unchecked factual review cannot save or start comparison
-PASS one reviewed confirmation saves facts and automatically compares them exactly once
-PASS comparison explains real mismatches and unknown values rather than showing a false all-clear
-PASS NAP succeeds independently and the paid Maps prerequisite stays visible
-PASS a successful free comparison does not trigger paid grids or backlink research
-PASS partial failure preserves saved facts and gives a customer action without server jargon
-PASS retrying the comparison does not replay profile saving
-PASS late responses from a previous site cannot populate the new site
-PASS site changes clear prior facts approval, paid consent and comparison results
-PASS local customer steps fit a mobile viewport
-PASS guided local comparison has no JavaScript errors
-31 assertions passed
-Exit status: 0
+page.waitForFunction: Timeout 30000ms exceeded.
+    at /workspace/ai-tour/tests/Automation/seo_guided_customer_journey_browser_test.cjs:75:105
+Exit status: 1
 
 $ node --check public_html/assets/js/seo-workspace.js
+
 Exit status: 0
 
 $ php tests/Automation/local_nap_without_coordinates_test.php
@@ -886,7 +893,22 @@ PASS reviewed monthly data wallet cap persists in the correct website policy
 PASS older setup clients that omit the monthly field preserve the existing reviewed cap
 PASS invalid monthly cap cannot overwrite the saved policy
 PASS failed budget validation rolls back and leaves the previous monthly allowance intact
-74 assertions passed
+PASS saved rejected proposal exposes its exact flagged sentence to its owner
+PASS ordinary metadata proposals cannot be converted to articles
+PASS published content cannot enter rejected-draft recovery
+PASS another customer cannot reopen the saved proposal
+PASS stale plan version cannot reopen a proposal
+PASS failed evidence persistence rolls back the recovered task atomically
+PASS recovery preserves row ID and opens the original text as a pending human-review draft
+PASS recovery retains the original task and source hash in history
+PASS restored body and FAQ evidence remain subject to the existing claim gate
+PASS unsafe recovered content cannot pass publication validation
+PASS approval cannot bypass the unconfirmed claim in a recovered draft
+PASS corrected text passes the same facts check and stays unpublished
+PASS repeat recovery does not overwrite corrected text or duplicate the draft
+PASS recovering and correcting the proposal performs no provider/model call, queue action, allowance use or wallet debit
+PASS an active policy leaves a review-only plan in draft instead of a phantom execution phase
+89 assertions passed
 Exit status: 0
 
 $ php tests/Automation/seo_task_follow_up_test.php
@@ -1017,7 +1039,7 @@ Runtime:       PHP 8.4.26
 
 ....                                                                4 / 4 (100%)
 
-Time: 00:00.038, Memory: 8.00 MB
+Time: 00:00.063, Memory: 8.00 MB
 
 OK (4 tests, 7 assertions)
 Exit status: 0
@@ -1369,64 +1391,54 @@ Exit status: 0
 
 $ php tests/Automation/php_connector_test.php
   ok  generated connector is valid PHP
-  ok  connector marker present
-  ok  homepage title replaced
-  ok  description replaced and escaped
-  ok  script containing </head> untouched
-  ok  html lang applied
-  ok  JSON-LD cannot close the script tag
-  ok  page rule applied on its path
-  ok  homepage values not applied to other pages
-  ok  generated PHP connector turns reviewed Markdown links into escaped anchors
-  ok  article served on /guides/{slug}
-  ok  bold and list formatting
-  ok  article text is escaped
-  ok  article canonical
-  ok  Article schema and connector marker
-  ok  featured image with escaped alt
-  ok  og:image and schema image
-  ok  fallback ?tf_article= works
-  ok  fallback article canonical uses its accessible URL
-  ok  guides index lists the article
-  ok  unknown article is explicit, never a soft homepage success
-  ok  unknown article returns an actual HTTP 404
-  ok  query article reuses normal site header/footer without configured PHP includes
-  ok  themed article has structured sections and its own title
-  ok  query article receives its contextual pillar link
-  ok  query article has one FAQ schema graph and no inherited homepage FAQ
-  ok  themed article uses the actual query canonical
-  ok  chunked site output is assembled once before article theme replacement
-  ok  connector sitemap lists the stored working fallback URL
-  ok  sitemap fallback works through root PHP without server rewrite rules
-  ok  guide index fallback lists working article links without rewrite rules
-  ok  customer sitemap includes the working query article and preserves existing URLs
-  ok  article links and body never leak into homepage
-  ok  guide uses configured site header/footer and keeps article body
-  ok  themed guide retains its own SEO title
-  ok  published guides appear in the connector sitemap
-  ok  existing sitemap index retains entries and adds guide sitemap
-  ok  flat site sitemap retains existing pages and adds published guides
-  ok  no rules: page unchanged
-  ok  missing article rules return 503 instead of the homepage
+  FAIL connector marker present
+  FAIL homepage title replaced
+  FAIL description replaced and escaped
+  FAIL script containing </head> untouched
+  FAIL html lang applied
+  FAIL JSON-LD cannot close the script tag
+  FAIL page rule applied on its path
+  FAIL homepage values not applied to other pages
+  FAIL generated PHP connector turns reviewed Markdown links into escaped anchors
+  FAIL article served on /guides/{slug}
+  FAIL bold and list formatting
+  FAIL article text is escaped
+  FAIL article canonical
+  FAIL Article schema and connector marker
+  FAIL featured image with escaped alt
+  FAIL og:image and schema image
+  FAIL fallback ?tf_article= works
+  FAIL fallback article canonical uses its accessible URL
+  FAIL guides index lists the article
+  FAIL unknown article is explicit, never a soft homepage success
+  FAIL unknown article returns an actual HTTP 404
+  FAIL query article reuses normal site header/footer without configured PHP includes
+  FAIL themed article has structured sections and its own title
+  FAIL query article receives its contextual pillar link
+  FAIL query article has one FAQ schema graph and no inherited homepage FAQ
+  FAIL themed article uses the actual query canonical
+  FAIL chunked site output is assembled once before article theme replacement
+  FAIL connector sitemap lists the stored working fallback URL
+  FAIL sitemap fallback works through root PHP without server rewrite rules
+  FAIL guide index fallback lists working article links without rewrite rules
+  FAIL customer sitemap includes the working query article and preserves existing URLs
+  FAIL article links and body never leak into homepage
+  FAIL guide uses configured site header/footer and keeps article body
+  FAIL themed guide retains its own SEO title
+  FAIL published guides appear in the connector sitemap
+  FAIL existing sitemap index retains entries and adds guide sitemap
+  FAIL flat site sitemap retains existing pages and adds published guides
+  FAIL no rules: page unchanged
+  FAIL missing article rules return 503 instead of the homepage
 
-40/40 passed
-Exit status: 0
+1/40 passed
+Exit status: 1
 
 $ node tests/Automation/content_publication_polish_browser_test.cjs
-  ok  real connector output retains customer theme in browser
-  ok  one article title with semantic section heading
-  ok  contextual trip link is clickable
-  ok  query canonical survives browser parsing
-  ok  one article/FAQ graph rendered
-  ok  article fits mobile viewport
-  ok  real SEO UI distinguishes passed and unavailable evidence
-  ok  real SEO UI explains missing links and optional FAQ separately
-  ok  UI distinguishes sitemap discovery from Google indexing
-  ok  viewing quality checks only probes connections; no publication or paid cycle request
-  ok  no browser JavaScript errors
-
-11/11 passed
-Exit status: 0
+locator.innerText: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('header')[22m
+Exit status: 1
 
 $ php tests/Automation/customer_audit_fix_test.php
   ok  bridge normalizes /api/local-seo/sites without changing method
@@ -1867,7 +1879,7 @@ build your plan
   ok  paid: trial cap gone; plan 20 + custom 10 + earlier pack 10 kept
   ok  chatbot replies: plan + custom + pack
 renewal
-  ok  renews at the custom price $169 ({"success":true,"subscription_id":746,"charged":169,"new_period_end":"2026-11-19 08:40:02","balance":240})
+  ok  renews at the custom price $169 ({"success":true,"subscription_id":757,"charged":169,"new_period_end":"2026-11-19 09:45:26","balance":240})
   ok  custom extras granted again for the new period (+10) and pack still on (+10)
 after the trial: automatic charge
   ok  customer can cancel renewal during the trial
@@ -2126,7 +2138,7 @@ Runtime:       PHP 8.4.26
 
 .........                                                           9 / 9 (100%)
 
-Time: 00:02.351, Memory: 18.00 MB
+Time: 00:01.435, Memory: 18.00 MB
 
 OK (9 tests, 57 assertions)
 Exit status: 0
@@ -2163,10 +2175,10 @@ $ php tests/Legacy/GbpLocalSeoAuditTest.php
   📝 Total: 19
   📈 Success Rate: 100%
 ==================================================
-
 Exit status: 0
 
 $ node --check public_html/assets/js/local-seo.js
+
 Exit status: 0
 
 $ php tests/Automation/seo_phase6_test.php
@@ -2287,23 +2299,123 @@ $ node tests/Automation/seo_phase6_browser_test.cjs
 Exit status: 0
 
 $ node --check public_html/assets/js/international-seo.js
+
 Exit status: 0
 
 $ php tools/lint.php
-OK: 1310 PHP files checked, no syntax errors.
+OK: 1311 PHP files checked, no syntax errors.
 Exit status: 0
 
 $ node --check public_html/assets/js/seo-expert.js
+
 Exit status: 0
 
 $ git diff --check
-docs/seo/seo-launch-test-output.txt:168: trailing whitespace.
-+PASS only recognized trailing annotations removed:  Tours (commercial, low)
-docs/seo/seo-launch-test-output.txt:1754: trailing whitespace.
-+  ok  no browser JavaScript errors:
-docs/seo/seo-launch-test-output.txt:2298: new blank line at EOF.
-Exit status: 2
 
-Recheck after normalizing the generated transcript (the initial whitespace check ran while this tracked report was being written; no implementation or assertions changed):
-$ git diff --check
 Exit status: 0
+
+Rechecks after fixture diagnosis (all original results above are retained):
+The guided browser first exceeded its 30-second wait; the unchanged suite passed on rerun. The connector fixture used a fixed 400-ms startup delay and produced an empty guide artifact when PHP was not ready. Its startup now waits for the local server under a bounded deadline; all 40 connector assertions remain unchanged. The guide artifact was regenerated before the dependent browser rerun.
+
+Premature guide-browser recheck before artifact regeneration:
+locator.innerText: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('header')[22m
+
+Recheck guided_customer_journey_browser:
+PASS customer has four explicit steps without losing existing tools
+PASS background processing asks the customer to follow the existing cycle: The platform is processing your existing cycle. Open it for automatic status updates; no new cycle or open browser is required.
+PASS missing optional WordPress login is not presented as a failed PHP setup
+PASS optional WordPress permissions remain accessible on request
+PASS cycle progress updates automatically without another customer click
+PASS automatic polling pauses for unsaved customer input even after focus leaves the field
+PASS guided progress never approves changes or consumes a new cycle automatically
+PASS the customer sees what requires their review and what the platform does
+PASS existing review takes priority over the monthly cycle limit
+PASS research link retains the selected customer website
+PASS changing the one-cycle research wallet cap clears generation consent
+PASS switching sites resets both generation approval and one-cycle research cap
+PASS switching sites clears the prior plan and its required actions
+PASS research link follows website switching without retaining the previous customer context
+PASS guided SEO overview fits a mobile viewport
+PASS SEO guidance and progress have no JavaScript errors
+PASS Arabic step instructions render correctly as UTF-8
+PASS actual connected facts are previewed and previous directory profiles are restored
+PASS Google facts render as escaped text
+PASS loading guidance never confirms facts or authorizes paid work
+PASS an unchecked factual review cannot save or start comparison
+PASS one reviewed confirmation saves facts and automatically compares them exactly once
+PASS comparison explains real mismatches and unknown values rather than showing a false all-clear
+PASS NAP succeeds independently and the paid Maps prerequisite stays visible
+PASS a successful free comparison does not trigger paid grids or backlink research
+PASS partial failure preserves saved facts and gives a customer action without server jargon
+PASS retrying the comparison does not replay profile saving
+PASS late responses from a previous site cannot populate the new site
+PASS site changes clear prior facts approval, paid consent and comparison results
+PASS local customer steps fit a mobile viewport
+PASS guided local comparison has no JavaScript errors
+31 assertions passed
+Exit status: 0
+
+Recheck connector:
+  ok  generated connector is valid PHP
+  ok  connector marker present
+  ok  homepage title replaced
+  ok  description replaced and escaped
+  ok  script containing </head> untouched
+  ok  html lang applied
+  ok  JSON-LD cannot close the script tag
+  ok  page rule applied on its path
+  ok  homepage values not applied to other pages
+  ok  generated PHP connector turns reviewed Markdown links into escaped anchors
+  ok  article served on /guides/{slug}
+  ok  bold and list formatting
+  ok  article text is escaped
+  ok  article canonical
+  ok  Article schema and connector marker
+  ok  featured image with escaped alt
+  ok  og:image and schema image
+  ok  fallback ?tf_article= works
+  ok  fallback article canonical uses its accessible URL
+  ok  guides index lists the article
+  ok  unknown article is explicit, never a soft homepage success
+  ok  unknown article returns an actual HTTP 404
+  ok  query article reuses normal site header/footer without configured PHP includes
+  ok  themed article has structured sections and its own title
+  ok  query article receives its contextual pillar link
+  ok  query article has one FAQ schema graph and no inherited homepage FAQ
+  ok  themed article uses the actual query canonical
+  ok  chunked site output is assembled once before article theme replacement
+  ok  connector sitemap lists the stored working fallback URL
+  ok  sitemap fallback works through root PHP without server rewrite rules
+  ok  guide index fallback lists working article links without rewrite rules
+  ok  customer sitemap includes the working query article and preserves existing URLs
+  ok  article links and body never leak into homepage
+  ok  guide uses configured site header/footer and keeps article body
+  ok  themed guide retains its own SEO title
+  ok  published guides appear in the connector sitemap
+  ok  existing sitemap index retains entries and adds guide sitemap
+  ok  flat site sitemap retains existing pages and adds published guides
+  ok  no rules: page unchanged
+  ok  missing article rules return 503 instead of the homepage
+
+40/40 passed
+Exit status: 0
+
+Recheck content_browser:
+  ok  real connector output retains customer theme in browser
+  ok  one article title with semantic section heading
+  ok  contextual trip link is clickable
+  ok  query canonical survives browser parsing
+  ok  one article/FAQ graph rendered
+  ok  article fits mobile viewport
+  ok  real SEO UI distinguishes passed and unavailable evidence
+  ok  real SEO UI explains missing links and optional FAQ separately
+  ok  UI distinguishes sitemap discovery from Google indexing
+  ok  viewing quality checks only probes connections; no publication or paid cycle request
+  ok  no browser JavaScript errors
+
+11/11 passed
+Exit status: 0
+
+Final git diff --check after recheck transcript: exit 0.

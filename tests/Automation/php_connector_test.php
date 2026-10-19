@@ -24,8 +24,19 @@ $page = '<!doctype html><html lang="ar"><head><title>Old</title><meta name="desc
 file_put_contents($dir . '/page.html', $page);
 file_put_contents($dir . '/router.php', '<?php require __DIR__ . "/tourfecto-connect.php"; echo file_get_contents(__DIR__ . "/page.html");');
 $port = 18900 + (getmypid() % 50);
-$server = proc_open(['php', '-S', '127.0.0.1:' . $port, $dir . '/router.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes);
-usleep(400000);
+$serverLog = $dir . '/server.log';
+$server = proc_open(['php', '-S', '127.0.0.1:' . $port, $dir . '/router.php'], [1 => ['file', $serverLog, 'a'], 2 => ['file', $serverLog, 'a']], $pipes);
+// Wait for the fixture, rather than assuming PHP starts within 400 ms on a busy runner.
+$deadline = microtime(true) + 10;
+do {
+    $socket = @fsockopen('127.0.0.1', $port, $socketError, $socketMessage, 0.1);
+    if (is_resource($socket)) { fclose($socket); break; }
+    if (!is_resource($server) || !proc_get_status($server)['running'] || microtime(true) >= $deadline) {
+        if (is_resource($server)) proc_terminate($server);
+        throw new RuntimeException('Connector fixture did not start: ' . @file_get_contents($serverLog));
+    }
+    usleep(50000);
+} while (true);
 function render($connector, $path, $page) {
     global $port;
     $body=@file_get_contents('http://127.0.0.1:' . $port . $path, false, stream_context_create(['http'=>['ignore_errors'=>true]]));
@@ -134,6 +145,6 @@ $unavailable=(string)render($connector,'/?tf_article=discover-egypt',$page);
 check(str_contains($GLOBALS['lastConnectorStatus'],'503') && str_contains($unavailable,'temporarily unavailable') && !str_contains($unavailable,'<title>Old</title>'),'missing article rules return 503 instead of the homepage');
 
 proc_terminate($server);
-@unlink($cache); @unlink($connector); @unlink($dir . '/page.html'); @unlink($dir . '/router.php'); @rmdir($dir);
+@unlink($cache); @unlink($connector); @unlink($dir . '/page.html'); @unlink($dir . '/router.php'); @unlink($serverLog); @rmdir($dir);
 echo "\n" . ($n - $fails) . "/$n passed\n";
 exit($fails ? 1 : 0);
