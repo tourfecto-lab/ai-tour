@@ -73,4 +73,25 @@ class SeoMarketService
             $this->db->exec('UPDATE seo_markets SET is_primary=(id=?) WHERE website_id=?',[$mid,$wid]);
         });
     }
+    /** A default country may be corrected before any geographically scoped work exists. */
+    public function replaceUnmeasured(int $wid,int $uid,int $mid,array $in): array
+    {
+        $this->resolve($wid,$uid,$mid);
+        $location=filter_var($in['location_code']??null,FILTER_VALIDATE_INT);$language=(string)($in['language_code']??'');$label=trim((string)($in['label']??''));
+        if(($in['reviewed']??false)!==true||!$location||$location<1||!preg_match('/^[a-z]{2,3}(?:-[A-Z]{2})?$/D',$language)||mb_strlen($label)<2||mb_strlen($label)>100)throw new InvalidArgumentException('راجع البلد واللغة ووافق على تغيير السوق غير المقاس');
+        return $this->db->transaction(function()use($wid,$uid,$mid,$location,$language,$label){
+            $pdo=$this->db->getConnection();$s=$pdo->prepare('SELECT id FROM websites WHERE id=? AND user_id=? FOR UPDATE');$s->execute([$wid,$uid]);if(!$s->fetchColumn())throw new InvalidArgumentException('الموقع غير متاح');
+            $s=$pdo->prepare('SELECT id FROM seo_markets WHERE id=? AND website_id=? FOR UPDATE');$s->execute([$mid,$wid]);if(!$s->fetchColumn())throw new InvalidArgumentException('السوق غير متاح');
+            foreach(['seo_keyword_research','seo_research_cache','seo_rank_tracking_history','competitor_keywords','seo_ai_prompt_sets','seo_ai_answers','seo_ai_calls','seo_ai_tasks'] as $table){
+                $s=$pdo->prepare('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=\'market_id\'');$s->execute([$table]);if(!$s->fetchColumn())continue;
+                $s=$pdo->prepare('SELECT 1 FROM `'.$table.'` WHERE market_id=? LIMIT 1');$s->execute([$mid]);if($s->fetchColumn())throw new InvalidArgumentException('لهذا السوق قياسات أو إعدادات مرتبطة؛ احتفظ بسجله وأضف سوقًا منفصلًا حسب الباقة');
+            }
+            $s=$pdo->prepare('SELECT 1 FROM tracked_keywords WHERE website_id=? AND user_id=? AND market_id=? AND (last_checked_at IS NOT NULL OR enriched_at IS NOT NULL OR current_position IS NOT NULL OR search_volume IS NOT NULL OR difficulty IS NOT NULL OR gsc_checked_at IS NOT NULL) LIMIT 1');$s->execute([$wid,$uid,$mid]);if($s->fetchColumn())throw new InvalidArgumentException('لهذا السوق بيانات كلمات محفوظة؛ لا نغير بلد القياسات القديمة');
+            $s=$pdo->prepare('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=\'seo_content_quality\'');$s->execute();
+            if($s->fetchColumn()){$s=$pdo->prepare("SELECT 1 FROM seo_content_quality WHERE website_id=? AND user_id=? AND JSON_VALID(brief_json) AND CAST(JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(brief_json) THEN brief_json ELSE '{}' END,'$.market.id')) AS UNSIGNED)=? LIMIT 1");$s->execute([$wid,$uid,$mid]);if($s->fetchColumn())throw new InvalidArgumentException('هذا السوق مرتبط بمحتوى محفوظ؛ احتفظ بتاريخه');}
+            $s=$pdo->prepare('SELECT id FROM seo_markets WHERE website_id=? AND location_code=? AND language_code=? AND id<>?');$s->execute([$wid,$location,$language,$mid]);if($s->fetchColumn())throw new InvalidArgumentException('السوق موجود بالفعل؛ اختَره من القائمة بدل تغيير سوق آخر');
+            $s=$pdo->prepare('UPDATE seo_markets SET location_code=?,language_code=?,label=? WHERE id=? AND website_id=?');$s->execute([$location,$language,$label,$mid,$wid]);
+            $s=$pdo->prepare('SELECT * FROM seo_markets WHERE id=? AND website_id=?');$s->execute([$mid,$wid]);return $s->fetch(PDO::FETCH_ASSOC);
+        });
+    }
 }

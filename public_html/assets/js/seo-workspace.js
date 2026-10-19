@@ -40,7 +40,7 @@
   const move=(id,page)=>{const n=document.getElementById(id),dest=panels.get(page);if(n&&!dest.contains(n))dest.append(n);};
   move('seWorker','overview');move('seScope','settings');
   for(const id of ['seManageConnections','seConnectionGrid','seProbe','seProbeResults','seConfig'])move(id,'settings');
-  move('seQuote','scan');
+  move('seQuote','scan');move('seResearchBudget','scan');
   const confirm=document.getElementById('seGenerateConfirm')?.closest('label');if(confirm)panels.get('scan').append(confirm);
   const scanActions=make('div','se-actions');panels.get('scan').append(scanActions);
   const settingsActions=make('div','se-actions');panels.get('settings').append(settingsActions);
@@ -92,7 +92,7 @@
     if(pagesScanned===null){let snap=run.snapshot;if(typeof snap==='string'){try{snap=JSON.parse(snap);}catch(e){snap=null;}}if(snap&&Array.isArray(snap.pages))pagesScanned=snap.pages.length;}
     for(const task of tasks){
      const done=task.status==='verified';
-     if(!done)continue;
+     if(!done||task.evidence?.superseded_by_task_id)continue;
      if(task.kind==='content'){articles++;items.push({text:t('مقال — تحقق سابق: ','Article — previously verified: ')+task.title,url:task.published_url});}
      else if(task.kind==='metadata'){changes++;items.push({text:({title:t('عنوان','Title'),description:t('وصف','Description')}[task.field_name]||task.field_name)+' — '+(task.page_path||'/'),url:task.page_url||siteUrl(task.page_path)});}
     }
@@ -126,6 +126,7 @@
    if(!state.configured){nextText.textContent=t('أكمل بيانات الشركة وحدود العمل، ثم ابدأ أول فحص.','Complete company facts and work limits, then start your first inspection.');nextActions.append(link('settings',t('أكمل الإعداد','Complete setup')));}
    else if(!state.workerReady){nextText.textContent=t('المتابعة غير متاحة من المنصة حاليًا. عملك السابق محفوظ؛ تواصل مع الدعم لو استمر التنبيه.','Background processing is unavailable from the platform. Existing work is preserved; contact support if this continues.');nextActions.append(link('results',t('راجع العمل المحفوظ','Review saved work')));}
    else if(state.runs.some(r=>['queued','scanning','scanned','planning','executing','monitoring'].includes(r.status))){const run=state.runs.find(r=>['queued','scanning','scanned','planning','executing','monitoring'].includes(r.status));nextText.textContent=t('المنصة تعمل على دورتك في الخلفية. افتحها لمتابعة الحالة تلقائيًا؛ لا تحتاج بدء دورة أخرى أو إبقاء الصفحة مفتوحة.','The platform is processing your existing cycle. Open it for automatic status updates; no new cycle or open browser is required.');nextActions.append(runLink(run));}
+   else if(state.runs.length&&(latestTasks||[]).some(x=>['pending','needs_client'].includes(x.status)&&!['excluded','needs_evidence'].includes(x.recommendation_review?.state)&&!['waiting_google','historical'].includes(x.follow_up?.state))){nextText.textContent=t('عندك خطة محفوظة تحتاج مراجعتك. افتح المهام والحقائق؛ مراجعتها لا تحتاج شراء دورة جديدة، حتى لو وصلت لحد الدورات.','Your saved plan needs review. Open its tasks and facts; reviewing it needs no new paid cycle, even at the cycle limit.');nextActions.append(runLink(state.runs[0]),link('results',t('النتائج','Results')));}
    else if(state.cycleBlock&&/limit|الحد/i.test(state.cycleBlock)){nextText.textContent=t('خلصت الدورات المسموحة الشهر ده. التعديلات المتحققة سابقًا معروضة تحت؛ أعد التحقق من حالتها الحالية. لو عايز فحص جديد دلوقتي علّي الحد من الإعدادات، وإلا هتتجدد الشهر الجاي.','You used this month’s cycles. Previously verified changes are listed below; recheck their current state. To scan again now, raise the limit in settings; otherwise it renews next month.');nextActions.append(link('settings',t('علّي الحد','Raise the limit')),link('results',t('النتائج','Results')));}
    else if(state.cycleBlock){nextText.textContent=state.cycleBlock;nextActions.append(link('plan',t('تابع الدورة الحالية','Follow the current cycle')));}
    else if(state.runs.length){const tasks=latestTasks||[],excluded=x=>['excluded','needs_evidence'].includes(x.recommendation_review?.state),pending=tasks.filter(x=>x.status==='pending'&&!excluded(x)).length,client=tasks.filter(x=>x.status==='needs_client'&&!excluded(x)&&x.follow_up?.state!=='waiting_google').length;nextText.textContent=pending?t('الخطة جاهزة. راجع واعتمد المقترحات المناسبة؛ المنصة تنفذ المعتمد وتتحقق من ظهوره. مقترحات للمراجعة: ','Your plan is ready. Review suitable proposals; the platform executes approved work and verifies it. Proposals to review: ')+pending:client?t('المطلوب منك الآن معلومات أو إجراءات محددة داخل الخطة. مهام للمراجعة: ','Your plan needs specific information or external actions. Tasks to review: ')+client:t('تابع آخر دورة ونتائجها. القياس يحتاج اكتمال فترته؛ وجود تعديل على الموقع لا يثبت تحسن الترتيب.','Review your latest cycle and results. Measurement needs a complete window; a visible edit does not establish ranking improvement.');nextActions.append(runLink(state.runs[0]),link('results',t('النتائج','Results')));}

@@ -58,9 +58,9 @@ if ($__tourfectoMissingExtensions) {
     exit;
 }
 
-tourfecto_register_fallback_autoloader();
-
 require_once ROOT_PATH . '/vendor/autoload.php';
+// The release map must precede even an older generated Composer class map.
+tourfecto_register_fallback_autoloader();
 
 // ============================================
 // 2.1. كلاسات جديدة مش مسجّلة لسه في classmap بتاع Composer

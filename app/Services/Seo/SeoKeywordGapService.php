@@ -22,7 +22,7 @@ class SeoKeywordGapService
     }
     public static function rows(Database $db,int $wid,int $uid): array
     {
-        $rows=$db->query("SELECT k.*,c.competitor_domain FROM competitor_keywords k JOIN competitors c ON c.id=k.competitor_id JOIN seo_markets m ON m.id=k.market_id AND m.website_id=c.website_id WHERE c.website_id=? AND c.user_id=? AND c.is_active=1 AND m.is_primary=1 AND k.source='dataforseo' AND k.fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)",[$wid,$uid]);
+        $rows=$db->query("SELECT k.*,c.competitor_domain FROM competitor_keywords k JOIN competitors c ON c.id=k.competitor_id JOIN seo_markets m ON m.id=k.market_id AND m.website_id=c.website_id WHERE c.website_id=? AND c.user_id=? AND c.is_active=1 AND c.monitoring_paused=0 AND m.is_primary=1 AND k.source='dataforseo' AND k.fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)",[$wid,$uid]);
         $own=$db->query('SELECT keyword,market_id,current_position,last_checked_at FROM tracked_keywords WHERE website_id=? AND user_id=?',[$wid,$uid]);
         return self::calculate($rows,$own);
     }
@@ -33,7 +33,7 @@ class SeoKeywordGapService
         if (empty($r['available'])) return $r;
         // Bounded and user initiated: measure candidates before claiming a gap.
         $candidates=[];
-        foreach ($db->query("SELECT DISTINCT k.keyword FROM competitor_keywords k JOIN competitors c ON c.id=k.competitor_id WHERE c.website_id=? AND c.user_id=? AND c.is_active=1 AND k.market_id=? AND k.source='dataforseo' AND k.position BETWEEN 1 AND 10 AND k.fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY) ORDER BY k.keyword LIMIT 50",[$wid,$uid,$market['id']]) as $k) {
+        foreach ($db->query("SELECT DISTINCT k.keyword FROM competitor_keywords k JOIN competitors c ON c.id=k.competitor_id WHERE c.website_id=? AND c.user_id=? AND c.is_active=1 AND c.monitoring_paused=0 AND k.market_id=? AND k.source='dataforseo' AND k.position BETWEEN 1 AND 10 AND k.fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY) ORDER BY k.keyword LIMIT 50",[$wid,$uid,$market['id']]) as $k) {
             $candidates[]=$k['keyword'];
             $db->exec('INSERT IGNORE INTO tracked_keywords (website_id,user_id,market_id,keyword) VALUES (?,?,?,?)',[$wid,$uid,$market['id'],$k['keyword']]);
         }

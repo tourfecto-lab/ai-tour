@@ -4,7 +4,12 @@ class SeoDataLedger
 {
     private Database $db;
     private ?float $cap=null;
-    public function __construct(?Database $db = null) { $this->db = $db ?? Database::getInstance(); }
+    private float $walletSpent=0;
+    public function __construct(?Database $db = null,private ?float $walletLimit=null) {
+        if ($walletLimit!==null && (!is_finite($walletLimit)||$walletLimit<0)) throw new InvalidArgumentException('Invalid wallet limit');
+        $this->db = $db ?? Database::getInstance();
+    }
+    public function walletSpent(): float {return $this->walletSpent;}
 
     public function reserve(string $endpoint, int $websiteId, int $units, float $ceiling, float $cap): int
     {
@@ -24,15 +29,35 @@ class SeoDataLedger
             if (!$owner) throw new RuntimeException('website_not_found');
             // Initialize PlanUsage's schema check before opening the billing transaction.
             PlanUsage::quota((int)$owner,'seo_data');
-            return $this->db->transaction(function () use ($endpoint,$websiteId,$units,$ceiling,$owner,$pdo) {
+            $automatic=$this->walletLimit===null;
+            $limit=$this->walletLimit;
+            $spent=$automatic?0.0:$this->walletSpent;
+            $note='DataForSEO '.($automatic?'auto':'manual').' website:'.$websiteId.' '.$endpoint;
+            if($automatic){
+                $s=$pdo->prepare("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='seo_expert_sites'");$s->execute();
+                $policy=[];if($s->fetchColumn()){$s=$pdo->prepare('SELECT policy_json FROM seo_expert_sites WHERE website_id=? AND user_id=?');$s->execute([$websiteId,$owner]);$policy=json_decode((string)$s->fetchColumn(),true)?:[];}
+                $value=$policy['max_data_wallet_monthly']??0;
+                $limit=is_numeric($value)&&is_finite((float)$value)&&$value>=0?round((float)$value,2):0.0;
+                // Only charges carrying this explicit policy marker count. Old unscoped notes are preserved.
+                if($limit>0){$s=$pdo->prepare("SELECT COALESCE(-SUM(amount),0) FROM wallet_transactions WHERE user_id=? AND feature_key='seo_data' AND status='completed' AND currency='USD' AND amount<0 AND reference_note LIKE ? AND created_at>=DATE_FORMAT(UTC_TIMESTAMP(),'%Y-%m-01')");$s->execute([$owner,'DataForSEO auto website:'.$websiteId.' %']);$limit=max(0,round($limit-(float)$s->fetchColumn(),2));}
+            }
+            $id=$this->db->transaction(function () use ($endpoint,$websiteId,$units,$ceiling,$owner,$pdo,&$spent,$automatic,$limit,$note) {
                 for ($i=0; $i<$units; $i++) {
-                    if (PlanUsage::charge((int)$owner,'seo_data','seo_data','DataForSEO '.$endpoint) === 'failed')
-                        throw new RuntimeException('seo_quota_and_wallet_exhausted');
+                    if (PlanUsage::consume((int)$owner,'seo_data',$note)) continue;
+                    $s=$pdo->prepare("SELECT price,currency,is_active FROM pay_per_use_pricing WHERE feature_key='seo_data' FOR UPDATE");$s->execute();$price=$s->fetch(PDO::FETCH_ASSOC);
+                    $amount=(float)($price['price']??0);
+                    if (!$price || !(int)$price['is_active'] || $price['currency']!=='USD' || !is_finite($amount) || $amount<=0 || abs($amount-round($amount,2))>0.000001)
+                        throw new RuntimeException('seo_wallet_price_unavailable');
+                    if (round($spent+$amount,2)>round($limit,2)) throw new RuntimeException($automatic?'seo_auto_wallet_limit_reached':'seo_wallet_limit_reached');
+                    if (!(new WalletService())->chargeAmount((int)$owner,$amount,'seo_data',$note)) throw new RuntimeException('seo_quota_and_wallet_exhausted');
+                    $spent=round($spent+$amount,2);
                 }
                 $s=$pdo->prepare('INSERT INTO dataforseo_calls (endpoint,cost,reserved_cost,website_id,status,created_at) VALUES (?,0,?,?,\'pending\',UTC_TIMESTAMP())');
                 $s->execute([$endpoint,$ceiling,$websiteId]);
                 return (int)$pdo->lastInsertId();
             });
+            $this->walletSpent=$automatic?round($this->walletSpent+$spent,2):$spent;
+            return $id;
         } finally { $pdo->query("SELECT RELEASE_LOCK('tourfecto:dataforseo:budget')"); }
     }
 

@@ -16,6 +16,8 @@ return [
     'SonarVisibilityProvider' => dirname(__DIR__,2).'/app/Services/AiVisibility/SonarVisibilityProvider.php',
     'AiVisibilityCheckJob' => dirname(__DIR__,2).'/app/Jobs/AiVisibilityCheckJob.php',
     'DataForSeoClient' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoClient.php',
+    'SeoKeywordMeasurementService' => dirname(__DIR__,2).'/app/Services/Seo/SeoKeywordMeasurementService.php',
+    'SeoServiceReadiness' => dirname(__DIR__,2).'/app/Services/SeoExpert/SeoServiceReadiness.php',
     'DataForSeoResearchService' => dirname(__DIR__,2).'/app/Services/Seo/DataForSeoResearchService.php',
     'SeoDataLedger' => dirname(__DIR__,2).'/app/Services/Seo/SeoDataLedger.php',
     'SeoDataSchema' => dirname(__DIR__,2).'/app/Services/Seo/SeoDataSchema.php',

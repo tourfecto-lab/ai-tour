@@ -20,18 +20,20 @@ class DataForSeoResearchService
             'position'=>isset($item['ranked_serp_element']['serp_item']['rank_group'])?(int)$item['ranked_serp_element']['serp_item']['rank_group']:null,
             'url'=>$item['ranked_serp_element']['serp_item']['url']??null];
     }
-    public function research(int $wid,int $uid,int $mid=0,array $seeds=[],bool $exact=false): array
+    public function research(int $wid,int $uid,int $mid=0,array $seeds=[],bool $exact=false,int $resultLimit=100): array
     {
         if (!$this->configured()) return ['available'=>false,'reason'=>'not_measured','message'=>'اربط DataForSEO من الأدمن','data'=>[]];
         $db=$this->db??Database::getInstance(); $markets=new SeoMarketService($db); $site=$markets->site($wid,$uid); $market=$markets->resolve($wid,$uid,$mid);
         $host=DataForSeoRankingSource::normalizeHost((string)($site['main_url']??$site['domain']??''));
         $seeds=array_values(array_unique(array_filter(array_map('trim',$seeds))));
+        $exact=$exact && (bool)$seeds;
+        if($resultLimit<1||$resultLimit>100)throw new InvalidArgumentException('Invalid research result limit');
         if (count($seeds)>20) throw new InvalidArgumentException('Maximum 20 seed keywords');
         foreach ($seeds as $seed) if (mb_strlen($seed)>255) throw new InvalidArgumentException('Invalid seed keyword');
         foreach ($seeds as $seed) if (DataForSeoRankingSource::keywordPhrase($seed)!==$seed)
             throw new InvalidArgumentException('راجع الكلمات التي تحتوي نية البحث والأولوية بين الأقواس، ونقّها من صفحة الكلمات قبل القياس المدفوع.');
         $kind=$seeds?($exact?'keyword_overview':'keyword_ideas'):'keywords_for_site';
-        $task=['location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'limit'=>100,'include_serp_info'=>false];
+        $task=['location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'limit'=>$resultLimit,'include_serp_info'=>false];
         if ($seeds) $task['keywords']=$seeds; else $task['target']=$host;
         $key=hash('sha256',json_encode([$kind,$task]));
         $pdo=$db->getConnection(); $lock='seo-research:'.sha1($wid.'|'.$market['id'].'|'.$key);
@@ -45,9 +47,10 @@ class DataForSeoResearchService
         $result=$r['response']['tasks'][0]['result'][0]??[];
         if (!array_key_exists('items',$result) || ($result['items']!==null && !is_array($result['items']))) return ['available'=>false,'reason'=>'dataforseo_invalid_response','data'=>[]];
         $data=[];
-        foreach (array_slice(DataForSeoClient::items($r),0,100) as $item) {
+        foreach (array_slice(DataForSeoClient::items($r),0,$exact?min(count($seeds),$resultLimit):$resultLimit) as $item) {
             if (!is_array($item)) continue;
             $row=self::parse($item);
+            if ($exact && !in_array(mb_strtolower($row['keyword']),array_map('mb_strtolower',$seeds),true)) continue;
             if ($row['keyword']!=='' && mb_strlen($row['keyword'])<=255) $data[]=$row;
         }
         if ($data) {

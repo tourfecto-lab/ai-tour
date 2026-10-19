@@ -71,7 +71,7 @@ class ContentBriefService
                 'Omit unconfirmed prices and claims. List questions needing customer confirmation separately. Never copy competitor wording.',
                 'Answer the supplied relevant questions visibly in the article. Do not put JSON-LD or scripts in article content.']];
     }
-    public function forKeyword(int $uid,int $wid,string $keyword,int $mid=0): array
+    public function forKeyword(int $uid,int $wid,string $keyword,int $mid=0,bool $allowPaidSerp=true): array
     {
         $db=$this->db??Database::getInstance();
         $market=(new SeoMarketService($db))->resolve($wid,$uid,$mid);
@@ -83,6 +83,7 @@ class ContentBriefService
         $cache=$db->query('SELECT result_json FROM seo_research_cache WHERE website_id=? AND market_id=? AND cache_key=? AND fetched_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 7 DAY)',[$wid,$market['id'],$key]);
         if ($cache) $items=json_decode($cache[0]['result_json'],true,512,JSON_THROW_ON_ERROR);
         else {
+            if (!$allowPaidSerp) throw new RuntimeException('SERP brief outcome needs review; no automatic paid retry');
             $r=($this->serp??new DataForSeoClient())->call('serp/google/organic/live/advanced',[[
                 'keyword'=>$keyword,'location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'depth'=>10]],$wid,1,0.10);
             if (empty($r['available'])) throw new RuntimeException('SERP brief unavailable: '.($r['reason']??'not_measured'));

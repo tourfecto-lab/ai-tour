@@ -1738,6 +1738,7 @@ $router->post('/api/website-optimizer/fixes/{id}/edge-verify','EdgeFixController
 require_once __DIR__.'/../Controllers/SeoExpertController.php';
 $router->get('/api/seo-expert/setup', 'SeoExpertController', 'setup', ['AuthMiddleware']);
 $router->get('/api/seo-expert/sites/{website_id}', 'SeoExpertController', 'overview', ['AuthMiddleware']);
+$router->get('/api/seo-expert/sites/{website_id}/readiness', 'SeoExpertController', 'readiness', ['AuthMiddleware']);
 $router->get('/api/seo-expert/runs/{id}', 'SeoExpertController', 'detail', ['AuthMiddleware']);
 $router->post('/api/seo-expert/sites/{website_id}/configure', 'SeoExpertController', 'configure', ['AuthMiddleware']);
 $router->post('/api/seo-expert/sites/{website_id}/probe', 'SeoExpertController', 'probe', ['AuthMiddleware']);
@@ -1781,6 +1782,8 @@ $router->post('/api/seo-expert/runs/{id}/review-scope','SeoExpertController','re
 $router->get('/api/seo/data/markets','SeoDataController','markets',['AuthMiddleware']);
 $router->post('/api/seo/data/markets','SeoDataController','addMarket',['AuthMiddleware']);
 $router->get('/api/seo/data/keywords','SeoDataController','keywords',['AuthMiddleware']);
+$router->get('/api/seo/data/measurement-quote','SeoDataController','measurementQuote',['AuthMiddleware']);
+$router->post('/api/seo/data/measure','SeoDataController','measureKeywords',['AuthMiddleware']);
 $router->post('/api/seo/data/keywords/{id}/repair','SeoDataController','repairKeyword',['AuthMiddleware']);
 $router->post('/api/seo/data/research','SeoDataController','discover',['AuthMiddleware']);
 $router->post('/api/seo/data/gaps/refresh','SeoDataController','gapRefresh',['AuthMiddleware']);

@@ -112,6 +112,7 @@ class SeoInsightsController extends Controller
         if (!$this->isAuthenticated()) {
             return $this->error('Unauthorized', 401);
         }
+        if ($error=$this->verifyCsrf()) return $error;
         $websiteId = (int) $this->get('website_id');
         if (!$websiteId || !$this->ownsWebsite($websiteId)) {
             return $this->error('الموقع غير موجود', 404);

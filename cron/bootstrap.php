@@ -29,9 +29,10 @@ if ($__tourfectoMissingExtensions) {
     exit;
 }
 
-tourfecto_register_fallback_autoloader();
-
 require_once ROOT_PATH . '/vendor/autoload.php';
+// Composer prepends its loader. Register the release map afterwards so stale
+// generated maps cannot load retired billing/service implementations first.
+tourfecto_register_fallback_autoloader();
 
 // ============================================================
 // Fallback Autoloader (للـ Cron/Queue Worker فقط)

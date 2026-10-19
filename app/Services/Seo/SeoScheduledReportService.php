@@ -41,55 +41,28 @@ class SeoScheduledReportService
      */
     public function saveSchedule(int $websiteId, int $userId, array $data, ?int $scheduleId = null): array
     {
-        if (!$this->db->query('SELECT id FROM websites WHERE id=? AND user_id=?',[$websiteId,$userId])) return ['success'=>false,'schedule'=>null,'error'=>'الموقع غير موجود'];
-        $frequency = (string) ($data['frequency'] ?? '');
-        if (!in_array($frequency, ['daily', 'weekly', 'monthly'], true)) {
-            return ['success' => false, 'schedule' => null, 'error' => 'تردد غير صالح (daily/weekly/monthly)'];
-        }
-        $hour = isset($data['hour']) ? (int) $data['hour'] : 8;
-        if ($hour < 0 || $hour > 23) {
-            return ['success' => false, 'schedule' => null, 'error' => 'الساعة لازم تكون بين 0 و 23'];
-        }
-        $weekday = ($data['weekday'] ?? '') !== '' ? (int) $data['weekday'] : null;
-        if ($weekday !== null && ($weekday < 0 || $weekday > 6)) {
-            return ['success' => false, 'schedule' => null, 'error' => 'اليوم لازم يكون بين 0 و 6'];
-        }
-        $email = trim((string) ($data['recipient_email'] ?? ''));
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return ['success' => false, 'schedule' => null, 'error' => 'بريد المستلم غير صالح'];
-        }
-        $isActive = isset($data['is_active']) ? (int) $data['is_active'] : 1;
-
-        if ($scheduleId !== null) {
-            $exists = $this->db->query(
-                "SELECT id FROM seo_report_schedules WHERE id = ? AND website_id = ? AND user_id = ? LIMIT 1",
-                [$scheduleId, $websiteId, $userId]
-            );
-            if (empty($exists)) {
-                return ['success' => false, 'schedule' => null, 'error' => 'الجدول غير موجود'];
-            }
-            $this->db->exec(
-                "UPDATE seo_report_schedules
-                 SET frequency = ?, weekday = ?, hour = ?, recipient_email = ?, is_active = ?
-                 WHERE id = ? AND website_id = ? AND user_id = ?",
-                [$frequency, $weekday, $hour, $email, $isActive, $scheduleId, $websiteId, $userId]
-            );
-            $id = $scheduleId;
-        } else {
-            $id = (int) $this->db->query(
-                "INSERT INTO seo_report_schedules
-                    (website_id, user_id, frequency, weekday, hour, recipient_email, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [$websiteId, $userId, $frequency, $weekday, $hour, $email, $isActive]
-            );
-        }
-
-        $rows = $this->db->query(
-            "SELECT id, website_id, frequency, weekday, hour, recipient_email, is_active, last_sent_at, created_at
-             FROM seo_report_schedules WHERE id = ? LIMIT 1",
-            [$id]
-        );
-        return ['success' => true, 'schedule' => $rows[0] ?? null, 'error' => null];
+        $frequency=(string)($data['frequency']??'');
+        $hour=filter_var($data['hour']??8,FILTER_VALIDATE_INT);
+        $weekday=($data['weekday']??'')!==''?filter_var($data['weekday'],FILTER_VALIDATE_INT):null;
+        $email=trim((string)($data['recipient_email']??''));
+        if(!in_array($frequency,['daily','weekly','monthly'],true)||$hour===false||$hour<0||$hour>23||($weekday!==null&&($weekday===false||$weekday<0||$weekday>6))||($frequency==='weekly'&&$weekday===null)||!filter_var($email,FILTER_VALIDATE_EMAIL))
+            return ['success'=>false,'schedule'=>null,'error'=>'راجع تكرار التقرير والبريد والساعة واليوم للتقرير الأسبوعي'];
+        $active=(int)($data['is_active']??1);if(!in_array($active,[0,1],true))return ['success'=>false,'schedule'=>null,'error'=>'حالة تفعيل غير صالحة'];
+        try {
+            return $this->db->transaction(function()use($websiteId,$userId,$frequency,$hour,$weekday,$email,$active,$scheduleId){
+                $pdo=$this->db->getConnection();$site=$pdo->prepare('SELECT id FROM websites WHERE id=? AND user_id=? FOR UPDATE');$site->execute([$websiteId,$userId]);
+                if(!$site->fetchColumn())throw new InvalidArgumentException('الموقع غير موجود');
+                if($scheduleId!==null){$find=$pdo->prepare('SELECT id FROM seo_report_schedules WHERE id=? AND website_id=? AND user_id=? FOR UPDATE');$find->execute([$scheduleId,$websiteId,$userId]);if(!$find->fetchColumn())throw new InvalidArgumentException('الجدول غير موجود');}
+                else {$find=$pdo->prepare('SELECT id FROM seo_report_schedules WHERE website_id=? AND user_id=? AND frequency=? AND weekday<=>? AND hour=? AND recipient_email=? ORDER BY id LIMIT 1 FOR UPDATE');$find->execute([$websiteId,$userId,$frequency,$weekday,$hour,$email]);$existing=$find->fetchColumn();if($existing)$scheduleId=(int)$existing;}
+                if($scheduleId!==null){$stmt=$pdo->prepare('UPDATE seo_report_schedules SET frequency=?,weekday=?,hour=?,recipient_email=?,is_active=? WHERE id=? AND website_id=? AND user_id=?');$ok=$stmt->execute([$frequency,$weekday,$hour,$email,$active,$scheduleId,$websiteId,$userId]);}
+                else {$stmt=$pdo->prepare('INSERT INTO seo_report_schedules(website_id,user_id,frequency,weekday,hour,recipient_email,is_active) VALUES(?,?,?,?,?,?,?)');$ok=$stmt->execute([$websiteId,$userId,$frequency,$weekday,$hour,$email,$active]);$scheduleId=(int)$pdo->lastInsertId();}
+                if(!$ok)throw new RuntimeException('Schedule write failed');
+                $stmt=$pdo->prepare('SELECT id,website_id,frequency,weekday,hour,recipient_email,is_active,last_sent_at,created_at FROM seo_report_schedules WHERE id=? AND website_id=? AND user_id=?');$stmt->execute([$scheduleId,$websiteId,$userId]);$row=$stmt->fetch(PDO::FETCH_ASSOC);
+                if(!$row)throw new RuntimeException('Schedule read failed');
+                return ['success'=>true,'schedule'=>$row,'error'=>null];
+            });
+        }catch(InvalidArgumentException $e){return ['success'=>false,'schedule'=>null,'error'=>$e->getMessage()];}
+        catch(Throwable $e){return ['success'=>false,'schedule'=>null,'error'=>'تعذر حفظ جدول التقرير؛ حاول لاحقًا'];}
     }
 
     /** حذف جدول (عزل تينانت). */
@@ -105,29 +78,18 @@ class SeoScheduledReportService
      * الجداول المستحقة الآن (نشطة + بلغ موعدها حسب التردد).
      * @return array صفوف (id, website_id, user_id, frequency, weekday, hour, recipient_email, last_sent_at) + main_url
      */
-    public function dueSchedules(int $limit = 50): array
+    public function dueSchedules(int $limit = 50, ?DateTimeImmutable $now = null): array
     {
-        $today = (int) date('w'); // 0=Sunday ... 6=Saturday
-        $weekdayMatch = in_array($today, [5, 6], true) ? 5 : $today; // مقارنة بالتقويم الغربي
-        $nowHour = (int) date('G');
-
-        $rows = $this->db->query(
-            "SELECT s.id, s.website_id, s.user_id, s.frequency, s.weekday, s.hour,
-                    s.recipient_email, s.last_sent_at, w.main_url
-             FROM seo_report_schedules s
-             INNER JOIN websites w ON w.id = s.website_id AND w.user_id = s.user_id
-             WHERE s.is_active = 1
-               AND (
-                   (s.frequency = 'daily'   AND (s.last_sent_at IS NULL OR DATE(s.last_sent_at) < CURDATE()))
-                   OR (s.frequency = 'weekly' AND s.weekday = ? AND (s.last_sent_at IS NULL OR DATE(s.last_sent_at) < CURDATE()))
-                   OR (s.frequency = 'monthly' AND (s.last_sent_at IS NULL OR DATE_FORMAT(s.last_sent_at, '%Y-%m') < DATE_FORMAT(CURDATE(), '%Y-%m')))
-               )
-               AND s.hour <= ?
-             ORDER BY s.last_sent_at ASC
-             LIMIT ?",
-            [$weekdayMatch, $nowHour, $limit]
+        $now=($now??new DateTimeImmutable('now',new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('UTC'));
+        return $this->db->query(
+            "SELECT s.id,s.website_id,s.user_id,s.frequency,s.weekday,s.hour,s.recipient_email,s.last_sent_at,w.main_url
+             FROM seo_report_schedules s INNER JOIN websites w ON w.id=s.website_id AND w.user_id=s.user_id
+             WHERE s.is_active=1 AND ((s.frequency='daily' AND (s.last_sent_at IS NULL OR DATE(s.last_sent_at)<?))
+             OR (s.frequency='weekly' AND s.weekday=? AND (s.last_sent_at IS NULL OR DATE(s.last_sent_at)<?))
+             OR (s.frequency='monthly' AND (s.last_sent_at IS NULL OR DATE_FORMAT(s.last_sent_at,'%Y-%m')<?)))
+             AND s.hour<=? ORDER BY s.last_sent_at ASC LIMIT ?",
+            [$now->format('Y-m-d'),(int)$now->format('w'),$now->format('Y-m-d'),$now->format('Y-m'),(int)$now->format('G'),max(1,min(200,$limit))]
         );
-        return $rows;
     }
 
     /**
@@ -174,7 +136,7 @@ class SeoScheduledReportService
                 $body
             );
             if (!empty($result['success'])) {
-                $this->db->exec("UPDATE seo_report_schedules SET last_sent_at = NOW() WHERE id = ?", [$s['id']]);
+                $this->db->exec("UPDATE seo_report_schedules SET last_sent_at = UTC_TIMESTAMP() WHERE id = ?", [$s['id']]);
                 $sent++;
             } else {
                 $errors[] = ['schedule_id' => $s['id'], 'error' => $result['error'] ?? 'send failed'];

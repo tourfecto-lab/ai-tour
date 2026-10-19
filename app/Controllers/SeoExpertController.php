@@ -7,18 +7,20 @@ class SeoExpertController extends Controller
     public function index(array $params=[]): void{
         if(!$this->isAuthenticated()){header('Location: /login');exit;}
         $css=htmlspecialchars(asset_v('/assets/css/seo-expert.css'),ENT_QUOTES,'UTF-8');$js=htmlspecialchars(asset_v('/assets/js/seo-expert.js'),ENT_QUOTES,'UTF-8');$editorJs=htmlspecialchars(asset_v('/assets/js/seo-page-editor.js'),ENT_QUOTES,'UTF-8');$impactJs=htmlspecialchars(asset_v('/assets/js/seo-impact.js'),ENT_QUOTES,'UTF-8');$workspaceJs=htmlspecialchars(asset_v('/assets/js/seo-workspace.js'),ENT_QUOTES,'UTF-8');$workspaceCss=htmlspecialchars(asset_v('/assets/css/seo-workspace.css'),ENT_QUOTES,'UTF-8');$uid=(int)$this->user['id'];
-        $body='<link rel="stylesheet" href="'.$css.'"><link rel="stylesheet" href="'.$workspaceCss.'"><section id="seoExpertRoot" data-user-id="'.$uid.'"><p>Loading SEO Expert… / جارٍ تحميل خبير SEO…</p></section><script defer src="'.$js.'"></script><script defer src="'.$editorJs.'"></script><script defer src="'.$impactJs.'"></script><script defer src="'.$workspaceJs.'"></script>';
+        $readinessJs=htmlspecialchars(asset_v('/assets/js/seo-service-readiness.js'),ENT_QUOTES,'UTF-8');
+        $body='<link rel="stylesheet" href="'.$css.'"><link rel="stylesheet" href="'.$workspaceCss.'"><section id="seoExpertRoot" data-user-id="'.$uid.'"><p>Loading SEO Expert… / جارٍ تحميل خبير SEO…</p></section><script defer src="'.$js.'"></script><script defer src="'.$editorJs.'"></script><script defer src="'.$impactJs.'"></script><script defer src="'.$workspaceJs.'"></script><script defer src="'.$readinessJs.'"></script>';
         $body='<p><a href="/international-seo">اللغات والفهرسة</a> · <a href="/local-seo">البحث المحلي والروابط والتقرير الشهري</a></p>'.$body;
         echo $this->renderPanelPage('seo_expert','SEO / AEO / GEO','Connect → Plan → Execute → Verify → Improve',$body);exit;
     }
     private function action(string $action,array $params=[]): array{
         header('Cache-Control: no-store, private');header('Pragma: no-cache');
-        if(!$this->isAuthenticated())return $this->error('Unauthorized',401);$write=!in_array($action,['setup','overview','detail'],true);if($write&&($e=$this->verifyCsrf()))return $e;
+        if(!$this->isAuthenticated())return $this->error('Unauthorized',401);$write=!in_array($action,['setup','overview','detail','readiness'],true);if($write&&($e=$this->verifyCsrf()))return $e;
         if($write&&($e=$this->rateLimitGuard('user','seo_expert_write',20,60)))return $e;
         $uid=(int)$this->user['id'];$wid=(int)($params['website_id']??$this->get('website_id',0));$id=(int)($params['id']??0);$s=new SeoExpertService();
         try{
             if($action==='setup'){$r=$s->setup($uid);$r['csrf_token']=Csrf::token();return $this->success($r);}
             if($action==='overview')return $this->success($s->overview($uid,$wid));
+            if($action==='readiness')return $this->success((new SeoServiceReadiness($this->db))->inspect($uid,$wid));
             if($action==='recheck')return $this->success($s->recheck($uid,$id));
             if($action==='detail')return $this->success($s->detail($uid,$id));
             if($action==='configure')return $this->success($s->configure($uid,$wid,$this->data));
@@ -39,6 +41,7 @@ class SeoExpertController extends Controller
     }
     public function setup(array $p=[]): array{return $this->action('setup',$p);}
     public function overview(array $p=[]): array{return $this->action('overview',$p);}
+    public function readiness(array $p=[]): array{return $this->action('readiness',$p);}
     public function recheck(array $p=[]): array{return $this->action('recheck',$p);}
     public function detail(array $p=[]): array{return $this->action('detail',$p);}
     public function configure(array $p=[]): array{return $this->action('configure',$p);}

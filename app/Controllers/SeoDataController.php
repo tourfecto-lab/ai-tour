@@ -23,6 +23,10 @@ class SeoDataController extends Controller
             [$wid,$uid,$service]=$this->context($admin);
             if ($write) {
                 if ($this->get('action')==='primary') $service->primary($wid,$uid,(int)$this->get('market_id'));
+                elseif ($this->get('action')==='replace_unmeasured') {
+                    if ($error=$this->verifyCsrf()) return $error;
+                    $service->replaceUnmeasured($wid,$uid,(int)$this->get('market_id'),['location_code'=>$this->get('location_code'),'language_code'=>$this->get('language_code'),'label'=>$this->get('label'),'reviewed'=>$this->get('reviewed',false)]);
+                }
                 else $service->add($wid,$uid,['location_code'=>$this->get('location_code'),'language_code'=>$this->get('language_code'),'label'=>$this->get('label'),'is_primary'=>$this->get('is_primary',false)]);
             }
             return $this->success(['markets'=>$service->markets($wid,$uid),'limit'=>$service->limit($uid)]);
@@ -58,6 +62,19 @@ class SeoDataController extends Controller
             $r['gaps']=!empty($r['status']['available'])?SeoKeywordGapService::rows($this->db,$wid,$uid):[];
             return $this->success($r);
         } catch (InvalidArgumentException $e) { return $this->error($e->getMessage(),422); }
+    }
+    public function measurementQuote(array $params=[]): array
+    {
+        try {[$wid,$uid]=$this->context();return $this->success((new SeoKeywordMeasurementService($this->db))->quote($uid,$wid,(int)$this->get('market_id',0),(string)$this->get('operation','demand')));}
+        catch (InvalidArgumentException $e) {return $this->error($e->getMessage(),422);}
+    }
+    public function measureKeywords(array $params=[]): array
+    {
+        if (!$this->isAuthenticated()) return $this->error('يجب تسجيل الدخول',401);
+        if ($error=$this->verifyCsrf()) return $error;
+        if ($error=$this->rateLimitGuard('user','seo_keyword_measure',5,60)) return $error;
+        try {[$wid,$uid]=$this->context();return $this->success((new SeoKeywordMeasurementService($this->db))->measure($uid,$wid,(int)$this->get('market_id',0),$this->data));}
+        catch (InvalidArgumentException $e) {return $this->error($e->getMessage(),422);}
     }
     public function deleteKeyword(array $params=[]): array
     {
@@ -153,16 +170,17 @@ class SeoDataController extends Controller
 <p id="seoStatus" role="status"></p>
 <p id="seoInputReview" role="status" hidden>بعض الكلمات فيها تعليقات تحليل وليست عبارة بحث صافية. راجع العبارة المقترحة ثم نقِّ الكلمات غير المقاسة. التنقية مجانية ولا تبدأ بحثًا أو قياس ترتيب، والسجلات المقاسة لا تُعدَّل.</p>
 <details><summary>إضافة سوق / تغيير السوق الرئيسي</summary>
-<form id="marketForm"><label>كود موقع DataForSEO <input id="seoLocation" type="number" min="1" required placeholder="2826 = UK"></label>
+<form id="marketForm" novalidate><label>بلد الجمهور <select id="seoMarketCountry"><option value="">اختَر البلد</option><option value="2840">United States</option><option value="2826">United Kingdom</option><option value="2124">Canada</option><option value="2036">Australia</option><option value="2818">Egypt</option><option value="2276">Germany</option><option value="2250">France</option><option value="2724">Spain</option><option value="2380">Italy</option><option value="2682">Saudi Arabia</option><option value="2784">United Arab Emirates</option></select></label><label>لغة العملاء <select id="seoMarketLanguage"><option value="en">English</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="it">Italiano</option></select></label><details><summary>إعداد سوق آخر أو موقع جغرافي مخصص — متقدم</summary><label>كود موقع DataForSEO <input id="seoLocation" type="number" min="1" required placeholder="2826 = UK"></label>
 <label>اللغة <input id="seoLanguage" required maxlength="12" placeholder="en"></label>
 <label>اسم السوق <input id="seoLabel" required maxlength="100" placeholder="UK – English"></label>
-<button class="p-btn" type="submit">إضافة السوق</button></form>
+</details><button class="p-btn" type="submit">إضافة السوق المختار</button><button id="seoReplaceMarket" class="p-btn" type="button">تصحيح السوق المختار إذا لم يبدأ قياسه</button><p>بلد الجمهور يختلف عن بلد نشاطك. لو باقتك تسمح بسوق واحد، يمكن تصحيح السوق الافتراضي قبل وجود قياسات أو إعدادات مرتبطة به؛ السجلات المقاسة لا نعيد تسميتها.</p></form>
 <button id="seoPrimary" class="p-btn">خلّي السوق المختار رئيسي</button><p id="seoMarketLimit"></p></details>
 <div id="seoCustomer">
 <label>كلمة تتابعها <input id="seoWord" maxlength="255"></label><button id="seoAdd" class="p-btn">إضافة للمتابعة</button>
-<button id="seoResearch" class="p-btn primary">بحث كلمات حقيقية للموقع</button>
-<button id="seoCheck" class="p-btn">فحص ترتيب الكلمات</button>
-<button id="seoGap" class="p-btn">تحديث فجوة الكلمات مع المنافسين (حتى 50 كلمة)</button>
+<section class="p-card"><h3>قياس الكلمات المحفوظة بميزانية واضحة</h3><p>نبدأ بما يصل إلى خمس كلمات تحتاج بيانات حديثة في السوق المختار. إذا لم تضف كلمات بعد، نبحث موقعك لدى المزود لاستخراج أول خمس كلمات حقيقية، دون اختلاق بيانات. عرض الاستخدام مجاني؛ تأكيد القياس يستهلك حصة SEO ثم المحفظة حتى السقف الذي تحدده.</p><button id="seoMeasureQuote" class="p-btn" type="button">عرض الكلمات والاستخدام قبل القياس</button><p id="seoMeasureStatus" role="status"></p><form id="seoMeasureForm" hidden><ul id="seoMeasureWords"></ul><p id="seoMeasureCost"></p><label>أقصى خصم للمحفظة بالدولار — صفر للباقة فقط<input id="seoMeasureCap" type="number" min="0" max="100" step="0.01" required></label><label><input id="seoMeasureConsent" type="checkbox">راجعت الكلمات والسوق والاستخدام وحد الخصم وأوافق على القياس</label><button class="p-btn" type="submit">بدء القياس الموافق عليه</button></form></section>
+<button id="seoResearch" class="p-btn primary">بحث كلمات الموقع — عرض الاستخدام</button>
+<button id="seoCheck" class="p-btn">ترتيب الكلمات — عرض الاستخدام</button>
+<button id="seoGap" class="p-btn">فجوة الكلمات مع المنافسين — عرض الاستخدام (حتى 50 كلمة)</button>
 <h3>حجم البحث الشهري والترتيب حسب السوق</h3>
 <div class="p-table-scroll"><table class="p-table"><thead><tr><th>الكلمة</th><th>حجم البحث</th><th>الصعوبة</th><th>CPC بالدولار</th><th>نية البحث</th><th>الترتيب</th><th>اتجاه 30 يوم</th><th>آخر قياس</th></tr></thead><tbody id="seoWords"></tbody></table></div>
 <h3>نتائج البحث من DataForSEO</h3><div id="seoResearchRows"></div>
@@ -175,12 +193,14 @@ HTML;
 const {fetchJSON,esc,toast}=window.Panel;
 const el=id=>document.getElementById(id);
 const base=seoAdmin?'/api/admin/seo-data':'/api/seo/data';
-let wid=0,mid=0,marketRequest=0,wordRequest=0;
+let wid=0,mid=0,marketRequest=0,wordRequest=0,measurementQuote=null;
+function clearMeasure(){measurementQuote=null;el('seoMeasureForm').hidden=true;el('seoMeasureConsent').checked=false;el('seoMeasureStatus').textContent='';}
+const measureReason=reason=>({'seo_wallet_limit_reached':'وصلنا لحد المحفظة الموافق عليه','seo_auto_wallet_limit_reached':'حد بيانات SEO الدورية لا يسمح بخصم إضافي','seo_monthly_budget_reached':'ميزانية مزود البحث تحتاج مراجعة الدعم','seo_quota_and_wallet_exhausted':'حصة SEO والرصيد المتاح لا يكفيان','seo_wallet_price_unavailable':'تسعير وحدة SEO يحتاج مراجعة الدعم','not_measured':'مزود البحث غير متاح','rank_check_busy':'فحص ترتيب للموقع يعمل بالفعل','research_busy':'بحث لهذه العينة يعمل بالفعل'})[reason]||'تعذر استكمال رد المزود؛ راجع البيانات المحفوظة قبل تكرار الطلب';
 const metric=v=>v===null||v===undefined?'—':esc(String(v));
 async function post(url,data={}){return fetchJSON(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({website_id:wid,market_id:mid,...data})});}
 function fail(r){if(!r.success){toast(r.error||'تعذر تنفيذ الطلب','error');return true;}return false;}
 async function markets(){
- const siteId=wid,request=++marketRequest;mid=0;++wordRequest;el('seoWords').replaceChildren();el('seoGaps').replaceChildren();el('seoInputReview').hidden=true;
+ const siteId=wid,request=++marketRequest;mid=0;++wordRequest;clearMeasure();el('seoWords').replaceChildren();el('seoGaps').replaceChildren();el('seoInputReview').hidden=true;
  const r=await fetchJSON(base+'/markets?website_id='+siteId);if(siteId!==wid||request!==marketRequest)return;if(fail(r))return;
  el('seoMarket').innerHTML=r.data.markets.map(m=>`<option value="${Number(m.id)}">${esc(m.label)}${Number(m.is_primary)?' ★':''}</option>`).join('');mid=Number(el('seoMarket').value);
  el('seoMarketLimit').textContent='الحد المتاح: '+r.data.limit+' سوق. السوق الافتراضي من لغة الموقع؛ راجعه حسب بلد الجمهور.';
@@ -199,14 +219,22 @@ async function words(){
  };
  el('seoGaps').innerHTML=r.data.gaps.filter(g=>Number(g.market_id)===mid).map(g=>`<tr><td>${esc(g.keyword)}</td><td>${esc(g.competitor_domain)}</td><td>${metric(g.search_volume)}</td><td>${metric(g.position)}</td><td>${g.customer_position===null?'خارج أول 100':metric(g.customer_position)}</td><td>DataForSEO · ${esc(g.fetched_at)}</td></tr>`).join('')||'<tr><td colspan="6">لسه مفيش فجوة متحققة للسوق ده — not measured</td></tr>';
 }
-el('marketForm').onsubmit=async e=>{e.preventDefault();const r=await post(base+'/markets',{location_code:Number(el('seoLocation').value),language_code:el('seoLanguage').value.trim(),label:el('seoLabel').value.trim()});if(!fail(r))await markets();};
+const marketInput=()=>({location_code:Number(el('seoLocation').value),language_code:el('seoLanguage').value.trim(),label:el('seoLabel').value.trim()});
+const marketValid=()=>{const data=marketInput();if(!data.location_code||!data.language_code||!data.label){toast('اختَر بلد الجمهور ولغته أو أكمل إعداد السوق المتقدم','error');return false;}return true;};
+el('marketForm').onsubmit=async e=>{e.preventDefault();if(!marketValid())return;const r=await post(base+'/markets',marketInput());if(!fail(r))await markets();};
+el('seoReplaceMarket').onclick=async()=>{if(!wid||!mid||!marketValid()||!confirm('تغيير السوق المختار إلى '+el('seoLabel').value+'؟ لن تتغير أي قياسات قديمة، وسنرفض التغيير إذا وُجد سجل مرتبط.'))return;const r=await post(base+'/markets',{...marketInput(),action:'replace_unmeasured',reviewed:true});if(!fail(r))await markets();};
+function marketPreset(){const option=el('seoMarketCountry').selectedOptions[0];if(!option?.value)return;el('seoLocation').value=option.value;el('seoLanguage').value=el('seoMarketLanguage').value;el('seoLabel').value=option.textContent+' – '+el('seoMarketLanguage').selectedOptions[0].textContent;}
+el('seoMarketCountry').onchange=marketPreset;el('seoMarketLanguage').onchange=marketPreset;
 el('seoPrimary').onclick=async()=>{const r=await post(base+'/markets',{action:'primary'});if(!fail(r))await markets();};
-el('seoMarket').onchange=async()=>{mid=Number(el('seoMarket').value);el('seoResearchRows').replaceChildren();if(!seoAdmin)await words();};
+el('seoMarket').onchange=async()=>{mid=Number(el('seoMarket').value);clearMeasure();el('seoResearchRows').replaceChildren();if(!seoAdmin)await words();};
 el('seoSite').onchange=async()=>{wid=Number(el('seoSite').value);el('seoResearchRows').replaceChildren();await markets();};
 el('seoAdd').onclick=async()=>{const r=await post('/api/ai/keywords/add',{keyword:el('seoWord').value.trim()});if(!fail(r))await words();};
-el('seoResearch').onclick=async function(){this.disabled=true;try{const r=await post('/api/seo/data/research');if(fail(r))return;if(!r.data.available){el('seoStatus').textContent=r.data.message||r.data.reason+' — not measured';return;}const box=el('seoResearchRows');box.replaceChildren();for(const k of r.data.data){const row=document.createElement('p');row.textContent=k.keyword+' | حجم البحث: '+(k.volume??'—')+' | الصعوبة: '+(k.difficulty??'—')+' | CPC: '+(k.cpc??'—')+' | النية: '+(k.intent??'—');const b=document.createElement('button');b.className='p-btn';b.textContent='تابع الكلمة';b.onclick=async()=>{const a=await post('/api/ai/keywords/add',{keyword:k.keyword});if(!fail(a))await words();};row.append(b);box.append(row);}await words();}finally{this.disabled=false;}};
-el('seoCheck').onclick=async function(){this.disabled=true;try{const r=await post('/api/seo/rank-tracking/check');if(!fail(r))await words();}finally{this.disabled=false;}};
-el('seoGap').onclick=async function(){this.disabled=true;try{const r=await post('/api/seo/data/gaps/refresh');if(!fail(r)){if(!r.data.available)toast(r.data.reason||'not measured','error');await words();}}finally{this.disabled=false;}};
+const showMeasurementQuote=async(operation,button)=>{if(!wid||!mid)return;const siteId=wid,marketId=mid;button.disabled=true;clearMeasure();try{const r=await fetchJSON('/api/seo/data/measurement-quote?website_id='+siteId+'&market_id='+marketId+'&operation='+operation);if(siteId!==wid||marketId!==mid)return;if(fail(r))return;const q=r.data;if(q.already_measured){el('seoMeasureStatus').textContent='الكلمات المحفوظة لها بيانات حديثة، أو لا توجد كلمات تحتاج قياسًا. الأرقام غير المتاحة تظل غير مقاسة.';return;}if(!q.available){el('seoMeasureStatus').textContent=q.wallet_sufficient===false?'الحد الأقصى المتوقع أعلى من الرصيد المتاح بعد الحصة؛ راجع الباقة أو المحفظة قبل القياس.':'القياس غير متاح حاليًا؛ راجع تنقية الكلمات وربط المزود وتسعيره مع الدعم.';return;}measurementQuote=q;el('seoMeasureWords').replaceChildren();if(q.operation==='discover_site'){const li=document.createElement('li');li.textContent='بحث '+q.target_host+' لاستخراج حتى خمس كلمات من بيانات المزود. لا يبدأ هذا العرض المجاني أي طلب مدفوع.';el('seoMeasureWords').append(li);}if(q.operation==='gap'){const li=document.createElement('li');li.textContent='مقارنة حتى خمسة منافسين وأول خمسين كلمة مرشحة في السوق الرئيسي. لا نفترض أن كلمة غير مفحوصة فرصة متحققة.';el('seoMeasureWords').append(li);for(const c of q.competitors||[]){const item=document.createElement('li');item.textContent=c.competitor_domain;el('seoMeasureWords').append(item);}}for(const k of q.keywords){const li=document.createElement('li');li.textContent=k.keyword;el('seoMeasureWords').append(li);}el('seoMeasureCost').textContent='السوق: '+q.market_label+' · حتى '+q.max_units+' وحدات SEO · سقف الخصم المتوقع: '+Number(q.wallet_max).toFixed(2)+' USD. الحصة الباقية: '+(q.plan_remaining===null?'غير محدودة':q.plan_remaining)+'. القياس لا يعني نشر محتوى أو ضمان ترتيب.';el('seoMeasureCap').value=Number(q.wallet_max).toFixed(2);el('seoMeasureForm').hidden=false;}catch(e){el('seoMeasureStatus').textContent='تعذر تحميل عرض الاستخدام؛ لم يبدأ قياس من هذا الزر.';}finally{button.disabled=false;}};
+el('seoMeasureQuote').onclick=function(){return showMeasurementQuote('demand',this);};
+el('seoMeasureForm').onsubmit=async e=>{e.preventDefault();const q=measurementQuote;if(!q||q.website_id!==wid||q.market_id!==mid||!el('seoMeasureConsent').checked){toast('راجع عرض الاستخدام ووافق عليه أولًا','error');return;}const button=e.currentTarget.querySelector('button');button.disabled=true;try{const r=await post('/api/seo/data/measure',{quote_hash:q.quote_hash,operation:q.operation,max_wallet_charge:Number(el('seoMeasureCap').value),reviewed:true});if(q.website_id!==wid||q.market_id!==mid)return;if(fail(r))return;measurementQuote=null;el('seoMeasureForm').hidden=true;el('seoMeasureStatus').textContent=r.data.available?((r.data.data||[]).length?'حُفظت البيانات التي أرجعها المزود.':'لم يرجع المزود بيانات لهذه العينة. راجع السوق أو أضف عبارة بحث من خدماتك المؤكدة؛ لم نختلق كلمات أو أحجام بحث.')+' خصم المحفظة لهذه العملية: '+Number(r.data.wallet_charged||0).toFixed(2)+' USD. راجع الجدول؛ القيم الناقصة لم تُختلق.':'لم يكتمل القياس: '+measureReason(r.data.reason)+'. خصم المحفظة المسجل: '+Number(r.data.wallet_charged||0).toFixed(2)+' USD. لا نكرر الطلب المدفوع تلقائيًا.';await words();}catch(e){measurementQuote=null;el('seoMeasureForm').hidden=true;el('seoMeasureStatus').textContent='تعذر تأكيد نتيجة الطلب. حدّث الحالة قبل إعادة القياس؛ لن نكرره تلقائيًا.';}finally{button.disabled=false;el('seoMeasureConsent').checked=false;}};
+el('seoResearch').onclick=function(){return showMeasurementQuote('discovery',this);};
+el('seoCheck').onclick=function(){return showMeasurementQuote('rank',this);};
+el('seoGap').onclick=function(){return showMeasurementQuote('gap',this);};
 if(seoAdmin)el('seoCustomer').hidden=true;
 const r=await fetchJSON(seoAdmin?base+'/sites':'/api/websites');if(fail(r))return;
 const sites=r.data.websites||[],requested=new URLSearchParams(location.search).get('website_id');
