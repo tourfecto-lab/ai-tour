@@ -1,5 +1,24 @@
 SEO customer launch: stored-evidence checklist, market review, bounded manual and automatic SEO wallet policy, article brief retry boundary, consented report schedules, canonical production bootstraps. Fake providers, guarded disposable MariaDB and actual Panel/Chromium; no production/provider/email/payment calls. Includes required phase1/2/3/connector/plans_studio/xpay/plan_gate/fx_bank plus phase4/5/6 and customer regressions. Each command exit is preserved below.
 
+$ php tests/Automation/seo_provider_budget_admin_test.php
+PASS unprivileged role cannot read global provider figures: anonymous
+PASS unprivileged role cannot read global provider figures: customer
+PASS unprivileged role cannot read global provider figures: admin
+PASS denied requests never read settings or global budget
+PASS authorized Super Admin receives the read-only global budget summary
+PASS existing masked settings response survives without extra reads or any mutation
+6 assertions passed
+Exit status: 0
+
+$ node tests/Automation/seo_provider_budget_admin_browser_test.cjs
+PASS actual admin loader renders cap, held funds and remaining separately
+PASS unknown reservations explain why the operator must review the budget
+PASS reading the summary never changes the saved budget input
+PASS failed ledger read is shown as unknown rather than invented zero spending
+PASS budget inspection makes read-only requests and has no JavaScript errors
+5 assertions passed
+Exit status: 0
+
 $ php tests/Automation/seo_bootstrap_classmap_test.php
 PASS actual cron bootstrap loads the release implementation: PlanUsage
 PASS actual cron bootstrap loads the release implementation: SubscriptionValidator
@@ -48,7 +67,12 @@ PASS without saved policy automatic requests never fall back to wallet
 PASS two automatic calls exhaust the shared site monthly cap across ledger instances without double counting
 PASS separately approved manual cap remains independent of the automatic monthly cap
 PASS monthly wallet exhaustion preserves remaining plan allowance
-31 assertions passed
+PASS free quote detects disabled global provider budget without confusing it with customer allowance
+PASS a known provider budget block refuses the paid action before transport or quota use
+PASS unknown global reservations remain reserved and make the free customer quote unavailable
+PASS admin summary separates actual cost from held unknown reservations without clearing them
+PASS settled provider budget re-enables a free quote without exposing another tenant ledger or admin amounts
+36 assertions passed
 Exit status: 0
 
 $ node tests/Automation/seo_keyword_measurement_browser_test.cjs
@@ -63,9 +87,10 @@ PASS legacy discover_site button shows a free unapproved quote only
 PASS discovery quote identifies the actual customer domain
 PASS legacy rank button shows a free unapproved quote only
 PASS legacy gap button shows a free unapproved quote only
+PASS known platform provider budget block is shown before the paid consent form and spends nothing
 PASS switching sites clears the prior paid quote and approval
 PASS bounded measurement has no JavaScript errors
-13 assertions passed
+14 assertions passed
 Exit status: 0
 
 $ php tests/Automation/seo_market_review_database_test.php
@@ -992,7 +1017,7 @@ Runtime:       PHP 8.4.26
 
 ....                                                                4 / 4 (100%)
 
-Time: 00:00.029, Memory: 8.00 MB
+Time: 00:00.038, Memory: 8.00 MB
 
 OK (4 tests, 7 assertions)
 Exit status: 0
@@ -1842,7 +1867,7 @@ build your plan
   ok  paid: trial cap gone; plan 20 + custom 10 + earlier pack 10 kept
   ok  chatbot replies: plan + custom + pack
 renewal
-  ok  renews at the custom price $169 ({"success":true,"subscription_id":735,"charged":169,"new_period_end":"2026-11-19 08:19:45","balance":240})
+  ok  renews at the custom price $169 ({"success":true,"subscription_id":746,"charged":169,"new_period_end":"2026-11-19 08:40:02","balance":240})
   ok  custom extras granted again for the new period (+10) and pack still on (+10)
 after the trial: automatic charge
   ok  customer can cancel renewal during the trial
@@ -2101,7 +2126,7 @@ Runtime:       PHP 8.4.26
 
 .........                                                           9 / 9 (100%)
 
-Time: 00:00.574, Memory: 18.00 MB
+Time: 00:02.351, Memory: 18.00 MB
 
 OK (9 tests, 57 assertions)
 Exit status: 0
@@ -2265,11 +2290,20 @@ $ node --check public_html/assets/js/international-seo.js
 Exit status: 0
 
 $ php tools/lint.php
-OK: 1309 PHP files checked, no syntax errors.
+OK: 1310 PHP files checked, no syntax errors.
 Exit status: 0
 
 $ node --check public_html/assets/js/seo-expert.js
 Exit status: 0
 
+$ git diff --check
+docs/seo/seo-launch-test-output.txt:168: trailing whitespace.
++PASS only recognized trailing annotations removed:  Tours (commercial, low)
+docs/seo/seo-launch-test-output.txt:1754: trailing whitespace.
++  ok  no browser JavaScript errors:
+docs/seo/seo-launch-test-output.txt:2298: new blank line at EOF.
+Exit status: 2
+
+Recheck after normalizing the generated transcript (the initial whitespace check ran while this tracked report was being written; no implementation or assertions changed):
 $ git diff --check
 Exit status: 0

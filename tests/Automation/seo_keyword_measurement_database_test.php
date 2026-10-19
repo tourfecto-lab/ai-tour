@@ -75,4 +75,11 @@ check(abs($before-(new WalletService())->getBalance(1)-0.15)<0.000001,'separatel
 $pdo->exec('DELETE FROM plan_usage_events');$id=$auto->reserve('auto-fixture',1,2,0.1,10);
 check($id>0&&$auto->walletSpent()===0.1,'monthly wallet exhaustion preserves remaining plan allowance');
 $pdo->exec('DROP TABLE seo_expert_sites');
+$settings->set('serp_monthly_budget_usd','0');$beforeCalls=count($modeRequests);$beforeEvents=(int)$pdo->query('SELECT COUNT(*) FROM plan_usage_events')->fetchColumn();$q=$modes->quote(1,1,$mid,'rank');
+check(!$q['available']&&$q['provider_configured']&&!$q['provider_budget_available']&&$q['provider_budget_reason']==='seo_monthly_budget_reached','free quote detects disabled global provider budget without confusing it with customer allowance');
+check(denied(fn()=>$modes->measure(1,1,$mid,['reviewed'=>true,'quote_hash'=>$q['quote_hash'],'max_wallet_charge'=>0,'operation'=>'rank']))&&count($modeRequests)===$beforeCalls&&(int)$pdo->query('SELECT COUNT(*) FROM plan_usage_events')->fetchColumn()===$beforeEvents,'a known provider budget block refuses the paid action before transport or quota use');
+$settings->set('serp_monthly_budget_usd','1');$pdo->exec("DELETE FROM dataforseo_calls;INSERT INTO dataforseo_calls(endpoint,cost,reserved_cost,website_id,status,created_at) VALUES('unknown-outcome',0,0.95,2,'unknown',UTC_TIMESTAMP())");$q=$modes->quote(1,1,$mid,'rank');
+check(!$q['available']&&!$q['provider_budget_available'],'unknown global reservations remain reserved and make the free customer quote unavailable');$summary=(new DataForSeoClient())->budgetSummary($db);check($summary['stats_available']&&$summary['cap']===1.0&&$summary['actual_cost']===0.0&&$summary['held_cost']===0.95&&$summary['remaining']===0.05&&$summary['unknown_calls']===1,'admin summary separates actual cost from held unknown reservations without clearing them');
+$pdo->exec("UPDATE dataforseo_calls SET cost=0.20,reserved_cost=0,status='complete'");$q=$modes->quote(1,1,$mid,'rank');
+check($q['available']&&$q['provider_budget_available']&&!array_key_exists('provider_budget_usd',$q),'settled provider budget re-enables a free quote without exposing another tenant ledger or admin amounts');
 echo "$n assertions passed\n";

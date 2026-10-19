@@ -605,7 +605,7 @@ class AdminController extends Controller
         }
         try {
             $service = new SystemSettingsService();
-            return $this->success(['settings' => $service->getAllForAdmin()]);
+            return $this->success(['settings' => $service->getAllForAdmin(),'seo_provider_budget'=>(new DataForSeoClient())->budgetSummary($this->db)]);
         } catch (Exception $e) {
             Logger::error('Admin getSystemSettings Error', ['message' => $e->getMessage()]);
             return $this->error('تعذر جلب الإعدادات', 500);
@@ -2401,6 +2401,11 @@ class AdminController extends Controller
         const res = await fetchJSON('/api/admin/system-settings');
         if (!res.success) return;
         const settings = res.data.settings || {};
+        const budgetBox=document.getElementById('ss_serp_budget_status'),budget=res.data.seo_provider_budget;
+        if(budgetBox){const money=n=>Number(n||0).toFixed(6);budgetBox.textContent=budget?.stats_available?
+            'شهر '+budget.period_utc+' (UTC) · السقف: '+money(budget.cap)+' USD · تكلفة مسجلة: '+money(budget.actual_cost)+' USD · محجوز لطلبات سابقة: '+money(budget.held_cost)+' USD · المتبقي: '+money(budget.remaining)+' USD. طلبات بنتيجة غير مؤكدة: '+Number(budget.unknown_calls)+' · معلقة: '+Number(budget.pending_calls)+'. '+(budget.available?'السقف يسمح بحجز طلب بحث جديد.':'القياس متوقف؛ راجع التفعيل والسقف والمستهلك والمحجوز قبل تغييره.'):
+            'تعذر قراءة سجل ميزانية المزود؛ لا نفترض أن المتبقي صفر أو نغيّر السقف.';}
+
 
         Object.keys(settings).forEach(category => {
             settings[category].forEach(item => {
@@ -4207,6 +4212,7 @@ HTML;
                         <div class="form-group"><label class="form-label" for="ss_serp_device">جهاز البحث</label><select id="ss_serp_device" class="form-control"><option value="desktop">Desktop</option><option value="mobile">Mobile</option></select></div>
                     </div>
 
+                    <p id="ss_serp_budget_status" class="p-cell-muted" role="status">جارٍ قراءة ميزانية بيانات البحث…</p><p class="p-cell-muted">الحصة ومحفظة العميل منفصلتان عن ميزانية المزود لكل المنصة. الحجوزات غير المؤكدة لا تُحذف أو تُصفّر قبل مراجعة حساب المزود. هذه الأرقام تُقرأ فقط ولا تعيد محاولة طلب مدفوع.</p>
                     <h4 style="margin:18px 0 8px;font-size:13px;color:var(--panel-text-muted);">🔗 Google OAuth</h4>
                     <p class="p-cell-muted" style="font-size:11.5px;margin-bottom:8px;">لازم يتفعّل "Google Business Profile API" على نفس مشروع Google Cloud ده (وصول رسمي من Google، مش مجرد تفعيل) عشان ربط نشاط العميل التجاري (منشورات، مراجعات) يشتغل.</p>
                     <div class="p-grid cols-2">
