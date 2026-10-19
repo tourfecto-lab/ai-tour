@@ -114,6 +114,8 @@ try {
  check(denied(fn()=>$service->editTask(2,$rid,array_replace($input,['version'=>0]))),'stale plan version cannot reopen a proposal');
  $pdo->exec("CREATE TRIGGER fixture_recovery_failure BEFORE INSERT ON seo_content_quality FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Recovery fixture failure'");
  try{check(denied(fn()=>$service->editTask(2,$rid,$input))&&$pdo->query('SELECT kind FROM seo_expert_tasks WHERE id='.$rid)->fetchColumn()==='manual','failed evidence persistence rolls back the recovered task atomically');}finally{$pdo->exec('DROP TRIGGER fixture_recovery_failure');}
+ // A real HTTP request starts with a cold schema guard, unlike the earlier fixture setup.
+ (new ReflectionProperty(SeoDataSchema::class,'ready'))->setValue(null,false);
  $d=$service->editTask(2,$rid,$input);$t=$d['tasks'][0];check($t['id']===$rid&&$t['kind']==='content'&&$t['status']==='pending'&&$t['expected_value']===$rejected['body'],'recovery preserves row ID and opens the original text as a pending human-review draft');
  check($t['evidence']['rejected_draft_recovery']['original_task']['kind']==='manual'&&$t['evidence']['rejected_draft_recovery']['source_hash']===hash('sha256',json_encode(SeoRejectedContentDraft::candidate($d['tasks'][0]['evidence']['rejected_draft_recovery']['original_task']+['is_active'=>0],['content_drafts'=>[$rejected]],$savedRun['content_brief'])??[],JSON_THROW_ON_ERROR)),'recovery retains the original task and source hash in history');
  check(isset($t['content_review'])&&$t['recommendation_review']['claim_review']['state']==='needs_confirmation','restored body and FAQ evidence remain subject to the existing claim gate');

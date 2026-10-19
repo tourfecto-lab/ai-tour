@@ -151,6 +151,9 @@ class SeoExpertService
     }
     private function restoreRejectedDraft(int $uid,int $id,array $input): array {
         $this->requireReady();$initial=$this->q('SELECT * FROM seo_expert_tasks WHERE id=? AND user_id=?',[$id,$uid])->fetch(PDO::FETCH_ASSOC);if(!$initial)throw new InvalidArgumentException('Task unavailable');$wid=(int)$initial['website_id'];$this->site($uid,$wid);
+        // A fresh HTTP request has not warmed the SEO schema guard yet. Keep its
+        // deployment fallback outside the atomic task/evidence transaction.
+        SeoDataSchema::ensureSchema($this->db);
         if(!ExternalExecution::lock('seo-expert-site:'.$wid))throw new RuntimeException('Site busy');
         try{return $this->db->transaction(function()use($uid,$id,$wid,$input,$initial){
             $task=$this->q('SELECT * FROM seo_expert_tasks WHERE id=? AND user_id=? AND website_id=? FOR UPDATE',[$id,$uid,$wid])->fetch(PDO::FETCH_ASSOC);if(!$task)throw new InvalidArgumentException('Task unavailable');$run=$this->run($uid,(int)$initial['run_id'],true);
