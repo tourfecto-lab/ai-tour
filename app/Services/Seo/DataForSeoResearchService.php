@@ -28,6 +28,8 @@ class DataForSeoResearchService
         $seeds=array_values(array_unique(array_filter(array_map('trim',$seeds))));
         if (count($seeds)>20) throw new InvalidArgumentException('Maximum 20 seed keywords');
         foreach ($seeds as $seed) if (mb_strlen($seed)>255) throw new InvalidArgumentException('Invalid seed keyword');
+        foreach ($seeds as $seed) if (DataForSeoRankingSource::keywordPhrase($seed)!==$seed)
+            throw new InvalidArgumentException('راجع الكلمات التي تحتوي نية البحث والأولوية بين الأقواس، ونقّها من صفحة الكلمات قبل القياس المدفوع.');
         $kind=$seeds?($exact?'keyword_overview':'keyword_ideas'):'keywords_for_site';
         $task=['location_code'=>(int)$market['location_code'],'language_code'=>$market['language_code'],'limit'=>100,'include_serp_info'=>false];
         if ($seeds) $task['keywords']=$seeds; else $task['target']=$host;

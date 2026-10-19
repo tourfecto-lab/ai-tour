@@ -1781,6 +1781,7 @@ $router->post('/api/seo-expert/runs/{id}/review-scope','SeoExpertController','re
 $router->get('/api/seo/data/markets','SeoDataController','markets',['AuthMiddleware']);
 $router->post('/api/seo/data/markets','SeoDataController','addMarket',['AuthMiddleware']);
 $router->get('/api/seo/data/keywords','SeoDataController','keywords',['AuthMiddleware']);
+$router->post('/api/seo/data/keywords/{id}/repair','SeoDataController','repairKeyword',['AuthMiddleware']);
 $router->post('/api/seo/data/research','SeoDataController','discover',['AuthMiddleware']);
 $router->post('/api/seo/data/gaps/refresh','SeoDataController','gapRefresh',['AuthMiddleware']);
 $router->get('/api/admin/seo-data/sites','SeoDataController','adminSites',['AuthMiddleware','AdminMiddleware']);

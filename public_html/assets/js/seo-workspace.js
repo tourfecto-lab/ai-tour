@@ -107,7 +107,7 @@
   };
   const research=make('article','se-card');research.append(make('h3','',t('بحث المنافسين والكلمات','Competitor & keyword research')),make('p','',t('افتح أدوات البحث الموجودة في المنصة. بدء تحليل جديد يتبع التكلفة والموافقة المعروضة في أداته.','Open the existing research tools. New analysis follows the cost and approval shown by each tool.')));
   const researchLinks=make('div','se-actions');
-  for(const [href,label] of [['/ai/competitors',t('تحليل المنافسين','Competitor analysis')],['/ai/keywords',t('بحث الكلمات','Keyword research')]]){const a=make('a','p-btn outline',label);a.href=href;a.target='_blank';a.rel='noopener noreferrer';researchLinks.append(a);}
+  for(const [href,label] of [['/ai/competitors',t('تحليل المنافسين','Competitor analysis')],['/ai/keywords',t('بحث الكلمات','Keyword research')]]){const a=make('a','p-btn outline',label);a.href=href;if(href==='/ai/keywords')a.dataset.seResearchKeywords='1';a.target='_blank';a.rel='noopener noreferrer';researchLinks.append(a);}
   research.append(researchLinks);panels.get('scan').append(research);
   const cycleChoices=make('article','se-card');cycleChoices.append(make('h3','',t('الفحوصات المحفوظة','Stored inspections')));const scanRuns=make('div','se-actions');scanRuns.id='seScanRuns';cycleChoices.append(scanRuns);panels.get('scan').append(cycleChoices);
   const planHint=make('p','se-note',t('افتح دورة من القائمة لعرض الخطة. إنشاء دورة جديدة موجود في صفحة الفحص.','Open a cycle below to view its plan. Start a new cycle on the inspection page.'));panels.get('plan').prepend(planHint);
@@ -118,7 +118,7 @@
   const adoptModules=()=>{
    for(const [id,page] of [['seoPageEditor','execute'],['seoImpact','results'],['tfTourDraft','tours']]){const node=document.getElementById(id);if(node){move(id,page);placeholders.get(page).hidden=true;}}
   };
-  const updateLinks=()=>{for(const a of root.querySelectorAll('a[data-se-page]')){a.href=urlFor(a.dataset.sePage);if(a.closest('#seNavigation')){if(a.dataset.sePage===active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}}};
+  const updateLinks=()=>{for(const a of root.querySelectorAll('[data-se-research-keywords]'))a.href='/ai/keywords'+(selected()?'?website_id='+selected():'');for(const a of root.querySelectorAll('a[data-se-page]')){a.href=urlFor(a.dataset.sePage);if(a.closest('#seNavigation')){if(a.dataset.sePage===active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}}};
   const renderNext=()=>{
    nextActions.replaceChildren();
    if(!selected()){nextText.textContent=t('أضف موقعك أو اختَر موقعًا من القائمة لبدء الخدمة.','Add or choose a website to begin.');const a=make('a','p-btn',t('إدارة المواقع','Manage websites'));a.href='/websites';nextActions.append(a);return;}

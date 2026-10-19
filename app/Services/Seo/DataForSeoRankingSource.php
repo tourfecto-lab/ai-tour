@@ -21,6 +21,14 @@ class DataForSeoRankingSource implements KeywordRankingSourceInterface
     }
     public function isConfigured(): bool { return $this->client->isConfigured(); }
     public function sourceName(): string { return 'dataforseo_google_organic'; }
+    /** Strip only the legacy AI report's explicit (intent, priority) annotation.
+     * Parentheses containing real query terms remain part of the phrase. */
+    public static function keywordPhrase(string $value): string
+    {
+        $intent='(?:informational|navigational|commercial|transactional|معلوماتية|معلوماتي|تجارية|تجاري|معاملاتية|معاملاتي|تنقلية|تنقلي)';
+        $priority='(?:high|medium|low|عالية|متوسطة|منخفضة|عالي|متوسط|منخفض)';
+        return trim((string)preg_replace('~\s*\(\s*'.$intent.'(?:\s*/\s*'.$intent.')*\s*[,،]\s*'.$priority.'\s*\)\s*$~iu','',trim($value)));
+    }
     public static function normalizeHost(string $value): string
     {
         $host=parse_url(preg_match('#^https?://#i',$value)?$value:'https://'.$value,PHP_URL_HOST);
@@ -42,6 +50,7 @@ class DataForSeoRankingSource implements KeywordRankingSourceInterface
         if (count($keywords)>20) return $bad('rank_batch_limit_20');
         foreach ($keywords as $keyword) {
             if (mb_strlen($keyword)>255) return $bad('invalid_keyword');
+            if (self::keywordPhrase($keyword)!==$keyword) return $bad('keyword_annotations_require_review');
             // Advanced operators multiply provider charges; rank tracking accepts plain keywords only.
             if (preg_match('/\b(?:site|inurl|intitle|intext|filetype|link|define|id|info|inanchor|allinurl|allintitle|allintext|allinanchor):/i',$keyword))
                 return $bad('search_operators_not_supported');

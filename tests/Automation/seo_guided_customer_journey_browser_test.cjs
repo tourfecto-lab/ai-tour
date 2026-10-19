@@ -38,8 +38,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
   check(!writes.some(u=>u.endsWith('/approve')||u.endsWith('/start')),'guided progress never approves changes or consumes a new cycle automatically');
   await p.locator('#seNavigation [data-se-page=overview]').click();await p.waitForFunction(()=>document.querySelector('#seNextStep').textContent.includes('Proposals to review: 1'));
   check((await p.locator('#seJourney').innerText()).includes('approve reviewed changes'),'the customer sees what requires their review and what the platform does');
+  check((await p.locator('[data-se-research-keywords]').getAttribute('href'))==='/ai/keywords?website_id=33','research link retains the selected customer website');
   await p.locator('#seWebsite').selectOption('44');await p.waitForFunction(()=>document.querySelector('#seNextStep').textContent.includes('Setup is saved'));
   check(await p.locator('#seDetail').innerText()===''&&!await p.locator('#seNextStep').innerText().then(t=>t.includes('Proposals to review: 1')),'switching sites clears the prior plan and its required actions');
+  check((await p.locator('[data-se-research-keywords]').getAttribute('href'))==='/ai/keywords?website_id=44','research link follows website switching without retaining the previous customer context');
   await p.setViewportSize({width:390,height:900});check(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'guided SEO overview fits a mobile viewport');
   check(errors.length===0,'SEO guidance and progress have no JavaScript errors');await p.close();
 

@@ -11,6 +11,8 @@ class RankTrackingService
     }
     public static function batches(KeywordRankingSourceInterface $source,string $host,array $keywords): array
     {
+        foreach ($keywords as $keyword) if (DataForSeoRankingSource::keywordPhrase($keyword)!==trim($keyword))
+            return ['available'=>false,'reason'=>'keyword_annotations_require_review','rankings'=>[]];
         $rankings=[];
         foreach (array_chunk(array_values(array_unique($keywords)),20) as $chunk) {
             $r=$source->check($host,$chunk);
@@ -54,7 +56,7 @@ class RankTrackingService
                 });
                 $out['recorded']++; $out['checked']++; $out['results'][]=$row+['market_id'=>$market['id']];
             }
-            if (empty($result['available'])) return array_replace($out,['reason'=>$result['reason']??'source_unavailable','error'=>'تعذر استكمال القياس؛ النتائج الجزئية محفوظة']);
+            if (empty($result['available'])) return array_replace($out,['reason'=>$result['reason']??'source_unavailable','error'=>($result['reason']??'')==='keyword_annotations_require_review'?'راجع الكلمات ونقِّ تعليقات نية البحث والأولوية من صفحة الكلمات قبل القياس المدفوع.':'تعذر استكمال القياس؛ النتائج الجزئية محفوظة']);
         }
         $db->exec('UPDATE websites SET last_rank_tracked_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?',[$websiteId,$userId]);
         return array_replace($out,['available'=>true]);
